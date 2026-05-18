@@ -2047,7 +2047,7 @@
 	}
 
 	header.major {
-		padding: 1em 0;
+		padding: 0em 0;
 		text-align: center;
 	}
 
@@ -3171,7 +3171,7 @@
 		background-repeat: repeat,							no-repeat;
 		background-size: auto,							cover;
 		color: #fff;
-		padding: 10em 0 18em 0;
+		padding: 10em 0 10em 0;
 		text-align: center;
 	}
 
@@ -3229,8 +3229,8 @@
 
 	#banner-textbox {
 		background-color: #000000d0;
-		padding: 2em 0 2em 0;
-		margin: -3em auto -5em auto;
+		padding: 2em 2em 2em 2em;
+		margin: -3em auto -8em auto;
 		width: 60em;
 		max-width: calc(100% - 5em);
 		border-radius: 6px;
