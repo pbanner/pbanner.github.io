@@ -3231,8 +3231,6 @@
 		background-color: #000000d0;
 		padding: 2em 2em 2em 2em;
 		margin: -3em auto -8em auto;
-		width: 60em;
-		max-width: calc(100% - 5em);
 		border-radius: 6px;
 	}
 
