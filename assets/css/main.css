@@ -160,12 +160,14 @@
 		font-size: 2.25em;
 		line-height: 1.5em;
 		letter-spacing: -0.035em;
+		font-weight: 700;
 	}
 
 	h3 {
 		font-size: 1.75em;
 		line-height: 1.5em;
 		letter-spacing: -0.025em;
+		font-weight: 700;
 	}
 
 	h4 {
@@ -2050,15 +2052,16 @@
 	}
 
 		header.major h2 {
-			margin: 0;
+			margin: 0 0 0.5em 0;
+			padding: 0 0 0.5em 0;
+			border-bottom: solid 2px #e5e5e5;
 		}
 
 		header.major p {
 			display: inline-block;
-			border-top: solid 2px #e5e5e5;
 			color: #777;
-			margin: 1.5em 0 0 0;
-			padding: 1.5em 0 0 0;
+			margin: 1.0em 0 0 0;
+			padding: 0 0 0 0;
 			font-style: normal;
 		}
 
