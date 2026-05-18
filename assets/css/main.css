@@ -3067,7 +3067,7 @@
 			-webkit-animation: none;
 			-ms-animation: none;
 			animation: none;
-			background: none;
+			background-color: black;
 			color: rgba(255, 255, 255, 0.75);
 			position: absolute;
 		}
@@ -3171,7 +3171,7 @@
 		background-repeat: repeat,							no-repeat;
 		background-size: auto,							cover;
 		color: #fff;
-		padding: 12em 0 20em 0;
+		padding: 10em 0 18em 0;
 		text-align: center;
 	}
 
@@ -3226,6 +3226,15 @@
 				background: #fff;
 				color: #666 !important;
 			}
+
+	#banner-textbox {
+		background-color: #000000d0;
+		padding: 2em 0 2em 0;
+		margin: -3em auto -5em auto;
+		width: 60em;
+		max-width: calc(100% - 5em);
+		border-radius: 6px;
+	}
 
 /* Main */
 
