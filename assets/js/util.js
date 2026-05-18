@@ -585,3 +585,25 @@
 	};
 
 })(jQuery);
+
+// Email copy button functionality
+$(function() {
+	$('#email-copy-btn').on('click', function(e) {
+		e.preventDefault();
+		
+		var $this = $(this);
+		var email = $this.data('email');
+		var originalText = $this.text();
+		
+		navigator.clipboard.writeText(email).then(function() {
+			$this.text('Copied!').css('background-color', '#4CAF50');
+			
+			setTimeout(function() {
+				$this.text(originalText).css('background-color', '');
+			}, 10000);
+		}).catch(function(err) {
+			console.error('Failed to copy email:', err);
+			$this.text('Error copying');
+		});
+	});
+});

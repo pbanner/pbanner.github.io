@@ -2883,6 +2883,14 @@
 			opacity: 0.25;
 		}
 
+/* Special Email Copy Button functionality */
+#email-copy-btn {
+	-moz-transition: background-color 0.3s ease-in-out, color 0.3s ease-in-out;
+	-webkit-transition: background-color 0.3s ease-in-out, color 0.3s ease-in-out;
+	-ms-transition: background-color 0.3s ease-in-out, color 0.3s ease-in-out;
+	transition: background-color 0.3s ease-in-out, color 0.3s ease-in-out;
+}
+
 /* Header */
 
 	#page-wrapper {
