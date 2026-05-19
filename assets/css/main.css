@@ -2884,7 +2884,7 @@
 		}
 
 /* Special Email Copy Button functionality */
-#email-copy-btn {
+#email-copy-menu-btn {
 	width: 11em;
 	text-align: center;
 	-moz-transition: background-color 0.3s ease-in-out, color 0.3s ease-in-out;

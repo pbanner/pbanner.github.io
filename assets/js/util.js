@@ -15,13 +15,15 @@
 			var	$this = $(this),
 				indent = Math.max(0, $this.parents('li').length - 1),
 				href = $this.attr('href'),
-				target = $this.attr('target');
+				target = $this.attr('target'),
+				thisID = $this.attr('id');
 
 			b.push(
 				'<a ' +
 					'class="link depth-' + indent + '"' +
 					( (typeof target !== 'undefined' && target != '') ? ' target="' + target + '"' : '') +
 					( (typeof href !== 'undefined' && href != '') ? ' href="' + href + '"' : '') +
+					( (typeof thisID !== 'undefined' && thisID != '') ? ' id="' + thisID + '-nav' + '"' : '') +
 				'>' +
 					'<span class="indent-' + indent + '"></span>' +
 					$this.text() +
@@ -586,6 +588,7 @@
 
 })(jQuery);
 
+// Email copy button in nav panel
 // Email copy button functionality
 $(function() {
 	$('#email-copy-btn').on('click', function(e) {
@@ -596,14 +599,37 @@ $(function() {
 		var originalText = $this.text();
 		
 		navigator.clipboard.writeText(email).then(function() {
-			$this.text('Copied to clipboard!').css('background-color', '#4CAF50');
+			$this.text('Copied!').css('background-color', '#4CAF50');
 			
 			setTimeout(function() {
 				$this.text(originalText).css('background-color', '');
-			}, 10000);
+			}, 2000);
 		}).catch(function(err) {
 			console.error('Failed to copy email:', err);
 			$this.text('Error copying');
 		});
 	});
 });
+
+function copyEmail(email) {
+	//var email = 'pbanner1@swarthmore.edu';
+	var ids = ['email-copy-menu-btn', 'email-copy-menu-btn-nav'];
+	
+	for (var i = 0; i < ids.length; i++) {
+		(function() {
+			var $element = $('#' + ids[i]);
+			if ($element.length > 0) {
+				var originalText = $element.text();
+				$element.text('Copied to clipboard!').css('background-color', '#4CAF50');
+				
+				navigator.clipboard.writeText(email).then(function() {
+					setTimeout(function() {
+						$element.text(originalText).css('background-color', '');
+					}, 10000);
+				}).catch(function(err) {
+					console.error('Failed to copy email:', err);
+				});
+			}
+		})();
+	}
+}
