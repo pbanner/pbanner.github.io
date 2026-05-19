@@ -6,7 +6,7 @@
 -->
 <html>
 	<head>
-		<title>Generic - Alpha by HTML5 UP</title>
+		<title>Quantum Networks | Banner Research Group</title>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
 		<link rel="stylesheet" href="assets/css/main.css" />
@@ -21,23 +21,60 @@
 				<section id="main" class="container">
 					<header>
 						<h2>Quantum Networks Research with BIFROST</h2>
-						<!-- <p>A generic page for every non-generic situation.</p> -->
+						<p>This page contains info about the research group behind the Birefringence in Fiber: Research and Optical Simulation Toolkit (BIFROST). Learn more about who has contributed, what we are trying to answer, and what we have learned so far. </p>
 					</header>
+
 					<div class="box">
-						<span class="image featured"><img src="images/pic01.jpg" alt="" /></span>
-						<h3>This is a subheading</h3>
-						<p>Cep risus aliquam gravida cep ut lacus amet. Adipiscing faucibus nunc placerat. Tempus adipiscing turpis non blandit accumsan eget lacinia nunc integer interdum amet aliquam ut orci non col ut ut praesent. Semper amet interdum mi. Phasellus enim laoreet ac ac commodo faucibus faucibus. Curae ante vestibulum ante. Blandit. Ante accumsan nisi eu placerat gravida placerat adipiscing in risus fusce vitae ac mi accumsan nunc in accumsan tempor blandit aliquet aliquet lobortis. Ultricies blandit lobortis praesent turpis. Adipiscing accumsan adipiscing adipiscing ac lacinia cep. Orci blandit a iaculis adipiscing ac. Vivamus ornare laoreet odio vis praesent nunc lorem mi. Erat. Tempus sem faucibus ac id. Vis in blandit. Nascetur ultricies blandit ac. Arcu aliquam. Accumsan mi eget adipiscing nulla. Non vestibulum ac interdum condimentum semper commodo massa arcu.</p>
-						<div class="row">
-							<div class="row-6 row-12-mobilep">
-								<h3>And now a subheading</h3>
-								<p>Adipiscing faucibus nunc placerat. Tempus adipiscing turpis non blandit accumsan eget lacinia nunc integer interdum amet aliquam ut orci non col ut ut praesent. Semper amet interdum mi. Phasellus enim laoreet ac ac commodo faucibus faucibus. Curae lorem ipsum adipiscing ac. Vivamus ornare laoreet odio vis praesent.</p>
-							</div>
-							<div class="row-6 row-12-mobilep">
-								<h3>And another subheading</h3>
-								<p>Adipiscing faucibus nunc placerat. Tempus adipiscing turpis non blandit accumsan eget lacinia nunc integer interdum amet aliquam ut orci non col ut ut praesent. Semper amet interdum mi. Phasellus enim laoreet ac ac commodo faucibus faucibus. Curae lorem ipsum adipiscing ac. Vivamus ornare laoreet odio vis praesent.</p>
+						<span class="image featured"><img src="images/quantum-network.png" alt="" style="height: 400; object-fit:contain;" /></span>
+						<h2>What Are We Trying to Learn?</h2>
+						<p>
+							<span class="image right"><img src="images/Poincare_Animation_Fast.gif" alt="" width="250" /></span>
+							Quantum networks that can perform entanglement distribution and swapping (tasks fundamental to quantum communication) are beginning to come online. In the US, QothamQ in New York City, DC-QNET in the DC Metro area, and ASPEN-NET west of the Rockies are all building quantum testbeds, demonstrating important steps toward practical computing, and partnering with industry to deploy quantum networks today. To do so, they are all using optical fiber to transfer photons over long distances. Optical fiber has been optimized over decades for classical telecommunications where each "bit" uses trillions of photons. But quantum information is different, and optical fiber introduces noise processes that matter for quantum information. In our group, we ask questions like: 
+						</p>
+						<ul>
+							<li>What physical mechanisms cause noise processes in fiber-based quantum networks? How do different mechanisms affect different logical encodings (polarization, time-bin, etc.)?</li>
+							<li>Are commercial telecom fibers really suitable for very-high-fidelity quantum network operations? If not, what are the alternatives?</li>
+							<li>What fundamental limits do loss, polarization mode dispersion, and other fiber physics place on quantum networks?</li>
+						</ul>
+						<p>To help us answer these questions, we have developed BIFROST, a Python and Julia library that models optical fibers from first principles. This library is a work-in-progress, and we look forward to using it to simulate quantum noise processes, investigate compensation schemes, and more!</p>
+
+						<span class="image fit"><img src="images/HingeModelsComparison_Draft2.png" alt="" /></span>
+					</div>
+
+					<div class="box">
+						<h2>Who Are We?</h2>
+						
+						<div class="box alt">
+							<div class="row gtr-50 gtr-uniform">
+								<div class="col-4"><span class="image fit" style="text-align: center;"><img src="images/Banner-Headshot.png" alt="" style="aspect-ratio: 1/1; object-fit: cover;" /> <h3>Patrick Banner (PI)</h3> </span></div>
+								<div class="col-4"><span class="image fit" style="text-align: center;"><img src="images/pic05.jpg" alt="" /> <h3>William Jin</h3> </span></div>
+								<div class="col-4"><span class="image fit" style="text-align: center;"><img src="images/Ari-Headshot.jpg" alt="" style="aspect-ratio: 1/1; object-fit: cover;" /> <h3>Ari Smith</h3> </span></div>
 							</div>
 						</div>
+
+						<p>
+							<b>Collaborators:</b> Joe Britton, Prakriti Shahi (University of Maryland/Joint Quantum Institute) <br />
+							<b>Past Contributors:</b> Deven Bowman, Evan McClintock (University of Maryland)
+						</p>
 					</div>
+
+					<div class="box">
+						<h2>What Have We Written?</h2>
+
+						<p>
+							<b>P. R. Banner, S. L. Rolston, and J. W. Britton. "BIFROST: A First-Principles Model of Polarization Mode Dispersion in Optical Fiber." Physical Review Applied (2026). Available online <a href="https://journals.aps.org/prapplied/abstract/10.1103/xgqr-rlmf">from APS</a> and <a href="https://arxiv.org/abs/2510.01212">on the Arxiv (no paywall)</a>.</b> <br />
+							This first paper presents BIFROST. We describe the physics underlying the model, the constraints on the model/operating regime of BIFROST, some validation work we have done, and a simple example simulation in the context of wavelength-division-multiplexed compensation of polarization qubits in a 26-km fiber.
+						</p>
+
+						<h4><b>PI's Past Work in Atomic and Optical Physics</b></h4>
+						<p>Patrick previously worked in other areas of atomic and optical physics. The publications from that work include:</p>
+						<ul>
+							<li>D. Kurdak, P. R. Banner, Y. Li, S. R. Muleady, A. V. Gorshkov, S. L. Rolston, and J. V. Porto, "Enhancement of Rydberg Blockade via Microwave Dressing." Physical Review Letters (2025). Available online <a href="https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.134.123404">from APS</a> and <a href="https://arxiv.org/abs/2411.08236">on the Arxiv (no paywall)</a>. </li>
+							<li>P. R. Banner, D. Kurdak, Y. Li, A. Migdall, J. V. Porto, and S. L. Rolston, “Number-State Reconstruction with a Single Single-Photon Avalanche Detector,” Optica Quantum 2, 2 (2024), DOI: 10.1364/OPTICAQ.504308.</li>
+							<li>S. Olmschenk, P. Banner, J. Hankes, and A. Nelson, “Optogalvanic spectroscopy of the hyperfine structure of the 5p<sup>6</sup>5d<sup>2</sup>D<sub>3/2,5/2</sub> and 5p<sup>6</sup>4f<sup>2</sup>F<sup>o</sup><sub>5/2,7/2</sub> levels of La III,” Phys. Rev. A 96, 032502 (2017).</li>
+						</ul>
+					</div>
+
 				</section>
 
 			<!-- Footer -->
