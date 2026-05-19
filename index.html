@@ -19,30 +19,7 @@
 		<div id="page-wrapper">
 
 			<!-- Header -->
-				<header id="header" class="alt">
-					<h1><a href="index.html">Patrick Banner</a> | Personal Website</h1>
-					<nav id="nav">
-						<ul>
-							<li><a href="index.html">Home</a></li>
-							<li>
-								<a href="#" class="icon solid fa-angle-down">Research</a>
-								<ul>
-									<li><a href="research-quantum-networks.html">Quantum Networks</a></li>
-									<li><a href="research-education.html">Physics Education</a></li>
-								</ul>
-							</li>
-							<li>
-								<a href="#" class="icon solid fa-angle-down">Teaching</a>
-								<ul>
-									<li><a href="teaching-overview.html">Overview</a></li>
-									<li><a href="teaching-sims-landing.html">Simulations</a></li>
-								</ul>
-							</li>
-							<li><a href="assets/Banner-CV-Feb2026.pdf">CV</a></li>
-							<li><a href="javascript:copyEmail('pbanner1@swarthmore.edu')" id="email-copy-menu-btn" class="button">Email (click to copy)</a></li>
-						</ul>
-					</nav>
-				</header>
+			<div id="header-container"></div>
 
 			<!-- Banner -->
 				<section id="banner">
@@ -160,16 +137,7 @@
 				</section>
 
 			<!-- Footer -->
-				<footer id="footer">
-					<ul class="icons">
-						<li><a href="https://scholar.google.com/citations?user=fbbKcYcAAAAJ" target="_blank" class="icon brands fa-google" alt="Google Scholar"><span class="label">Google</span></a></li>
-						<li><a href="https://github.com/pbanner" target="_blank" class="icon brands fa-github"><span class="label">Github</span></a></li>
-						<li><a href="https://www.linkedin.com/in/patrick-banner/" target="_blank" class="icon brands fa-linkedin"><span class="label">LinkedIn</span></a></li>
-					</ul>
-					<ul class="copyright">
-						<li>&copy; Patrick Banner 2026. All rights reserved.</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
-					</ul>
-				</footer>
+			<div id="footer-container"></div>
 
 		</div>
 
@@ -180,7 +148,19 @@
 			<script src="assets/js/browser.min.js"></script>
 			<script src="assets/js/breakpoints.min.js"></script>
 			<script src="assets/js/util.js"></script>
-			<script src="assets/js/main.js"></script>
+			<script>
+			// Populate the header from header.html
+			$(function() {
+				$('#header-container').load('header.html', function() {
+					// Also populate the footer from footer.html
+					$('#footer-container').load('footer.html');
+					// Dynamically load main.js after header is loaded
+					var script1 = document.createElement('script');
+					script1.src = 'assets/js/main.js';
+					document.head.appendChild(script1);
+				});
+			});
+			</script>
 
 	</body>
 </html>
