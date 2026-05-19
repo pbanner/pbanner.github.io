@@ -2885,6 +2885,8 @@
 
 /* Special Email Copy Button functionality */
 #email-copy-btn {
+	width: 11em;
+	text-align: center;
 	-moz-transition: background-color 0.3s ease-in-out, color 0.3s ease-in-out;
 	-webkit-transition: background-color 0.3s ease-in-out, color 0.3s ease-in-out;
 	-ms-transition: background-color 0.3s ease-in-out, color 0.3s ease-in-out;

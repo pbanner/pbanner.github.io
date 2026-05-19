@@ -596,7 +596,7 @@ $(function() {
 		var originalText = $this.text();
 		
 		navigator.clipboard.writeText(email).then(function() {
-			$this.text('Copied!').css('background-color', '#4CAF50');
+			$this.text('Copied to clipboard!').css('background-color', '#4CAF50');
 			
 			setTimeout(function() {
 				$this.text(originalText).css('background-color', '');
