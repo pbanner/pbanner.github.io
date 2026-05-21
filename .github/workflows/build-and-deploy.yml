@@ -11,6 +11,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: write  # Allows the action to push code to the repo
+      pull-requests: write # Use this if your action adds PR comments
     
     steps:
       - name: Checkout code
@@ -35,4 +39,4 @@ jobs:
           git config user.email "github-actions@github.com"
           git add sims/test-sim/dist/
           git commit -m "Build: update dist folder" || echo "No changes to commit"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
+          git push
