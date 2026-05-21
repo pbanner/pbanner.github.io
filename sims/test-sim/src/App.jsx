@@ -6,6 +6,7 @@ export default function App() {
   const [circle, setCircle] = useState({ x: 200, y: 200, radius: 30 });
   const [dragging, setDragging] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [isRed, setIsRed] = useState(false);  // ← Add this
 
   // Draw the circle
   useEffect(() => {
@@ -35,7 +36,7 @@ export default function App() {
     }
     
     // Draw circle
-    ctx.fillStyle = '#3498db';
+    ctx.fillStyle = isRed ? '#e74c3c' : '#3498db';  // ← Changes based on isRed state
     ctx.beginPath();
     ctx.arc(circle.x, circle.y, circle.radius, 0, Math.PI * 2);
     ctx.fill();
@@ -44,7 +45,7 @@ export default function App() {
     ctx.strokeStyle = '#2980b9';
     ctx.lineWidth = 2;
     ctx.stroke();
-  }, [circle]);
+  }, [circle, isRed]);
 
   // Handle mouse down
   const handleMouseDown = (e) => {
@@ -92,6 +93,16 @@ export default function App() {
     <div className="container">
       <h1>Draggable Circle Simulator</h1>
       <p>Click and drag the blue circle around the canvas</p>
+      <div style={{ marginBottom: '20px' }}>
+        <label>
+          <input
+            type="checkbox"
+            checked={isRed}
+            onChange={(e) => setIsRed(e.target.checked)}
+          />
+          Make circle red
+        </label>
+      </div>
       <canvas
         ref={canvasRef}
         width={800}
