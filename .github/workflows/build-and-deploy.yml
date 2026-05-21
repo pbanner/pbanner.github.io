@@ -35,4 +35,4 @@ jobs:
           git config user.email "github-actions@github.com"
           git add sims/test-sim/dist/
           git commit -m "Build: update dist folder" || echo "No changes to commit"
-          git push
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
