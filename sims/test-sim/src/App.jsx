@@ -3,7 +3,7 @@ import './App.css';
 
 /************************************************
  * 
- *   Ray-Mirror Coolision Handling
+ *   Ray-Mirror Collision Handling
  * 
 ************************************************/
 
@@ -63,6 +63,10 @@ function reflectRay(incidentAngle, mirrorNormal) {
   const incidentDy = Math.sin(incidentAngle);
   
   // Reflection formula: r = i - 2(i·n)n
+  // (i·n)n is the component of the ray perpendicular to the mirror.
+  // By subtracting it twice, we remove it (subtract once) then reverse it
+  //    (subtract twice); since n is perpendicular to the mirror, the parallel
+  //    part of i in unchanged.
   const dotProduct = incidentDx * mirrorNormal.x + incidentDy * mirrorNormal.y;
   
   const reflectedDx = incidentDx - 2 * dotProduct * mirrorNormal.x;
@@ -144,7 +148,7 @@ export default function App() {
   const [gridOn, setGridOn] = useState(true);
   const [mirrors, setMirrors] = useState([
     { start: { x: 600, y: 100 }, end: { x: 600, y: 500 } },    // Vertical mirror 
-    { start: { x: 100, y: 400 }, end: { x: 500, y: 400 } },    // Horizontal mirror
+    { start: { x: 100, y: 400 }, end: { x: 600, y: 400 } },    // Horizontal mirror
   ]);
 
   // Draw the circle
@@ -187,20 +191,33 @@ export default function App() {
 
     // Draw ray segments
     // Define the set of rays
-    const raySegments = traceRay(
-      { x: circle.x, y: circle.y },
-      rayAngle,
-      mirrors,
-      5, // maxBounces
-      2000 // maxDistance for final segment
-    );
+    // Define the set of rays
+    const rayCount = 5;  // Number of rays
+    const angleSpread = 2 * Math.PI / 180.0;  // Total spread (4 degrees, so ±2 degrees from center)
+
+    const allRaySegments = [];
+
+    for (let i = 0; i < rayCount; i++) {
+      // Spread rays evenly from (rayAngle - angleSpread/2) to (rayAngle + angleSpread/2)
+      const angle = rayAngle + (i / (rayCount - 1) - 0.5) * angleSpread;
+      
+      const raySegments = traceRay(
+        { x: circle.x, y: circle.y },
+        angle,
+        mirrors,
+        5,      // maxBounces
+        2000    // maxDistance for final segment
+      );
+      
+      allRaySegments.push(...raySegments);
+    }
     //console.log('Ray segments:', raySegments);
     //console.log('Circle:', circle, 'Angle:', rayAngle, 'Mirrors:', mirrors);
 
     // Draw the ray segments
     ctx.strokeStyle = '#202020';
     ctx.lineWidth = 1;
-    raySegments.forEach(seg => {
+    allRaySegments.forEach(seg => {
       ctx.beginPath();
       ctx.moveTo(seg.start.x, seg.start.y);
       ctx.lineTo(seg.end.x, seg.end.y);
