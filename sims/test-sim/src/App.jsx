@@ -1,15 +1,151 @@
 import React, { useRef, useEffect, useState } from 'react';
 import './App.css';
 
+/************************************************
+ * 
+ *   Ray-Mirror Coolision Handling
+ * 
+************************************************/
+
+function rayHitsMirror(rayOrigin, rayDirection, mirrorStart, mirrorEnd, maxDist = Infinity) {
+  // rayOrigin: {x, y}
+  // rayDirection: angle in radians
+  // mirrorStart, mirrorEnd: {x, y}
+  
+  // Strategy here is to parametrize both the ray and the mirror and solve:
+  // Parametric ray: P = rayOrigin + t * (cos(rayDirection), sin(rayDirection))
+  // Parametric line: P = mirrorStart + s * (mirrorEnd - mirrorStart)
+  
+  const rayDx = Math.cos(rayDirection);
+  const rayDy = Math.sin(rayDirection);
+  
+  const mirrorDx = mirrorEnd.x - mirrorStart.x;
+  const mirrorDy = mirrorEnd.y - mirrorStart.y;
+  
+  // Solve: rayOrigin + t*(rayDx, rayDy) = mirrorStart + s*(mirrorDx, mirrorDy)
+  const denom = rayDx * mirrorDy - rayDy * mirrorDx;
+  if (Math.abs(denom) < 1e-10) return null; // Ray parallel to mirror
+  const dx = mirrorStart.x - rayOrigin.x;
+  const dy = mirrorStart.y - rayOrigin.y;
+  const t = (dx * mirrorDy - dy * mirrorDx) / denom;
+  const s = (dx * rayDy - dy * rayDx) / denom;
+  
+  // Check if intersection is:
+  // - In front of ray (t > 0)
+  // - Within mirror segment (0 <= s <= 1)
+  // - Not too far away
+  if (t > 0.001 && s >= 0 && s <= 1 && t < maxDist) {
+    return {
+      t: t,
+      hitPoint: { x: rayOrigin.x + t * rayDx, y: rayOrigin.y + t * rayDy },
+      mirrorIndex: null, // Will be set by caller
+      s: s
+    };
+  }
+  
+  return null;
+}
+
+function getMirrorNormal(mirrorStart, mirrorEnd) {
+  // Vector along mirror
+  const dx = mirrorEnd.x - mirrorStart.x;
+  const dy = mirrorEnd.y - mirrorStart.y;
+  
+  // Normal (perpendicular, pointing "outward")
+  // Rotate 90 degrees counterclockwise
+  const length = Math.sqrt(dx*dx + dy*dy);
+  return { x: -dy / length, y: dx / length };
+}
+
+function reflectRay(incidentAngle, mirrorNormal) {
+  // Convert angle to direction vector
+  const incidentDx = Math.cos(incidentAngle);
+  const incidentDy = Math.sin(incidentAngle);
+  
+  // Reflection formula: r = i - 2(i·n)n
+  const dotProduct = incidentDx * mirrorNormal.x + incidentDy * mirrorNormal.y;
+  
+  const reflectedDx = incidentDx - 2 * dotProduct * mirrorNormal.x;
+  const reflectedDy = incidentDy - 2 * dotProduct * mirrorNormal.y;
+  
+  // Convert back to angle
+  return Math.atan2(reflectedDy, reflectedDx);
+}
+
+function traceRay(startPoint, startAngle, mirrors, maxBounces = 5, maxDistance = 2000) {
+  //console.log('traceRay called with:', { startPoint, startAngle, mirrorsCount: mirrors.length, maxBounces, maxDistance });
+  const segments = [];
+  let currentPoint = startPoint;
+  let currentAngle = startAngle;
+  
+  for (let bounce = 0; bounce < maxBounces; bounce++) {
+    //console.log(`Bounce ${bounce}: currentPoint=`, currentPoint, 'currentAngle=', currentAngle);
+    // Find which mirror (if any) is hit first by looping through
+    // mirrors and checking their hit points and comparing
+    let closest = null;
+    for (let i = 0; i < mirrors.length; i++) {
+      const hit = rayHitsMirror(currentPoint, currentAngle, mirrors[i].start, mirrors[i].end, maxDistance);
+      //console.log(`  Mirror ${i}: hit=`, hit);
+      if (hit && (!closest || hit.t < closest.t)) {
+        hit.mirrorIndex = i;
+        closest = hit;
+      }
+    }
+    
+    //console.log(`  Closest hit:`, closest);
+    // If the ray doesn't hit anything, then just draw out to the max distance
+    // And end the loop of bounces for this ray
+    if (!closest) {
+      const endX = currentPoint.x + maxDistance * Math.cos(currentAngle);
+      const endY = currentPoint.y + maxDistance * Math.sin(currentAngle);
+      segments.push({
+        start: currentPoint,
+        end: { x: endX, y: endY },
+        bounced: false
+      });
+      break;
+    }
+    
+    //console.log(`  Hit mirror, adding segment`);
+    // If the ray does hit a mirror, push that segment...
+    segments.push({
+      start: currentPoint,
+      end: closest.hitPoint,
+      bounced: bounce > 0
+    });
+    
+    // ... and set up to reflect the next bounce
+    const mirrorNormal = getMirrorNormal(
+      mirrors[closest.mirrorIndex].start,
+      mirrors[closest.mirrorIndex].end
+    );
+    currentPoint = closest.hitPoint;
+    currentAngle = reflectRay(currentAngle, mirrorNormal);
+  }
+  
+  //console.log('traceRay returning segments:', segments);
+  return segments;
+}
+
+/************************************************
+ * 
+ *   Main App
+ * 
+************************************************/
+
 export default function App() {
   const canvasRef = useRef(null);
   const [circle, setCircle] = useState({ x: 200, y: 200, radius: 5 });
   const [draggingCircle, setDraggingCircle] = useState(false);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [offset, setOffset] = useState({ x: 0, y: 0, angle: 0 });
   const [rayAngle, setRayAngle] = useState(0);  // Angle measured ccw from rightward horizontal
   const [draggingRays, setDraggingRays] = useState(false);
   const [isRed, setIsRed] = useState(false);
   const [gridOn, setGridOn] = useState(true);
+  const [mirrors, setMirrors] = useState([
+    { start: { x: 600, y: 100 }, end: { x: 600, y: 500 } },    // Vertical mirror 
+    { start: { x: 100, y: 400 }, end: { x: 500, y: 400 } },    // Horizontal mirror
+  ]);
 
   // Draw the circle
   useEffect(() => {
@@ -49,17 +185,39 @@ export default function App() {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Draw rays
+    // Draw ray segments
+    // Define the set of rays
+    const raySegments = traceRay(
+      { x: circle.x, y: circle.y },
+      rayAngle,
+      mirrors,
+      5, // maxBounces
+      2000 // maxDistance for final segment
+    );
+    //console.log('Ray segments:', raySegments);
+    //console.log('Circle:', circle, 'Angle:', rayAngle, 'Mirrors:', mirrors);
+
+    // Draw the ray segments
     ctx.strokeStyle = '#202020';
     ctx.lineWidth = 1;
-    for (let i = -2*Math.PI/180.0; i < 3*Math.PI/180.0; i += 2*Math.PI/180.0) {
+    raySegments.forEach(seg => {
       ctx.beginPath();
-      ctx.moveTo(circle.x, circle.y);
-      ctx.lineTo(circle.x + 250*Math.cos(rayAngle+i), circle.y + 250*Math.sin(rayAngle+i));
-      ctx.stroke()
-    }
+      ctx.moveTo(seg.start.x, seg.start.y);
+      ctx.lineTo(seg.end.x, seg.end.y);
+      ctx.stroke();
+    });
 
-  }, [circle, isRed, gridOn, rayAngle]);
+    // Draw mirrors
+    ctx.strokeStyle = '#ff0000';
+    ctx.lineWidth = 3;
+    mirrors.forEach(mirror => {
+      ctx.beginPath();
+      ctx.moveTo(mirror.start.x, mirror.start.y);
+      ctx.lineTo(mirror.end.x, mirror.end.y);
+      ctx.stroke();
+    });
+
+  }, [circle, isRed, gridOn, rayAngle, mirrors]);
 
   // Handle mouse down
   const handleMouseDown = (e) => {
@@ -77,6 +235,7 @@ export default function App() {
       setOffset({
         x: mouseX - circle.x,
         y: mouseY - circle.y,
+        angle: Math.atan2(mouseY - circle.y, mouseX - circle.x) - rayAngle
       });
     // Check if clicked in the rays' path
     } else if ((dist < 250) && (Math.abs(angleClick - rayAngle) <= 3.0*Math.PI/180.0)) {
@@ -84,6 +243,7 @@ export default function App() {
       setOffset({
         x: mouseX - circle.x,
         y: mouseY - circle.y,
+        angle: Math.atan2(mouseY - circle.y, mouseX - circle.x) - rayAngle
       });
     }
   };
@@ -104,8 +264,7 @@ export default function App() {
         y: mouseY - offset.y,
       });
     } else if (draggingRays) {
-      let offsetAngle = Math.atan2(offset.y, offset.x);
-      setRayAngle(Math.atan2(mouseY - circle.y, mouseX - circle.x) - offsetAngle);
+      setRayAngle(Math.atan2(mouseY - circle.y, mouseX - circle.x) - offset.angle);
     }
   };
 
