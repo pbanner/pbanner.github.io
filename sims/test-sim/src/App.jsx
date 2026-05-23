@@ -3,10 +3,13 @@ import './App.css';
 
 export default function App() {
   const canvasRef = useRef(null);
-  const [circle, setCircle] = useState({ x: 200, y: 200, radius: 30 });
-  const [dragging, setDragging] = useState(false);
+  const [circle, setCircle] = useState({ x: 200, y: 200, radius: 5 });
+  const [draggingCircle, setDraggingCircle] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [isRed, setIsRed] = useState(false);  // ← Add this
+  const [rayAngle, setRayAngle] = useState(0);  // Angle measured ccw from rightward horizontal
+  const [draggingRays, setDraggingRays] = useState(false);
+  const [isRed, setIsRed] = useState(false);
+  const [gridOn, setGridOn] = useState(true);
 
   // Draw the circle
   useEffect(() => {
@@ -20,7 +23,7 @@ export default function App() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
     // Draw grid (optional, just for reference)
-    ctx.strokeStyle = '#e0e0e0';
+    ctx.strokeStyle = gridOn ? '#e0e0e0' : '#f0f0f0';
     ctx.lineWidth = 1;
     for (let i = 0; i < canvas.width; i += 50) {
       ctx.beginPath();
@@ -45,7 +48,18 @@ export default function App() {
     ctx.strokeStyle = '#2980b9';
     ctx.lineWidth = 2;
     ctx.stroke();
-  }, [circle, isRed]);
+
+    // Draw rays
+    ctx.strokeStyle = '#202020';
+    ctx.lineWidth = 1;
+    for (let i = -2*Math.PI/180.0; i < 3*Math.PI/180.0; i += 2*Math.PI/180.0) {
+      ctx.beginPath();
+      ctx.moveTo(circle.x, circle.y);
+      ctx.lineTo(circle.x + 250*Math.cos(rayAngle+i), circle.y + 250*Math.sin(rayAngle+i));
+      ctx.stroke()
+    }
+
+  }, [circle, isRed, gridOn, rayAngle]);
 
   // Handle mouse down
   const handleMouseDown = (e) => {
@@ -54,13 +68,19 @@ export default function App() {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    // Check if clicked inside circle
-    const dist = Math.sqrt(
-      (mouseX - circle.x) ** 2 + (mouseY - circle.y) ** 2
-    );
+    const dist = Math.sqrt((mouseX - circle.x) ** 2 + (mouseY - circle.y) ** 2);
+    const angleClick = Math.atan2(mouseY - circle.y, mouseX - circle.x);
 
+    // Check if clicked inside circle
     if (dist < circle.radius) {
-      setDragging(true);
+      setDraggingCircle(true);
+      setOffset({
+        x: mouseX - circle.x,
+        y: mouseY - circle.y,
+      });
+    // Check if clicked in the rays' path
+    } else if ((dist < 250) && (Math.abs(angleClick - rayAngle) <= 3.0*Math.PI/180.0)) {
+      setDraggingRays(true);
       setOffset({
         x: mouseX - circle.x,
         y: mouseY - circle.y,
@@ -70,23 +90,29 @@ export default function App() {
 
   // Handle mouse move
   const handleMouseMove = (e) => {
-    if (!dragging) return;
+    if (!(draggingCircle || draggingRays)) return;
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    setCircle({
-      ...circle,
-      x: mouseX - offset.x,
-      y: mouseY - offset.y,
-    });
+    if (draggingCircle) {
+      setCircle({
+        ...circle,
+        x: mouseX - offset.x,
+        y: mouseY - offset.y,
+      });
+    } else if (draggingRays) {
+      let offsetAngle = Math.atan2(offset.y, offset.x);
+      setRayAngle(Math.atan2(mouseY - circle.y, mouseX - circle.x) - offsetAngle);
+    }
   };
 
   // Handle mouse up
   const handleMouseUp = () => {
-    setDragging(false);
+    setDraggingCircle(false);
+    setDraggingRays(false);
   };
 
   return (
@@ -102,6 +128,15 @@ export default function App() {
           />
           Make circle red
         </label>
+
+        <label>
+          <input
+            type="checkbox"
+            checked={gridOn}
+            onChange={(e) => setGridOn(e.target.checked)}
+          />
+          Grid visible
+        </label>
       </div>
       <canvas
         ref={canvasRef}
@@ -111,7 +146,7 @@ export default function App() {
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        style={{ border: '2px solid #333', cursor: dragging ? 'grabbing' : 'grab' }}
+        style={{ border: '2px solid #333', cursor: (draggingCircle || draggingRays) ? 'grabbing' : 'grab' }}
       />
       <div className="info">
         Position: ({circle.x.toFixed(0)}, {circle.y.toFixed(0)})
