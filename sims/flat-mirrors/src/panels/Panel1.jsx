@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import eyeImage from '../assets/eye-small.png';
 
 /************************************************
  * 
@@ -130,15 +131,27 @@ function traceRay(startPoint, startAngle, mirrors, maxBounces = 2, maxDistance =
   return segments;
 }
 
+/************************************************
+ * 
+ *   Main App
+ * 
+************************************************/
+
 export default function Panel1({ gridOn }) {
   const GRID_SPACING = 50;
+  const EYE_HEIGHT = 50; // pixels
+  const EYE_WIDTH = 40; // pixels
 
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const mirrorInitializedRef = useRef(false);  // ← Track if we've set mirrors once
+  const eyeImageRef = useRef(null);
+  const [imageLoaded, setImageLoaded] = useState(false);
   
   const [circle, setCircle] = useState({ x: 300, y: 200, radius: 8 });
   const [draggingCircle, setDraggingCircle] = useState(false);
+  const [eye, setEye] = useState({ x: 300, y: 400 });
+  const [draggingEye, setDraggingEye] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [circleColor, setCircleColor] = useState(false);
   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
@@ -178,7 +191,7 @@ export default function Panel1({ gridOn }) {
     return () => window.removeEventListener('resize', resizeCanvas);
   }, []);
 
-  // EFFECT 1: Initialize mirrors only once, after canvas dims are set
+  // EFFECT 1a: Initialize mirrors only once, after canvas dims are set
   useEffect(() => {
     if (mirrorInitializedRef.current) return; // Only run once
     if (canvasDims.width === 800) return; // Wait for actual resize to complete
@@ -190,6 +203,16 @@ export default function Panel1({ gridOn }) {
     }]);
     mirrorInitializedRef.current = true;
   }, [canvasDims]);
+
+  // EFFECT 1b: Wait for the eye image to be loaded, so it gets drawn
+  useEffect(() => {
+    const img = new Image();
+    img.src = eyeImage;
+    img.onload = () => {
+      eyeImageRef.current = img;
+      setImageLoaded(true);  // Trigger redraw
+    };
+  }, []);
 
   // EFFECT 2: Draw everything
   useEffect(() => {
@@ -261,7 +284,13 @@ export default function Panel1({ gridOn }) {
     ctx.strokeStyle = circleColor ? '#c0392b' : '#2980b9';
     ctx.lineWidth = 2;
     ctx.stroke();
-  }, [circle, circleColor, gridOn, mirrors, rayAngle, canvasDims]);
+
+    // Draw eye
+    if (eyeImageRef.current && eyeImageRef.current.complete) {
+      ctx.drawImage(eyeImageRef.current, eye.x - EYE_WIDTH / 2, eye.y - EYE_HEIGHT / 2, EYE_WIDTH, EYE_HEIGHT);
+    }
+
+  }, [circle, eye, circleColor, gridOn, mirrors, rayAngle, canvasDims, imageLoaded]);
 
   // Mouse handlers
   const handleMouseDown = (e) => {
@@ -270,34 +299,43 @@ export default function Panel1({ gridOn }) {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    const dist = Math.sqrt((mouseX - circle.x) ** 2 + (mouseY - circle.y) ** 2);
+    const distToCircle = Math.sqrt((mouseX - circle.x) ** 2 + (mouseY - circle.y) ** 2);
+    const distToEye = Math.sqrt((mouseX - eye.x) ** 2 + (mouseY - eye.y) ** 2);
 
-    if (dist < circle.radius + 5) {
+    if (distToEye < 25) { // Eye hitbox
+      setDraggingEye(true);
+      setOffset({ x: mouseX - eye.x, y: mouseY - eye.y });
+    } else if (distToCircle < circle.radius + 5) {
       setDraggingCircle(true);
-      setOffset({
-        x: mouseX - circle.x,
-        y: mouseY - circle.y,
-      });
+      setOffset({ x: mouseX - circle.x, y: mouseY - circle.y });
     }
   };
 
   const handleMouseMove = (e) => {
-    if (!draggingCircle) return;
+    if (!draggingCircle && !draggingEye) return;
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    setCircle({
-      ...circle,
-      x: Math.max(circle.radius, Math.min(canvas.width - circle.radius, mouseX - offset.x)),
-      y: Math.max(circle.radius, Math.min(canvas.height - circle.radius, mouseY - offset.y)),
-    });
+    if (draggingEye) {
+      setEye({
+        x: Math.max(20, Math.min(canvas.width - 20, mouseX - offset.x)),
+        y: Math.max(20, Math.min(canvas.height - 20, mouseY - offset.y)),
+      });
+    } else if (draggingCircle) {
+      setCircle({
+        ...circle,
+        x: Math.max(circle.radius, Math.min(canvas.width - circle.radius, mouseX - offset.x)),
+        y: Math.max(circle.radius, Math.min(canvas.height - circle.radius, mouseY - offset.y)),
+      });
+    }
   };
 
   const handleMouseUp = () => {
     setDraggingCircle(false);
+    setDraggingEye(false);
   };
 
   return (
