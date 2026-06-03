@@ -153,7 +153,6 @@ export default function Panel1({ gridOn }) {
   const [eye, setEye] = useState({ x: 300, y: 400 });
   const [draggingEye, setDraggingEye] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [circleColor, setCircleColor] = useState(false);
   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
   const [mirrors, setMirrors] = useState([
     { start: { x: 600, y: 100 }, end: { x: 600, y: 500 } },
@@ -277,11 +276,11 @@ export default function Panel1({ gridOn }) {
     });
 
     // Draw circle
-    ctx.fillStyle = circleColor ? '#e74c3c' : '#3498db';
+    ctx.fillStyle = '#3498db';
     ctx.beginPath();
     ctx.arc(circle.x, circle.y, circle.radius, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = circleColor ? '#c0392b' : '#2980b9';
+    ctx.strokeStyle = '#2980b9';
     ctx.lineWidth = 2;
     ctx.stroke();
 
@@ -290,7 +289,7 @@ export default function Panel1({ gridOn }) {
       ctx.drawImage(eyeImageRef.current, eye.x - EYE_WIDTH / 2, eye.y - EYE_HEIGHT / 2, EYE_WIDTH, EYE_HEIGHT);
     }
 
-  }, [circle, eye, circleColor, gridOn, mirrors, rayAngle, canvasDims, imageLoaded]);
+  }, [circle, eye, gridOn, mirrors, rayAngle, canvasDims, imageLoaded]);
 
   // Mouse handlers
   const handleMouseDown = (e) => {
