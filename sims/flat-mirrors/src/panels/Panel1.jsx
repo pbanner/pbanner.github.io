@@ -1,6 +1,8 @@
 import React, { useRef, useEffect, useState } from 'react';
 
 export default function Panel1({ gridOn }) {
+  const GRID_SPACING = 50;
+
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [circle, setCircle] = useState({ x: 300, y: 200, radius: 8 });
@@ -8,6 +10,19 @@ export default function Panel1({ gridOn }) {
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [circleColor, setCircleColor] = useState(false);
   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
+
+  // Calculate mirror position based on canvas dimensions
+  const getMirrorPosition = () => {
+    const mirrorWidth = 20; // Fixed horizontal width in pixels
+    const mirrorHeightRatio = 0.6; // 60% of canvas height
+    
+    return {
+      x: Math.round(canvasDims.width / 2 / GRID_SPACING) * GRID_SPACING, // Left side at halfway across, rounded to the nearest grid line
+      y: (canvasDims.height - canvasDims.height * mirrorHeightRatio) / 2, // Centered vertically
+      width: mirrorWidth,
+      height: canvasDims.height * mirrorHeightRatio,
+    };
+  };
 
   // Resize canvas to fill container
   useEffect(() => {
@@ -42,30 +57,34 @@ export default function Panel1({ gridOn }) {
     // Draw grid
     ctx.strokeStyle = gridOn ? '#e0e0e0' : '#ffffff';
     ctx.lineWidth = 1;
-    for (let i = 0; i <= canvas.width; i += 50) {
+    for (let i = 0; i <= canvas.width; i += GRID_SPACING) {
       ctx.beginPath();
       ctx.moveTo(i, 0);
       ctx.lineTo(i, canvas.height);
       ctx.stroke();
     }
-    for (let i = 0; i <= canvas.height; i += 50) {
+    for (let i = 0; i <= canvas.height; i += GRID_SPACING) {
       ctx.beginPath();
       ctx.moveTo(0, i);
       ctx.lineTo(canvas.width, i);
       ctx.stroke();
     }
 
+    // Draw mirror
+    const mirror = getMirrorPosition();
+    ctx.fillStyle = '#3498db';
+    ctx.fillRect(mirror.x, mirror.y, mirror.width, mirror.height);
+
     // Draw circle
     ctx.fillStyle = circleColor ? '#e74c3c' : '#3498db';
     ctx.beginPath();
     ctx.arc(circle.x, circle.y, circle.radius, 0, Math.PI * 2);
     ctx.fill();
-
     // Draw circle outline
     ctx.strokeStyle = circleColor ? '#c0392b' : '#2980b9';
     ctx.lineWidth = 2;
     ctx.stroke();
-  }, [circle, circleColor, gridOn, canvasDims]); // ← Added canvasDims dependency
+  }, [circle, circleColor, gridOn, canvasDims]);
 
   // Mouse handlers
   const handleMouseDown = (e) => {
