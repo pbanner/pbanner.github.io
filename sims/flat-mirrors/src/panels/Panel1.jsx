@@ -1,13 +1,12 @@
 import React, { useRef, useEffect, useState } from 'react';
 
-export default function Panel1() {
+export default function Panel1({ gridOn }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [circle, setCircle] = useState({ x: 300, y: 200, radius: 8 });
   const [draggingCircle, setDraggingCircle] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [circleColor, setCircleColor] = useState(false);
-  const [gridOn, setGridOn] = useState(true);
   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
 
   // Resize canvas to fill container
