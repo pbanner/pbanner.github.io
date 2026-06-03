@@ -76,7 +76,7 @@ function reflectRay(incidentAngle, mirrorNormal) {
   return Math.atan2(reflectedDy, reflectedDx);
 }
 
-function traceRay(startPoint, startAngle, mirrors, maxBounces = 2, maxDistance = 2000) {
+function traceRay(startPoint, startAngle, mirrors, maxBounces = 2, maxDistance = 500) {
   //console.log('traceRay called with:', { startPoint, startAngle, mirrorsCount: mirrors.length, maxBounces, maxDistance });
   const segments = [];
   let currentPoint = startPoint;
@@ -260,7 +260,7 @@ export default function Panel1({ gridOn }) {
         angle,
         mirrors,
         5,
-        2000
+        500
       );
       allRaySegments.push(...raySegments);
     }
