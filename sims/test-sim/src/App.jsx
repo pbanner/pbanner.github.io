@@ -237,7 +237,7 @@ export default function App() {
   }, [circle, isRed, gridOn, rayAngle, mirrors]);
 
   // Handle mouse down
-  const handleMouseDown = (e) => {
+  const handlePointerDown = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
@@ -266,7 +266,7 @@ export default function App() {
   };
 
   // Handle mouse move
-  const handleMouseMove = (e) => {
+  const handlePointerMove = (e) => {
     if (!(draggingCircle || draggingRays)) return;
 
     const canvas = canvasRef.current;
@@ -286,7 +286,7 @@ export default function App() {
   };
 
   // Handle mouse up
-  const handleMouseUp = () => {
+  const handlePointerUp = () => {
     setDraggingCircle(false);
     setDraggingRays(false);
   };
@@ -318,11 +318,15 @@ export default function App() {
         ref={canvasRef}
         width={800}
         height={600}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        style={{ border: '2px solid #333', cursor: (draggingCircle || draggingRays) ? 'grabbing' : 'grab' }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+        style={{
+          border: '2px solid #333',
+          cursor: (draggingCircle || draggingRays) ? 'grabbing' : 'grab',
+          touchAction: 'none'
+        }}
       />
       <div className="info">
         Position: ({circle.x.toFixed(0)}, {circle.y.toFixed(0)})
