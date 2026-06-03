@@ -131,6 +131,58 @@ function traceRay(startPoint, startAngle, mirrors, maxBounces = 2, maxDistance =
   return segments;
 }
 
+function reflectPointAcrossLine(point, lineStart, lineEnd) {
+  // Vector along the line
+  const lineDx = lineEnd.x - lineStart.x;
+  const lineDy = lineEnd.y - lineStart.y;
+  const lineLen = Math.sqrt(lineDx * lineDx + lineDy * lineDy);
+  
+  // Unit normal to the line (perpendicular)
+  const normalX = -lineDy / lineLen;
+  const normalY = lineDx / lineLen;
+  
+  // Vector from line start to point
+  const toPointX = point.x - lineStart.x;
+  const toPointY = point.y - lineStart.y;
+  
+  // Signed distance from point to line
+  const distToLine = toPointX * normalX + toPointY * normalY;
+  
+  // Reflected point
+  return {
+    x: point.x - 2 * distToLine * normalX,
+    y: point.y - 2 * distToLine * normalY
+  };
+}
+
+function pointsOnSameSideOfLine(point1, point2, lineStart, lineEnd) {
+  // Vector along the line
+  const lineDx = lineEnd.x - lineStart.x;
+  const lineDy = lineEnd.y - lineStart.y;
+  
+  // Normal to the line
+  const normalX = -lineDy;
+  const normalY = lineDx;
+  
+  // Signed distances
+  const dist1 = (point1.x - lineStart.x) * normalX + (point1.y - lineStart.y) * normalY;
+  const dist2 = (point2.x - lineStart.x) * normalX + (point2.y - lineStart.y) * normalY;
+  
+  return dist1 * dist2 >= 0; // Same sign means same side
+}
+
+function raysHitMirror(startPoint, angleSpread, rayCount, mirrors) {
+  // Check if any ray in the bundle hits a mirror
+  for (let i = 0; i < rayCount; i++) {
+    const angle = startPoint.angle + (i / (rayCount - 1) - 0.5) * angleSpread;
+    for (let m = 0; m < mirrors.length; m++) {
+      const hit = rayHitsMirror(startPoint.point, angle, mirrors[m].start, mirrors[m].end, 2000);
+      if (hit) return true;
+    }
+  }
+  return false;
+}
+
 /************************************************
  * 
  *   Main App
@@ -139,6 +191,9 @@ function traceRay(startPoint, startAngle, mirrors, maxBounces = 2, maxDistance =
 
 export default function Panel1({ gridOn }) {
   const GRID_SPACING = 50;
+  const MAX_RAY_DISTANCE = 1000;
+  const RAY_COUNT = 5;
+  const RAY_ANGLE_SPREAD = 2 * Math.PI / 180.0;
   const EYE_HEIGHT = 50; // pixels
   const EYE_WIDTH = 40; // pixels
 
@@ -158,6 +213,7 @@ export default function Panel1({ gridOn }) {
     { start: { x: 600, y: 100 }, end: { x: 600, y: 500 } },
   ]);
   const [rayAngle, setRayAngle] = useState(8*Math.PI/180);
+  const [canSeeImage, setCanSeeImage] = useState(true);
 
   const getMirrorPosition = () => {
     const mirrorWidth = 20;
@@ -213,6 +269,38 @@ export default function Panel1({ gridOn }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (mirrors.length === 0) return;
+    
+    const mirror = mirrors[0];
+    
+    // Check if eye and object are on same side of mirror
+    if (!pointsOnSameSideOfLine(eye, circle, mirror.start, mirror.end)) {
+      setCanSeeImage(false);
+      return;
+    }
+    
+    // Calculate reflected eye and angle
+    const reflectedEye = reflectPointAcrossLine(eye, mirror.start, mirror.end);
+    const angleToReflectedEye = Math.atan2(
+      reflectedEye.y - circle.y,
+      reflectedEye.x - circle.x
+    );
+    
+    // Check if a ray in that direction actually hits the mirror
+    //const hit = rayHitsMirror(circle, angleToReflectedEye, mirror.start, mirror.end, 2000);
+    const hitsBundle = raysHitMirror({ point: circle, angle: angleToReflectedEye }, RAY_ANGLE_SPREAD*1.10, RAY_COUNT, mirrors);
+    
+    if (!hitsBundle) {
+      setCanSeeImage(false);
+      return;
+    }
+    
+    // Both conditions met: update ray angle
+    setCanSeeImage(true);
+    setRayAngle(angleToReflectedEye);
+  }, [circle, eye, mirrors]);
+
   // EFFECT 2: Draw everything
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -249,18 +337,16 @@ export default function Panel1({ gridOn }) {
     }
 
     // Draw ray segments
-    const rayCount = 5;
-    const angleSpread = 2 * Math.PI / 180.0;
     const allRaySegments = [];
 
-    for (let i = 0; i < rayCount; i++) {
-      const angle = rayAngle + (i / (rayCount - 1) - 0.5) * angleSpread;
+    for (let i = 0; i < RAY_COUNT; i++) {
+      const angle = rayAngle + (i / (RAY_COUNT - 1) - 0.5) * RAY_ANGLE_SPREAD;
       const raySegments = traceRay(
         { x: circle.x, y: circle.y },
         angle,
         mirrors,
         5,
-        500
+        MAX_RAY_DISTANCE
       );
       allRaySegments.push(...raySegments);
     }
@@ -323,6 +409,7 @@ export default function Panel1({ gridOn }) {
         x: Math.max(20, Math.min(canvas.width - 20, mouseX - offset.x)),
         y: Math.max(20, Math.min(canvas.height - 20, mouseY - offset.y)),
       });
+      //setRayAngle(Math.atan2(mouseY - circle.y, mouseX - circle.x) - offset.angle)
     } else if (draggingCircle) {
       setCircle({
         ...circle,
