@@ -9,12 +9,13 @@ export default function App() {
   
   // Panel 1 state
   const [gridOn, setGridOn] = useState(true);
+  const [mirrorAngle, setMirrorAngle] = useState(0);
 
   return (
     <div className="app-layout">
       {/* Main Canvas Area */}
       <div className="canvas-area">
-        {activePanel === 1 && <Panel1 gridOn={gridOn} />}
+        {activePanel === 1 && <Panel1 gridOn={gridOn} mirrorAngle={mirrorAngle} setMirrorAngle={setMirrorAngle} />}
         {activePanel === 2 && <Panel2 gridOn={gridOn} />}
         {activePanel === 3 && <Panel3 gridOn={gridOn} />}
       </div>
@@ -60,6 +61,18 @@ export default function App() {
                     <input type="checkbox" checked={gridOn} onChange={(e) => setGridOn(e.target.checked)} />
                     Show grid
                   </label>
+                </div>
+                <div className="control-group">
+                  <label>Mirror angle: {(mirrorAngle * 180 / Math.PI).toFixed(1)}°</label>
+                  <input
+                    type="range"
+                    min="0"
+                    max={2 * Math.PI}
+                    step="0.01"
+                    value={mirrorAngle}
+                    onChange={(e) => setMirrorAngle(parseFloat(e.target.value))}
+                    style={{ width: '100%' }}
+                  />
                 </div>
               </div>
             )}

@@ -251,7 +251,7 @@ function distancePointToLine(point, lineStart, lineEnd) {
  * 
 ************************************************/
 
-export default function Panel1({ gridOn }) {
+export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
   const GRID_SPACING = 50;
   const MAX_RAY_DISTANCE = 1000;
   const RAY_COUNT = 5;
@@ -363,6 +363,33 @@ export default function Panel1({ gridOn }) {
     setRayAngle(angleToReflectedEye);
   }, [circle, eye, mirrors]);
 
+  useEffect(() => {
+    const mirror = getMirrorPosition();
+    const mirrorHeight = mirror.height;
+    const centerX = mirror.x;
+    const centerY = mirror.y + mirrorHeight / 2;
+    
+    // Original start and end (before rotation)
+    const halfHeight = mirrorHeight / 2;
+    const originalStart = { x: centerX, y: centerY - halfHeight };
+    const originalEnd = { x: centerX, y: centerY + halfHeight };
+    
+    // Rotate points around center using 2D rotation matrix
+    const rotatePoint = (point, center, angle) => {
+      const x = point.x - center.x;
+      const y = point.y - center.y;
+      return {
+        x: center.x + x * Math.cos(angle) - y * Math.sin(angle),
+        y: center.y + x * Math.sin(angle) + y * Math.cos(angle)
+      };
+    };
+    
+    const start = rotatePoint(originalStart, { x: centerX, y: centerY }, mirrorAngle);
+    const end = rotatePoint(originalEnd, { x: centerX, y: centerY }, mirrorAngle);
+    
+    setMirrors([{ start, end }]);
+  }, [mirrorAngle, canvasDims]);
+
   // EFFECT 2: Draw everything
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -390,12 +417,30 @@ export default function Panel1({ gridOn }) {
       ctx.stroke();
     }
 
-    // Draw mirror (use stored state, not recalculated position)
+    // Draw mirror (rotated around its center)
+    // const mirror = mirrors[0];
+    // if (mirror) {
+    //   const mirrorHeight = mirror.end.y - mirror.start.y;
+    //   const mirrorCenterX = mirror.start.x;
+    //   const mirrorCenterY = mirror.start.y + mirrorHeight / 2;
+      
+    //   ctx.save();
+    //   ctx.translate(mirrorCenterX, mirrorCenterY);
+    //   ctx.rotate(mirrorAngle);
+    //   ctx.fillStyle = '#3498db';
+    //   ctx.fillRect(-10, -mirrorHeight / 2, 20, mirrorHeight);
+    //   ctx.restore();
+    // }
+    // Draw mirror using rotated endpoints
     const mirror = mirrors[0];
     if (mirror) {
-      const mirrorHeight = mirror.end.y - mirror.start.y;
-      ctx.fillStyle = '#3498db';
-      ctx.fillRect(mirror.start.x, mirror.start.y, 20, mirrorHeight);
+      ctx.strokeStyle = '#3498db';
+      ctx.lineWidth = 10;
+      //ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(mirror.start.x, mirror.start.y);
+      ctx.lineTo(mirror.end.x, mirror.end.y);
+      ctx.stroke();
     }
 
     // Draw ray segments
