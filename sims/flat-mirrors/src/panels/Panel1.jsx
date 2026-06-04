@@ -530,8 +530,8 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
 
   }, [circle, eye, gridOn, mirrors, rayAngle, canvasDims, imageLoaded]);
 
-  // Mouse handlers
-  const handleMouseDown = (e) => {
+  // Pointer handlers
+  const handlePointerDown = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
@@ -549,7 +549,7 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
     }
   };
 
-  const handleMouseMove = (e) => {
+  const handlePointerMove = (e) => {
     if (!draggingCircle && !draggingEye) return;
 
     const canvas = canvasRef.current;
@@ -572,7 +572,7 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
     }
   };
 
-  const handleMouseUp = () => {
+  const handlePointerUp = () => {
     setDraggingCircle(false);
     setDraggingEye(false);
   };
@@ -581,10 +581,10 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
     <div ref={containerRef} style={{ width: '100%', height: '100%' }}>
       <canvas
         ref={canvasRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
         style={{
           cursor: draggingCircle ? 'grabbing' : 'grab',
           display: 'block',
