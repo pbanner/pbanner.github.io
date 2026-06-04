@@ -76,7 +76,7 @@ function reflectRay(incidentAngle, mirrorNormal) {
   return Math.atan2(reflectedDy, reflectedDx);
 }
 
-function traceRay(startPoint, startAngle, mirrors, maxBounces = 2, maxDistance = 500) {
+function traceRay(startPoint, startAngle, mirrors, maxBounces = 5, maxDistance = 500) {
   //console.log('traceRay called with:', { startPoint, startAngle, mirrorsCount: mirrors.length, maxBounces, maxDistance });
   const segments = [];
   let currentPoint = startPoint;
@@ -105,12 +105,12 @@ function traceRay(startPoint, startAngle, mirrors, maxBounces = 2, maxDistance =
       segments.push({
         start: currentPoint,
         end: { x: endX, y: endY },
-        bounced: false
+        bounced: bounce > 0
       });
       break;
     }
     
-    //console.log(`  Hit mirror, adding segment`);
+    //console.log(`  Hit mirror, adding segment; bounce=${bounce}`);
     // If the ray does hit a mirror, push that segment...
     segments.push({
       start: currentPoint,
@@ -181,6 +181,68 @@ function raysHitMirror(startPoint, angleSpread, rayCount, mirrors) {
     }
   }
   return false;
+}
+
+function closestPointOnSegment(point, segStart, segEnd) {
+  const dx = segEnd.x - segStart.x;
+  const dy = segEnd.y - segStart.y;
+  const lenSq = dx * dx + dy * dy;
+  
+  if (lenSq === 0) return segStart;
+  
+  const t = Math.max(0, Math.min(1, ((point.x - segStart.x) * dx + (point.y - segStart.y) * dy) / lenSq));
+  
+  return {
+    point: { x: segStart.x + t * dx, y: segStart.y + t * dy },
+    distance: Math.sqrt((point.x - (segStart.x + t * dx)) ** 2 + (point.y - (segStart.y + t * dy)) ** 2),
+    t: t
+  };
+}
+
+function extendRayThroughMirror(raySegment, mirror, objectPoint) {
+  // Extend the ray backward to where it appears to come from (the virtual image)
+  
+  // Direction of the ray
+  const dx = raySegment.end.x - raySegment.start.x;
+  const dy = raySegment.end.y - raySegment.start.y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  
+  if (len === 0) return null;
+  
+  // Reverse direction (going backward)
+  const backDx = -dx / len;
+  const backDy = -dy / len;
+  
+  // Calculate the virtual image point
+  const virtualImage = reflectPointAcrossLine(objectPoint, mirror.start, mirror.end);
+  
+  // Extend from bounce point toward virtual image
+  const toImageX = virtualImage.x - raySegment.start.x;
+  const toImageY = virtualImage.y - raySegment.start.y;
+  const distToImage = Math.sqrt(toImageX * toImageX + toImageY * toImageY);
+  
+  return {
+    start: raySegment.end,
+    end: virtualImage
+  };
+}
+
+function distancePointToLine(point, lineStart, lineEnd) {
+  // Vector along the line
+  const lineDx = lineEnd.x - lineStart.x;
+  const lineDy = lineEnd.y - lineStart.y;
+  const lineLen = Math.sqrt(lineDx * lineDx + lineDy * lineDy);
+  
+  // Unit normal to the line
+  const normalX = -lineDy / lineLen;
+  const normalY = lineDx / lineLen;
+  
+  // Vector from line start to point
+  const toPointX = point.x - lineStart.x;
+  const toPointY = point.y - lineStart.y;
+  
+  // Perpendicular distance
+  return Math.abs(toPointX * normalX + toPointY * normalY);
 }
 
 /************************************************
@@ -289,7 +351,7 @@ export default function Panel1({ gridOn }) {
     
     // Check if a ray in that direction actually hits the mirror
     //const hit = rayHitsMirror(circle, angleToReflectedEye, mirror.start, mirror.end, 2000);
-    const hitsBundle = raysHitMirror({ point: circle, angle: angleToReflectedEye }, RAY_ANGLE_SPREAD*1.10, RAY_COUNT, mirrors);
+    const hitsBundle = raysHitMirror({ point: circle, angle: angleToReflectedEye }, RAY_ANGLE_SPREAD*1.20, RAY_COUNT, mirrors);
     
     if (!hitsBundle) {
       setCanSeeImage(false);
@@ -337,7 +399,7 @@ export default function Panel1({ gridOn }) {
     }
 
     // Draw ray segments
-    const allRaySegments = [];
+    var allRaySegments = [];
 
     for (let i = 0; i < RAY_COUNT; i++) {
       const angle = rayAngle + (i / (RAY_COUNT - 1) - 0.5) * RAY_ANGLE_SPREAD;
@@ -351,6 +413,18 @@ export default function Panel1({ gridOn }) {
       allRaySegments.push(...raySegments);
     }
 
+    if (canSeeImage) {
+      const eyeHitbox = 25;
+      allRaySegments = allRaySegments.map(seg => {
+        const closest = closestPointOnSegment(eye, seg.start, seg.end);
+        // If eye is close to this segment, truncate at closest point
+        if (closest.distance < eyeHitbox && closest.t < 1) {
+          return { ...seg, end: closest.point };
+        }
+        return seg;
+      });
+    }
+
     // Draw the ray segments
     ctx.strokeStyle = '#202020';
     ctx.lineWidth = 1;
@@ -361,6 +435,29 @@ export default function Panel1({ gridOn }) {
       ctx.stroke();
     });
 
+    // Draw virtual rays (if canSeeImage)
+    if (canSeeImage && mirrors.length > 0) {
+      const virtualImageDistance = distancePointToLine(circle, mirrors[0].start, mirrors[0].end);
+
+      ctx.strokeStyle = '#999999';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([5, 5]); // Dashed line pattern
+      
+      allRaySegments.forEach(seg => {
+        if (seg.bounced) {
+          const virtualRay = extendRayThroughMirror(seg, mirrors[0], circle);
+          if (virtualRay) {
+            ctx.beginPath();
+            ctx.moveTo(virtualRay.start.x, virtualRay.start.y);
+            ctx.lineTo(virtualRay.end.x, virtualRay.end.y);
+            ctx.stroke();
+          }
+        }
+      });
+      
+      ctx.setLineDash([]); // Reset to solid lines
+    }
+
     // Draw circle
     ctx.fillStyle = '#3498db';
     ctx.beginPath();
@@ -369,6 +466,17 @@ export default function Panel1({ gridOn }) {
     ctx.strokeStyle = '#2980b9';
     ctx.lineWidth = 2;
     ctx.stroke();
+    // Draw virtual image
+    if (canSeeImage && mirrors.length > 0) {
+      const virtualImage = reflectPointAcrossLine(circle, mirrors[0].start, mirrors[0].end);
+      ctx.fillStyle = '#3498db80';
+      ctx.beginPath();
+      ctx.arc(virtualImage.x, virtualImage.y, circle.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#2980b980';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
 
     // Draw eye
     if (eyeImageRef.current && eyeImageRef.current.complete) {
