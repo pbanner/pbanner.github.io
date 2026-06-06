@@ -262,7 +262,6 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
 
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
-  const mirrorInitializedRef = useRef(false);  // ← Track if we've set mirrors once
   const eyeImageRef = useRef(null);
   const [imageLoaded, setImageLoaded] = useState(false);
   
@@ -312,7 +311,6 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
       start: { x: mirror.x, y: mirror.y }, 
       end: { x: mirror.x, y: mirror.y + mirror.height } 
     }]);
-    mirrorInitializedRef.current = true;
 
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
