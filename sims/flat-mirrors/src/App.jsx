@@ -66,8 +66,8 @@ export default function App() {
                   <label>Mirror angle: {(mirrorAngle * 180 / Math.PI).toFixed(1)}°</label>
                   <input
                     type="range"
-                    min="0"
-                    max={2 * Math.PI}
+                    min={-Math.PI}
+                    max={Math.PI}
                     step="0.01"
                     value={mirrorAngle}
                     onChange={(e) => setMirrorAngle(parseFloat(e.target.value))}
