@@ -315,9 +315,13 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
 
   // Objects and dragging variables
   const [circle, setCircle] = useState({ x: 300, y: 200, radius: 8 });
-  const [draggingCircle, setDraggingCircle] = useState(false);
   const [eye, setEye] = useState({ x: 300, y: 400 });
-  const [draggingEye, setDraggingEye] = useState(false);
+  // Event handler state variables
+  // A string that can be '', 'object', 'eye'
+  const [hovering, setHovering] = useState('')
+  // A string that can be '', 'object', 'eye'
+  const [dragging, setDragging] = useState('')
+  // Used for dragging seamlessly
   const [offset, setOffset] = useState({ x: 0, y: 0 });
 
   const [rayAngle, setRayAngle] = useState(8*Math.PI/180);
@@ -524,7 +528,7 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
   // because those things updating sets ray angle which triggers a redraw
 
   // Pointer handlers
-  const handlePointerDown = (e) => {
+  function senseElements(e) {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
@@ -534,29 +538,41 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
     const distToEye = Math.sqrt((mouseX - eye.x) ** 2 + (mouseY - eye.y) ** 2);
 
     if (distToEye < 25) { // Eye hitbox
-      setDraggingEye(true);
-      setOffset({ x: mouseX - eye.x, y: mouseY - eye.y });
+      return({ element: 'eye', x: mouseX - eye.x, y: mouseY - eye.y })
     } else if (distToCircle < circle.radius + 5) {
-      setDraggingCircle(true);
-      setOffset({ x: mouseX - circle.x, y: mouseY - circle.y });
+      return({ element: 'circle', x: mouseX - circle.x, y: mouseY - circle.y })
+    } else {
+      return({ element: '', x: 0, y: 0 })
+    }
+  }
+
+  const handlePointerDown = (e) => {
+    const sensedElement = senseElements(e)
+
+    if (sensedElement.element === 'eye') { // Eye hitbox
+      setDragging('eye');
+      setOffset({ x: sensedElement.x, y: sensedElement.y });
+    } else if (sensedElement.element === 'circle') {
+      setDragging('circle');
+      setOffset({ x: sensedElement.x, y: sensedElement.y });
     }
   };
 
   const handlePointerMove = (e) => {
-    if (!draggingCircle && !draggingEye) return;
-
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
+    const sensedElement = senseElements(e)
 
-    if (draggingEye) {
+    if (dragging === '') {
+      setHovering(sensedElement.element)
+    } else if (dragging == 'eye') {
       setEye({
         x: Math.max(20, Math.min(canvas.width - 20, mouseX - offset.x)),
         y: Math.max(20, Math.min(canvas.height - 20, mouseY - offset.y)),
       });
-      //setRayAngle(Math.atan2(mouseY - circle.y, mouseX - circle.x) - offset.angle)
-    } else if (draggingCircle) {
+    } else if (dragging == 'circle') {
       setCircle({
         ...circle,
         x: Math.max(circle.radius, Math.min(canvas.width - circle.radius, mouseX - offset.x)),
@@ -566,8 +582,7 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
   };
 
   const handlePointerUp = () => {
-    setDraggingCircle(false);
-    setDraggingEye(false);
+    setDragging('');
   };
 
   return (
@@ -579,7 +594,7 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
         style={{
-          cursor: draggingCircle ? 'grabbing' : 'grab',
+          cursor: dragging != '' ? 'grabbing' : (hovering != '' ? 'move' : 'default'),
           display: 'block',
         }}
       />
