@@ -253,6 +253,7 @@ function distancePointToLine(point, lineStart, lineEnd) {
 
 export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
   const GRID_SPACING = 50;
+  const MIRROR_WIDTH = 10;
   const MAX_RAY_DISTANCE = 1000;
   const RAY_COUNT = 5;
   const RAY_ANGLE_SPREAD = 2 * Math.PI / 180.0;
@@ -277,19 +278,22 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
   const [rayAngle, setRayAngle] = useState(8*Math.PI/180);
   const [canSeeImage, setCanSeeImage] = useState(true);
 
+  // This function returns the position and size of the mirror at 0° angle
+  // (i.e. before rotation). 'x' and 'y' are the "top" center of the mirror
+  // and 'width' and 'height' are, well, that.
   const getMirrorPosition = () => {
-    const mirrorWidth = 20;
     const mirrorHeightRatio = 0.6;
     
     return {
       x: Math.round(canvasDims.width / 2 / GRID_SPACING) * GRID_SPACING,
       y: (canvasDims.height - canvasDims.height * mirrorHeightRatio) / 2,
-      width: mirrorWidth,
+      width: MIRROR_WIDTH,
       height: canvasDims.height * mirrorHeightRatio,
     };
   };
 
-  // Resize canvas to fill container
+  // On initialization: resize canvas to fill container
+  // Dependency array = [] means it runs once on initialization
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -303,23 +307,17 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
       setCanvasDims({ width: newWidth, height: newHeight });
     };
 
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
-    return () => window.removeEventListener('resize', resizeCanvas);
-  }, []);
-
-  // EFFECT 1a: Initialize mirrors only once, after canvas dims are set
-  useEffect(() => {
-    if (mirrorInitializedRef.current) return; // Only run once
-    if (canvasDims.width === 800) return; // Wait for actual resize to complete
-    
     const mirror = getMirrorPosition();
     setMirrors([{ 
       start: { x: mirror.x, y: mirror.y }, 
       end: { x: mirror.x, y: mirror.y + mirror.height } 
     }]);
     mirrorInitializedRef.current = true;
-  }, [canvasDims]);
+
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+    return () => window.removeEventListener('resize', resizeCanvas);
+  }, []);
 
   // EFFECT 1b: Wait for the eye image to be loaded, so it gets drawn
   useEffect(() => {
@@ -435,7 +433,7 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
     const mirror = mirrors[0];
     if (mirror) {
       ctx.strokeStyle = '#3498db';
-      ctx.lineWidth = 10;
+      ctx.lineWidth = MIRROR_WIDTH;
       //ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(mirror.start.x, mirror.start.y);
