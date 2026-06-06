@@ -245,6 +245,32 @@ function distancePointToLine(point, lineStart, lineEnd) {
   return Math.abs(toPointX * normalX + toPointY * normalY);
 }
 
+function canSeeVirtualImage(circle, eye, mirrors, rayCount, angleSpread) {
+  if (mirrors.length === 0) return false;
+  
+  const mirror = mirrors[0];
+  
+  // Check if eye and object are on same side of mirror
+  if (!pointsOnSameSideOfLine(eye, circle, mirror.start, mirror.end)) {
+    return false;
+  }
+  
+  // Calculate reflected eye and angle
+  const reflectedEye = reflectPointAcrossLine(eye, mirror.start, mirror.end);
+  const angleToReflectedEye = Math.atan2(
+    reflectedEye.y - circle.y,
+    reflectedEye.x - circle.x
+  );
+  
+  // Check if a ray in that direction actually hits the mirror
+  return raysHitMirror(
+    { point: circle, angle: angleToReflectedEye }, 
+    angleSpread * 1.20, 
+    rayCount, 
+    mirrors
+  );
+}
+
 /************************************************
  * 
  *   Main App
@@ -277,7 +303,6 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
     { start: { x: 600, y: 100 }, end: { x: 600, y: 500 } },
   ]);
   const [rayAngle, setRayAngle] = useState(8*Math.PI/180);
-  const [canSeeImage, setCanSeeImage] = useState(true);
 
   // This function returns the position and size of the mirror at 0° angle
   // (i.e. before rotation). 'x' and 'y' are the "top" center of the mirror
@@ -332,35 +357,20 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
     return () => window.removeEventListener('resize', resizeCanvas);
   }, []);
 
+  // Set the ray angle any time the circle, eye, or mirrors are changed
+  // The idea is to set it to the angle that makes the rays go into the eye when
+  // they do so (i.e. when the virtual image is visible), and to do nothing otherwise.
   useEffect(() => {
     if (mirrors.length === 0) return;
+    if (!canSeeVirtualImage(circle, eye, mirrors, RAY_COUNT, RAY_ANGLE_SPREAD)) return;
     
     const mirror = mirrors[0];
-    
-    // Check if eye and object are on same side of mirror
-    if (!pointsOnSameSideOfLine(eye, circle, mirror.start, mirror.end)) {
-      setCanSeeImage(false);
-      return;
-    }
-    
-    // Calculate reflected eye and angle
     const reflectedEye = reflectPointAcrossLine(eye, mirror.start, mirror.end);
     const angleToReflectedEye = Math.atan2(
       reflectedEye.y - circle.y,
       reflectedEye.x - circle.x
     );
     
-    // Check if a ray in that direction actually hits the mirror
-    //const hit = rayHitsMirror(circle, angleToReflectedEye, mirror.start, mirror.end, 2000);
-    const hitsBundle = raysHitMirror({ point: circle, angle: angleToReflectedEye }, RAY_ANGLE_SPREAD*1.20, RAY_COUNT, mirrors);
-    
-    if (!hitsBundle) {
-      setCanSeeImage(false);
-      return;
-    }
-    
-    // Both conditions met: update ray angle
-    setCanSeeImage(true);
     setRayAngle(angleToReflectedEye);
   }, [circle, eye, mirrors]);
 
@@ -431,6 +441,9 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
       ctx.stroke();
     }
 
+    // Calculate visibility once
+    const imageVisible = canSeeVirtualImage(circle, eye, mirrors, RAY_COUNT, RAY_ANGLE_SPREAD);
+
     // Calculate ray segments for drawing
     var allRaySegments = [];
     for (let i = 0; i < RAY_COUNT; i++) {
@@ -445,7 +458,7 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
       allRaySegments.push(...raySegments);
     }
     // Truncate ray segments at the eye if they're entering the eye
-    if (canSeeImage) {
+    if (imageVisible) {
       const eyeHitbox = 25;
       allRaySegments = allRaySegments.map(seg => {
         const closest = closestPointOnSegment(eye, seg.start, seg.end);
@@ -468,7 +481,7 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
     });
 
     // Draw virtual rays if applicable
-    if (canSeeImage && mirrors.length > 0) {
+    if (imageVisible && mirrors.length > 0) {
       const virtualImageDistance = distancePointToLine(circle, mirrors[0].start, mirrors[0].end);
 
       ctx.strokeStyle = '#999999';
@@ -477,7 +490,7 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
       
       allRaySegments.forEach(seg => {
         // This check only works for one mirror... if it bounced, and it's going into
-        // the eye because canSeeImage, then it needs to be traced back
+        // the eye because imageVisible, then it needs to be traced back
         if (seg.bounced) {
           const virtualRay = extendRayThroughMirror(seg, mirrors[0], circle);
           if (virtualRay) {
@@ -501,7 +514,7 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
     ctx.lineWidth = 2;
     ctx.stroke();
     // Draw virtual image
-    if (canSeeImage && mirrors.length > 0) {
+    if (imageVisible && mirrors.length > 0) {
       const virtualImage = reflectPointAcrossLine(circle, mirrors[0].start, mirrors[0].end);
       ctx.fillStyle = '#3498db80';
       ctx.beginPath();
