@@ -364,6 +364,7 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
     setRayAngle(angleToReflectedEye);
   }, [circle, eye, mirrors]);
 
+  // Update mirror position and angle when mirrorAngle or canvasDims is changed
   useEffect(() => {
     const mirror = getMirrorPosition();
     const mirrorHeight = mirror.height;
@@ -391,7 +392,7 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
     setMirrors([{ start, end }]);
   }, [mirrorAngle, canvasDims]);
 
-  // EFFECT 2: Draw everything
+  // Draw everything
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -418,21 +419,7 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
       ctx.stroke();
     }
 
-    // Draw mirror (rotated around its center)
-    // const mirror = mirrors[0];
-    // if (mirror) {
-    //   const mirrorHeight = mirror.end.y - mirror.start.y;
-    //   const mirrorCenterX = mirror.start.x;
-    //   const mirrorCenterY = mirror.start.y + mirrorHeight / 2;
-      
-    //   ctx.save();
-    //   ctx.translate(mirrorCenterX, mirrorCenterY);
-    //   ctx.rotate(mirrorAngle);
-    //   ctx.fillStyle = '#3498db';
-    //   ctx.fillRect(-10, -mirrorHeight / 2, 20, mirrorHeight);
-    //   ctx.restore();
-    // }
-    // Draw mirror using rotated endpoints
+    // Draw mirror (using placed and rotated endpoints)
     const mirror = mirrors[0];
     if (mirror) {
       ctx.strokeStyle = '#3498db';
@@ -444,9 +431,8 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
       ctx.stroke();
     }
 
-    // Draw ray segments
+    // Calculate ray segments for drawing
     var allRaySegments = [];
-
     for (let i = 0; i < RAY_COUNT; i++) {
       const angle = rayAngle + (i / (RAY_COUNT - 1) - 0.5) * RAY_ANGLE_SPREAD;
       const raySegments = traceRay(
@@ -458,7 +444,7 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
       );
       allRaySegments.push(...raySegments);
     }
-
+    // Truncate ray segments at the eye if they're entering the eye
     if (canSeeImage) {
       const eyeHitbox = 25;
       allRaySegments = allRaySegments.map(seg => {
@@ -481,7 +467,7 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
       ctx.stroke();
     });
 
-    // Draw virtual rays (if canSeeImage)
+    // Draw virtual rays if applicable
     if (canSeeImage && mirrors.length > 0) {
       const virtualImageDistance = distancePointToLine(circle, mirrors[0].start, mirrors[0].end);
 
@@ -490,6 +476,8 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
       ctx.setLineDash([5, 5]); // Dashed line pattern
       
       allRaySegments.forEach(seg => {
+        // This check only works for one mirror... if it bounced, and it's going into
+        // the eye because canSeeImage, then it needs to be traced back
         if (seg.bounced) {
           const virtualRay = extendRayThroughMirror(seg, mirrors[0], circle);
           if (virtualRay) {
@@ -530,6 +518,8 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
     }
 
   }, [circle, eye, gridOn, mirrors, rayAngle, canvasDims, eyeImageLoaded]);
+  // Note that rayAngle is required here, even though it's a dependency on cricle + eye + mirrors,
+  // because those things updating sets ray angle which triggers a redraw
 
   // Pointer handlers
   const handlePointerDown = (e) => {
