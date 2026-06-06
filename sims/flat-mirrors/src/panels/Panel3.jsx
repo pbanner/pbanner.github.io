@@ -76,29 +76,22 @@ function reflectRay(incidentAngle, mirrorNormal) {
   return Math.atan2(reflectedDy, reflectedDx);
 }
 
-function traceRay(startPoint, startAngle, mirrors, maxBounces = 5, maxDistance = 500) {
-  //console.log('traceRay called with:', { startPoint, startAngle, mirrorsCount: mirrors.length, maxBounces, maxDistance });
+function traceRay(startPoint, startAngle, mirrors, mirrorAngle, mirrorHeight, maxBounces = 5, maxDistance = 500) {
   const segments = [];
   let currentPoint = startPoint;
   let currentAngle = startAngle;
   
   for (let bounce = 0; bounce < maxBounces; bounce++) {
-    //console.log(`Bounce ${bounce}: currentPoint=`, currentPoint, 'currentAngle=', currentAngle);
-    // Find which mirror (if any) is hit first by looping through
-    // mirrors and checking their hit points and comparing
     let closest = null;
     for (let i = 0; i < mirrors.length; i++) {
-      const hit = rayHitsMirror(currentPoint, currentAngle, mirrors[i].start, mirrors[i].end, maxDistance);
-      //console.log(`  Mirror ${i}: hit=`, hit);
+      const endpoints = getMirrorEndpoints(mirrors[i], mirrorAngle, mirrorHeight);
+      const hit = rayHitsMirror(currentPoint, currentAngle, endpoints.start, endpoints.end, maxDistance);
       if (hit && (!closest || hit.t < closest.t)) {
         hit.mirrorIndex = i;
         closest = hit;
       }
     }
     
-    //console.log(`  Closest hit:`, closest);
-    // If the ray doesn't hit anything, then just draw out to the max distance
-    // And end the loop of bounces for this ray
     if (!closest) {
       const endX = currentPoint.x + maxDistance * Math.cos(currentAngle);
       const endY = currentPoint.y + maxDistance * Math.sin(currentAngle);
@@ -110,24 +103,18 @@ function traceRay(startPoint, startAngle, mirrors, maxBounces = 5, maxDistance =
       break;
     }
     
-    //console.log(`  Hit mirror, adding segment; bounce=${bounce}`);
-    // If the ray does hit a mirror, push that segment...
     segments.push({
       start: currentPoint,
       end: closest.hitPoint,
       bounced: bounce > 0
     });
     
-    // ... and set up to reflect the next bounce
-    const mirrorNormal = getMirrorNormal(
-      mirrors[closest.mirrorIndex].start,
-      mirrors[closest.mirrorIndex].end
-    );
+    const endpoints = getMirrorEndpoints(mirrors[closest.mirrorIndex], mirrorAngle, mirrorHeight);
+    const mirrorNormal = getMirrorNormal(endpoints.start, endpoints.end);
     currentPoint = closest.hitPoint;
     currentAngle = reflectRay(currentAngle, mirrorNormal);
   }
   
-  //console.log('traceRay returning segments:', segments);
   return segments;
 }
 
@@ -171,12 +158,13 @@ function pointsOnSameSideOfLine(point1, point2, lineStart, lineEnd) {
   return dist1 * dist2 >= 0; // Same sign means same side
 }
 
-function raysHitMirror(startPoint, angleSpread, rayCount, mirrors) {
+function raysHitMirror(startPoint, angleSpread, rayCount, mirrors, mirrorAngle, mirrorHeight) {
   // Check if any ray in the bundle hits a mirror
   for (let i = 0; i < rayCount; i++) {
     const angle = startPoint.angle + (i / (rayCount - 1) - 0.5) * angleSpread;
     for (let m = 0; m < mirrors.length; m++) {
-      const hit = rayHitsMirror(startPoint.point, angle, mirrors[m].start, mirrors[m].end, 2000);
+      const endpoints = getMirrorEndpoints(mirrors[m], mirrorAngle, mirrorHeight);
+      const hit = rayHitsMirror(startPoint.point, angle, endpoints.start, endpoints.end, 2000);
       if (hit) return true;
     }
   }
@@ -245,18 +233,19 @@ function distancePointToLine(point, lineStart, lineEnd) {
   return Math.abs(toPointX * normalX + toPointY * normalY);
 }
 
-function canSeeVirtualImage(circle, eye, mirrors, rayCount, angleSpread) {
+function canSeeVirtualImage(circle, eye, mirrors, mirrorAngle, rayCount, angleSpread, mirrorHeight) {
   if (mirrors.length === 0) return false;
   
-  const mirror = mirrors[0];
+  const mirrorCenter = mirrors[0];
+  const mirrorEndpoints = getMirrorEndpoints(mirrorCenter, mirrorAngle, mirrorHeight);
   
   // Check if eye and object are on same side of mirror
-  if (!pointsOnSameSideOfLine(eye, circle, mirror.start, mirror.end)) {
+  if (!pointsOnSameSideOfLine(eye, circle, mirrorEndpoints.start, mirrorEndpoints.end)) {
     return false;
   }
   
   // Calculate reflected eye and angle
-  const reflectedEye = reflectPointAcrossLine(eye, mirror.start, mirror.end);
+  const reflectedEye = reflectPointAcrossLine(eye, mirrorEndpoints.start, mirrorEndpoints.end);
   const angleToReflectedEye = Math.atan2(
     reflectedEye.y - circle.y,
     reflectedEye.x - circle.x
@@ -267,8 +256,33 @@ function canSeeVirtualImage(circle, eye, mirrors, rayCount, angleSpread) {
     { point: circle, angle: angleToReflectedEye }, 
     angleSpread * 1.20, 
     rayCount, 
-    mirrors
+    mirrors,
+    mirrorAngle,
+    mirrorHeight
   );
+}
+
+function getMirrorEndpoints(mirrorCenter, mirrorAngle, mirrorHeight) {
+  // Given a mirror center, rotation angle, and height,
+  // return the start and end points of the mirror
+  const halfHeight = mirrorHeight / 2;
+  
+  const originalStart = { x: mirrorCenter.x, y: mirrorCenter.y - halfHeight };
+  const originalEnd = { x: mirrorCenter.x, y: mirrorCenter.y + halfHeight };
+  
+  const rotatePoint = (point, center, angle) => {
+    const x = point.x - center.x;
+    const y = point.y - center.y;
+    return {
+      x: center.x + x * Math.cos(angle) - y * Math.sin(angle),
+      y: center.y + x * Math.sin(angle) + y * Math.cos(angle)
+    };
+  };
+  
+  return {
+    start: rotatePoint(originalStart, mirrorCenter, mirrorAngle),
+    end: rotatePoint(originalEnd, mirrorCenter, mirrorAngle)
+  };
 }
 
 /************************************************
@@ -280,6 +294,7 @@ function canSeeVirtualImage(circle, eye, mirrors, rayCount, angleSpread) {
 export default function Panel3({ gridOn }) {
   const GRID_SPACING = 50;
   const MIRROR_WIDTH = 10;
+  const MIRROR_HEIGHT_RATIO = 0.6;  // Height as fraction of canvas height
   const MAX_RAY_DISTANCE = 1000;
   const RAY_COUNT = 5;
   const RAY_ANGLE_SPREAD = 2 * Math.PI / 180.0;
@@ -293,33 +308,22 @@ export default function Panel3({ gridOn }) {
   // the eye image has loaded
   const [eyeImageLoaded, setEyeImageLoaded] = useState(false);
   
+  // Canvas dimensions; gets written over on initialization
+  const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
+  // Mirror center; gets written over on initialization
+  const [mirrors, setMirrors] = useState([{ x: 400, y: 300 }]);
+
+  // Objects and dragging variables
   const [circle, setCircle] = useState({ x: 300, y: 200, radius: 8 });
   const [draggingCircle, setDraggingCircle] = useState(false);
   const [eye, setEye] = useState({ x: 300, y: 400 });
   const [draggingEye, setDraggingEye] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
-  const [mirrors, setMirrors] = useState([
-    { start: { x: 600, y: 100 }, end: { x: 600, y: 500 } },
-  ]);
+
   const [rayAngle, setRayAngle] = useState(8*Math.PI/180);
   // Here as a temporary placeholder after copying code from Panel 1
   // This should be deleted eventually
   const [mirrorAngle, setMirrorAngle] = useState(0);
-
-  // This function returns the position and size of the mirror at 0° angle
-  // (i.e. before rotation). 'x' and 'y' are the "top" center of the mirror
-  // and 'width' and 'height' are, well, that.
-  const getMirrorPosition = () => {
-    const mirrorHeightRatio = 0.6;
-    
-    return {
-      x: Math.round(canvasDims.width / 2 / GRID_SPACING) * GRID_SPACING,
-      y: (canvasDims.height - canvasDims.height * mirrorHeightRatio) / 2,
-      width: MIRROR_WIDTH,
-      height: canvasDims.height * mirrorHeightRatio,
-    };
-  };
 
   // On initialization: resize canvas to fill container, then set the
   // mirror to be centered vertically and horizontally on the sized canvas.
@@ -347,12 +351,11 @@ export default function Panel3({ gridOn }) {
       setCanvasDims({ width: newWidth, height: newHeight });
     };
 
-    // Put the mirror in the right place
-    const mirror = getMirrorPosition();
-    setMirrors([{ 
-      start: { x: mirror.x, y: mirror.y }, 
-      end: { x: mirror.x, y: mirror.y + mirror.height } 
-    }]);
+    // Put the mirror center in the center of canvas
+    // Round the horizontal position to the nearest grid line
+    const mirrorCenterX = Math.round(canvasDims.width / 2 / GRID_SPACING) * GRID_SPACING;
+    const mirrorCenterY = canvasDims.height / 2;
+    setMirrors([{ x: mirrorCenterX, y: mirrorCenterY }]);
 
     // Make simulation responsive to window size changes
     resizeCanvas();
@@ -365,45 +368,30 @@ export default function Panel3({ gridOn }) {
   // they do so (i.e. when the virtual image is visible), and to do nothing otherwise.
   useEffect(() => {
     if (mirrors.length === 0) return;
-    if (!canSeeVirtualImage(circle, eye, mirrors, RAY_COUNT, RAY_ANGLE_SPREAD)) return;
+    const mirrorHeight = canvasDims.height * MIRROR_HEIGHT_RATIO;
+    const imageVisible = canSeeVirtualImage(circle, eye, mirrors, mirrorAngle, RAY_COUNT, RAY_ANGLE_SPREAD, mirrorHeight);
+    console.log(imageVisible);
+    if (!imageVisible) return;
     
-    const mirror = mirrors[0];
-    const reflectedEye = reflectPointAcrossLine(eye, mirror.start, mirror.end);
+    const mirrorCenter = mirrors[0];
+    const mirrorEndpoints = getMirrorEndpoints(mirrorCenter, mirrorAngle, canvasDims.height * MIRROR_HEIGHT_RATIO);
+    const reflectedEye = reflectPointAcrossLine(eye, mirrorEndpoints.start, mirrorEndpoints.end);
     const angleToReflectedEye = Math.atan2(
       reflectedEye.y - circle.y,
       reflectedEye.x - circle.x
     );
     
     setRayAngle(angleToReflectedEye);
-  }, [circle, eye, mirrors]);
+  }, [circle, eye, mirrors, mirrorAngle, canvasDims]);
 
-  // Update mirror position and angle when mirrorAngle or canvasDims is changed
+  // When canvas dims change, recenter the mirror horizontally but keep y-position
   useEffect(() => {
-    const mirror = getMirrorPosition();
-    const mirrorHeight = mirror.height;
-    const centerX = mirror.x;
-    const centerY = mirror.y + mirrorHeight / 2;
+    if (mirrors.length === 0) return;
     
-    // Original start and end (before rotation)
-    const halfHeight = mirrorHeight / 2;
-    const originalStart = { x: centerX, y: centerY - halfHeight };
-    const originalEnd = { x: centerX, y: centerY + halfHeight };
-    
-    // Rotate points around center using 2D rotation matrix
-    const rotatePoint = (point, center, angle) => {
-      const x = point.x - center.x;
-      const y = point.y - center.y;
-      return {
-        x: center.x + x * Math.cos(angle) - y * Math.sin(angle),
-        y: center.y + x * Math.sin(angle) + y * Math.cos(angle)
-      };
-    };
-    
-    const start = rotatePoint(originalStart, { x: centerX, y: centerY }, mirrorAngle);
-    const end = rotatePoint(originalEnd, { x: centerX, y: centerY }, mirrorAngle);
-    
-    setMirrors([{ start, end }]);
-  }, [mirrorAngle, canvasDims]);
+    const mirrorCenterX = Math.round(canvasDims.width / 2 / GRID_SPACING) * GRID_SPACING;
+    const mirrorCenterY = canvasDims.height / 2;
+    setMirrors([{ x: mirrorCenterX, y: mirrorCenterY }]);
+  }, [canvasDims]);
 
   // Draw everything
   useEffect(() => {
@@ -433,19 +421,20 @@ export default function Panel3({ gridOn }) {
     }
 
     // Draw mirror (using placed and rotated endpoints)
-    const mirror = mirrors[0];
-    if (mirror) {
+    if (mirrors.length > 0) {
+      const mirrorHeight = canvasDims.height * MIRROR_HEIGHT_RATIO;
+      const mirrorEndpoints = getMirrorEndpoints(mirrors[0], mirrorAngle, mirrorHeight);
       ctx.strokeStyle = '#3498db';
       ctx.lineWidth = MIRROR_WIDTH;
-      //ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(mirror.start.x, mirror.start.y);
-      ctx.lineTo(mirror.end.x, mirror.end.y);
+      ctx.moveTo(mirrorEndpoints.start.x, mirrorEndpoints.start.y);
+      ctx.lineTo(mirrorEndpoints.end.x, mirrorEndpoints.end.y);
       ctx.stroke();
     }
 
     // Calculate visibility once
-    const imageVisible = canSeeVirtualImage(circle, eye, mirrors, RAY_COUNT, RAY_ANGLE_SPREAD);
+    const mirrorHeight = canvasDims.height * MIRROR_HEIGHT_RATIO;
+    const imageVisible = canSeeVirtualImage(circle, eye, mirrors, mirrorAngle, RAY_COUNT, RAY_ANGLE_SPREAD, mirrorHeight);
 
     // Calculate ray segments for drawing
     var allRaySegments = [];
@@ -455,6 +444,8 @@ export default function Panel3({ gridOn }) {
         { x: circle.x, y: circle.y },
         angle,
         mirrors,
+        mirrorAngle,
+        mirrorHeight,
         5,
         MAX_RAY_DISTANCE
       );
@@ -483,19 +474,18 @@ export default function Panel3({ gridOn }) {
       ctx.stroke();
     });
 
-    // Draw virtual rays if applicable
+    // Draw virtual rays and image if visible
     if (imageVisible && mirrors.length > 0) {
-      const virtualImageDistance = distancePointToLine(circle, mirrors[0].start, mirrors[0].end);
+      const mirrorHeight = canvasDims.height * MIRROR_HEIGHT_RATIO;
+      const mirrorEndpoints = getMirrorEndpoints(mirrors[0], mirrorAngle, mirrorHeight);
 
       ctx.strokeStyle = '#999999';
       ctx.lineWidth = 1;
-      ctx.setLineDash([5, 5]); // Dashed line pattern
+      ctx.setLineDash([5, 5]);
       
       allRaySegments.forEach(seg => {
-        // This check only works for one mirror... if it bounced, and it's going into
-        // the eye because imageVisible, then it needs to be traced back
         if (seg.bounced) {
-          const virtualRay = extendRayThroughMirror(seg, mirrors[0], circle);
+          const virtualRay = extendRayThroughMirror(seg, { start: mirrorEndpoints.start, end: mirrorEndpoints.end }, circle);
           if (virtualRay) {
             ctx.beginPath();
             ctx.moveTo(virtualRay.start.x, virtualRay.start.y);
@@ -506,6 +496,16 @@ export default function Panel3({ gridOn }) {
       });
       
       ctx.setLineDash([]); // Reset to solid lines
+      
+      // Draw virtual image
+      const virtualImage = reflectPointAcrossLine(circle, mirrorEndpoints.start, mirrorEndpoints.end);
+      ctx.fillStyle = '#3498db80';
+      ctx.beginPath();
+      ctx.arc(virtualImage.x, virtualImage.y, circle.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#2980b980';
+      ctx.lineWidth = 2;
+      ctx.stroke();
     }
 
     // Draw circle
@@ -516,24 +516,13 @@ export default function Panel3({ gridOn }) {
     ctx.strokeStyle = '#2980b9';
     ctx.lineWidth = 2;
     ctx.stroke();
-    // Draw virtual image
-    if (imageVisible && mirrors.length > 0) {
-      const virtualImage = reflectPointAcrossLine(circle, mirrors[0].start, mirrors[0].end);
-      ctx.fillStyle = '#3498db80';
-      ctx.beginPath();
-      ctx.arc(virtualImage.x, virtualImage.y, circle.radius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#2980b980';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
 
     // Draw eye
     if (eyeImageRef.current && eyeImageRef.current.complete) {
       ctx.drawImage(eyeImageRef.current, eye.x - EYE_WIDTH / 2, eye.y - EYE_HEIGHT / 2, EYE_WIDTH, EYE_HEIGHT);
     }
 
-  }, [circle, eye, gridOn, mirrors, rayAngle, canvasDims, eyeImageLoaded]);
+  }, [circle, eye, gridOn, mirrors, rayAngle, canvasDims, eyeImageLoaded, mirrorAngle]);
   // Note that rayAngle is required here, even though it's a dependency on cricle + eye + mirrors,
   // because those things updating sets ray angle which triggers a redraw
 
