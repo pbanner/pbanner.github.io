@@ -263,7 +263,9 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const eyeImageRef = useRef(null);
-  const [imageLoaded, setImageLoaded] = useState(false);
+  // This Boolean exists solely to make sure the final drawing occurs after
+  // the eye image has loaded
+  const [eyeImageLoaded, setEyeImageLoaded] = useState(false);
   
   const [circle, setCircle] = useState({ x: 300, y: 200, radius: 8 });
   const [draggingCircle, setDraggingCircle] = useState(false);
@@ -291,13 +293,24 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
     };
   };
 
-  // On initialization: resize canvas to fill container
+  // On initialization: resize canvas to fill container, then set the
+  // mirror to be centered vertically and horizontally on the sized canvas.
+  // Also, load the eye image and make sure it's loaded.
   // Dependency array = [] means it runs once on initialization
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
 
+    // Load the eye image, trigger a redraw once loaded
+    const img = new Image();
+    img.src = eyeImage;
+    img.onload = () => {
+      eyeImageRef.current = img;
+      setEyeImageLoaded(true);  // Trigger redraw
+    };
+
+    // Rezise the canvas
     const resizeCanvas = () => {
       const newWidth = container.clientWidth;
       const newHeight = container.clientHeight;
@@ -306,25 +319,17 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
       setCanvasDims({ width: newWidth, height: newHeight });
     };
 
+    // Put the mirror in the right place
     const mirror = getMirrorPosition();
     setMirrors([{ 
       start: { x: mirror.x, y: mirror.y }, 
       end: { x: mirror.x, y: mirror.y + mirror.height } 
     }]);
 
+    // Make simulation responsive to window size changes
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
     return () => window.removeEventListener('resize', resizeCanvas);
-  }, []);
-
-  // EFFECT 1b: Wait for the eye image to be loaded, so it gets drawn
-  useEffect(() => {
-    const img = new Image();
-    img.src = eyeImage;
-    img.onload = () => {
-      eyeImageRef.current = img;
-      setImageLoaded(true);  // Trigger redraw
-    };
   }, []);
 
   useEffect(() => {
@@ -524,7 +529,7 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
       ctx.drawImage(eyeImageRef.current, eye.x - EYE_WIDTH / 2, eye.y - EYE_HEIGHT / 2, EYE_WIDTH, EYE_HEIGHT);
     }
 
-  }, [circle, eye, gridOn, mirrors, rayAngle, canvasDims, imageLoaded]);
+  }, [circle, eye, gridOn, mirrors, rayAngle, canvasDims, eyeImageLoaded]);
 
   // Pointer handlers
   const handlePointerDown = (e) => {
