@@ -9,13 +9,16 @@ export default function App() {
   
   // Panel 1 state
   const [gridOn, setGridOn] = useState(true);
+  const [measuringMode, setMeasuringMode] = useState(true);
   const [mirrorAngle, setMirrorAngle] = useState(0);
 
   return (
     <div className="app-layout">
       {/* Main Canvas Area */}
       <div className="canvas-area">
-        {activePanel === 1 && <Panel1 gridOn={gridOn} mirrorAngle={mirrorAngle} setMirrorAngle={setMirrorAngle} />}
+        {activePanel === 1 && <Panel1 gridOn={gridOn}
+                                      mirrorAngle={mirrorAngle} setMirrorAngle={setMirrorAngle}
+                                      measuringMode={measuringMode} setMeasuringMode={setMeasuringMode} />}
         {activePanel === 2 && <Panel2 gridOn={gridOn} />}
         {activePanel === 3 && <Panel3 gridOn={gridOn} />}
       </div>
@@ -73,6 +76,12 @@ export default function App() {
                     onChange={(e) => setMirrorAngle(parseFloat(e.target.value))}
                     style={{ width: '100%' }}
                   />
+                </div>
+                <div className="control-group">
+                  <label>
+                    <input type="checkbox" checked={measuringMode} onChange={(e) => setMeasuringMode(e.target.checked)} />
+                    Measure a distance
+                  </label>
                 </div>
               </div>
             )}

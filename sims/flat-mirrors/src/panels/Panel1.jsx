@@ -291,7 +291,7 @@ function getMirrorEndpoints(mirrorCenter, mirrorAngle, mirrorHeight) {
  * 
 ************************************************/
 
-export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
+export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle, measuringMode, setMeasuringMode }) {
   const GRID_SPACING = 50;
   const MIRROR_WIDTH = 10;
   const MIRROR_HEIGHT_RATIO = 0.6;  // Height as fraction of canvas height
@@ -323,6 +323,8 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
   const [dragging, setDragging] = useState('')
   // Used for dragging seamlessly
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  // Measurement coordinates
+  const [measurementCoords, setMeasurementCoords] = useState({ start: { x: 0, y: 0 }, end: { x: 0, y: 0 } })
 
   const [rayAngle, setRayAngle] = useState(8*Math.PI/180);
 
@@ -371,7 +373,7 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
     if (mirrors.length === 0) return;
     const mirrorHeight = canvasDims.height * MIRROR_HEIGHT_RATIO;
     const imageVisible = canSeeVirtualImage(circle, eye, mirrors, mirrorAngle, RAY_COUNT, RAY_ANGLE_SPREAD, mirrorHeight);
-    console.log(imageVisible);
+    //console.log(imageVisible);
     if (!imageVisible) return;
     
     const mirrorCenter = mirrors[0];
@@ -523,7 +525,43 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
       ctx.drawImage(eyeImageRef.current, eye.x - EYE_WIDTH / 2, eye.y - EYE_HEIGHT / 2, EYE_WIDTH, EYE_HEIGHT);
     }
 
-  }, [circle, eye, gridOn, mirrors, rayAngle, canvasDims, eyeImageLoaded, mirrorAngle]);
+    // Draw measurement if active
+    // Here we determine "active" to mean measurement mode has to be active AND
+    // either we must be dragging the mouse or the start and end measurement coordinates
+    // must be different
+    if (measuringMode && (dragging === 'measuring' || measurementCoords.start != measurementCoords.end)) {
+      const dx = measurementCoords.end.x - measurementCoords.start.x;
+      const dy = measurementCoords.end.y - measurementCoords.start.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // Draw line
+      ctx.strokeStyle = '#303030';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(measurementCoords.start.x, measurementCoords.start.y);
+      ctx.lineTo(measurementCoords.end.x, measurementCoords.end.y);
+      ctx.stroke();
+
+      // Draw end caps
+      ctx.fillStyle = '#303030';
+      ctx.beginPath();
+      ctx.arc(measurementCoords.start.x, measurementCoords.start.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(measurementCoords.end.x, measurementCoords.end.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Draw distance label
+      const midX = (measurementCoords.start.x + measurementCoords.end.x) / 2;
+      const midY = (measurementCoords.start.y + measurementCoords.end.y) / 2;
+      ctx.fillStyle = '#303030';
+      ctx.font = '14px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${distance.toFixed(1)} px`, midX, midY - 15);
+    }
+
+  }, [circle, eye, gridOn, mirrors, rayAngle, canvasDims, eyeImageLoaded, mirrorAngle, measuringMode, measurementCoords]);
   // Note that rayAngle is required here, even though it's a dependency on cricle + eye + mirrors,
   // because those things updating sets ray angle which triggers a redraw
 
@@ -547,6 +585,17 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
   }
 
   const handlePointerDown = (e) => {
+    // If in measuring mode, start measurement
+    if (measuringMode) {
+      const canvas = canvasRef.current;
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      setMeasurementCoords({ start: { x: mouseX, y: mouseY }, end: { x: mouseX, y: mouseY } });
+      setDragging('measuring');
+      return;
+    }
+
     const sensedElement = senseElements(e)
 
     if (sensedElement.element === 'eye') { // Eye hitbox
@@ -563,6 +612,17 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle }) {
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
+
+    // Handle measurement dragging
+    if (measuringMode) {
+      setHovering('')
+      if (dragging === 'measuring') {
+        setMeasurementCoords({ ...measurementCoords, end: { x: mouseX, y: mouseY } });
+        return;
+      }
+      return;
+    }
+
     const sensedElement = senseElements(e)
 
     if (dragging === '') {
