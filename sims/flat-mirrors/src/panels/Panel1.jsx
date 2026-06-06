@@ -285,6 +285,54 @@ function getMirrorEndpoints(mirrorCenter, mirrorAngle, mirrorHeight) {
   };
 }
 
+function findNearestSnappable(point, circle, eye, mirrors, mirrorAngle, mirrorHeight) {
+  const candidates = [];
+  
+  // Circle center
+  candidates.push({
+    point: { x: circle.x, y: circle.y },
+    distance: Math.sqrt((point.x - circle.x) ** 2 + (point.y - circle.y) ** 2),
+    label: 'circle'
+  });
+  
+  // Eye center
+  candidates.push({
+    point: { x: eye.x, y: eye.y },
+    distance: Math.sqrt((point.x - eye.x) ** 2 + (point.y - eye.y) ** 2),
+    label: 'eye'
+  });
+
+  const mirrorEndpoints = getMirrorEndpoints(mirrors[0], mirrorAngle, mirrorHeight);
+  const viPoint = reflectPointAcrossLine(circle, mirrorEndpoints.start, mirrorEndpoints.end);
+  candidates.push({
+    point: { x: viPoint.x, y: viPoint.y },
+    distance: Math.sqrt((point.x - viPoint.x) ** 2 + (point.y - viPoint.y) ** 2),
+    label: 'virtual image'
+  });
+  
+  // Nearest point on mirror
+  if (mirrors.length > 0) {
+    //const mirrorHeight = mirrors[0] ? Math.sqrt((mirrorHeight * mirrorHeight)) : 0;
+    const mirrorEndpoints = getMirrorEndpoints(mirrors[0], mirrorAngle, mirrorHeight);
+    const closest = closestPointOnSegment(point, mirrorEndpoints.start, mirrorEndpoints.end);
+    candidates.push({
+      point: closest.point,
+      distance: closest.distance,
+      label: 'mirror'
+    });
+  }
+  
+  // Return closest if within snap distance
+  const SNAP_DISTANCE = 20; // pixels
+  const nearest = candidates.reduce((a, b) => a.distance < b.distance ? a : b);
+  
+  if (nearest.distance < SNAP_DISTANCE) {
+    return nearest.point;
+  }
+  
+  return null;
+}
+
 /************************************************
  * 
  *   Main App
@@ -591,7 +639,21 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle, measuringM
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
-      setMeasurementCoords({ start: { x: mouseX, y: mouseY }, end: { x: mouseX, y: mouseY } });
+      let startPoint = { x: mouseX, y: mouseY };
+
+      // If in measuring mode, start measurement
+      if (measuringMode) {
+        // Snap if Shift is held
+        if (e.shiftKey) {
+          const mirrorHeight = canvasDims.height * MIRROR_HEIGHT_RATIO;
+          const snapped = findNearestSnappable(startPoint, circle, eye, mirrors, mirrorAngle, mirrorHeight);
+          if (snapped) {
+            startPoint = snapped;
+          }
+        }
+      }
+
+      setMeasurementCoords({ start: startPoint, end: startPoint });
       setDragging('measuring');
       return;
     }
@@ -617,7 +679,16 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle, measuringM
     if (measuringMode) {
       setHovering('')
       if (dragging === 'measuring') {
-        setMeasurementCoords({ ...measurementCoords, end: { x: mouseX, y: mouseY } });
+        let endPoint = { x: mouseX, y: mouseY };
+        // Snap if Shift is held
+        if (e.shiftKey) {
+          const mirrorHeight = canvasDims.height * MIRROR_HEIGHT_RATIO;
+          const snapped = findNearestSnappable(endPoint, circle, eye, mirrors, mirrorAngle, mirrorHeight);
+          if (snapped) {
+            endPoint = snapped;
+          }
+        }
+        setMeasurementCoords({ ...measurementCoords, end: endPoint });
         return;
       }
       return;
@@ -654,7 +725,7 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle, measuringM
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
         style={{
-          cursor: dragging != '' ? 'grabbing' : (hovering != '' ? 'move' : 'default'),
+          cursor: measuringMode ? 'crosshair' : (dragging != '' ? 'grabbing' : (hovering != '' ? 'move' : 'default')),
           display: 'block',
         }}
       />
