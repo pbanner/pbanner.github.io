@@ -333,13 +333,36 @@ function findNearestSnappable(point, circle, eye, mirrors, mirrorAngle, mirrorHe
   return null;
 }
 
+function findCentralRayIntersection(circle, rayAngle, mirrors, mirrorAngle, mirrorHeight) {
+  // The central ray is the one at rayAngle (middle of the spread)
+  const mirrorCenter = mirrors[0];
+  const mirrorEndpoints = getMirrorEndpoints(mirrorCenter, mirrorAngle, mirrorHeight);
+  
+  const hit = rayHitsMirror(
+    { x: circle.x, y: circle.y },
+    rayAngle,
+    mirrorEndpoints.start,
+    mirrorEndpoints.end,
+    10000
+  );
+  
+  if (!hit) return null;
+  
+  return {
+    hitPoint: hit.hitPoint,
+    mirrorEndpoints: mirrorEndpoints,
+    rayAngle: rayAngle
+  };
+}
+
 /************************************************
  * 
  *   Main App
  * 
 ************************************************/
 
-export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle, measuringMode, setMeasuringMode }) {
+export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView, anglesView }) {
+
   const GRID_SPACING = 50;
   const MIRROR_WIDTH = 10;
   const MIRROR_HEIGHT_RATIO = 0.6;  // Height as fraction of canvas height
@@ -360,6 +383,7 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle, measuringM
   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
   // Mirror center; gets written over on initialization
   const [mirrors, setMirrors] = useState([{ x: 400, y: 300 }]);
+  const [rayAngle, setRayAngle] = useState(8*Math.PI/180);
 
   // Objects and dragging variables
   const [circle, setCircle] = useState({ x: 300, y: 200, radius: 8 });
@@ -373,8 +397,6 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle, measuringM
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   // Measurement coordinates
   const [measurementCoords, setMeasurementCoords] = useState({ start: { x: 0, y: 0 }, end: { x: 0, y: 0 } })
-
-  const [rayAngle, setRayAngle] = useState(8*Math.PI/180);
 
   // On initialization: resize canvas to fill container, then set the
   // mirror to be centered vertically and horizontally on the sized canvas.
@@ -609,7 +631,77 @@ export default function Panel1({ gridOn, mirrorAngle, setMirrorAngle, measuringM
       ctx.fillText(`${distance.toFixed(1)} px`, midX, midY - 15);
     }
 
-  }, [circle, eye, gridOn, mirrors, rayAngle, canvasDims, eyeImageLoaded, mirrorAngle, measuringMode, measurementCoords]);
+    // Draw normal line to the mirror
+    if (normalView) {
+      const mirrorHeight = canvasDims.height * MIRROR_HEIGHT_RATIO;
+      const mirrorEndpoints = getMirrorEndpoints(mirrors[0], mirrorAngle, mirrorHeight);
+      const mirrorNormal = getMirrorNormal(mirrorEndpoints.start, mirrorEndpoints.end);
+      const hitData = findCentralRayIntersection(circle, rayAngle, mirrors, mirrorAngle, mirrorHeight);
+      let startPoint = mirrors[0]
+      if (hitData) {
+        startPoint = hitData.hitPoint
+      }
+      ctx.strokeStyle = '#236d9e';
+      ctx.lineWidth = 2.0;
+      ctx.setLineDash([7, 7]);
+      ctx.beginPath();
+      ctx.moveTo(startPoint.x, startPoint.y);
+      ctx.lineTo(startPoint.x + mirrorNormal.x * 500, startPoint.y + mirrorNormal.y * 500);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      if (anglesView && hitData && imageVisible) {
+        const arcRadius = 50;
+        const LBL_MULT = 1.15;
+        const REFL_ARC_ADD = 10;
+        const hitPoint = hitData.hitPoint;
+
+        //console.log((rayAngle*180/Math.PI).toFixed(1), (mirrorAngle*180/Math.PI).toFixed(1))
+        
+        // Incident angle arc
+        ctx.strokeStyle = '#27ae60';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(
+          hitPoint.x,
+          hitPoint.y,
+          arcRadius,
+          Math.PI + mirrorAngle,
+          Math.PI + rayAngle,
+          rayAngle < mirrorAngle
+        );
+        ctx.stroke();
+
+        // Reflected angle arc
+        ctx.strokeStyle = '#9b59b6';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(
+          hitPoint.x,
+          hitPoint.y,
+          arcRadius + REFL_ARC_ADD,
+          Math.PI + mirrorAngle,
+          Math.PI + 2*mirrorAngle - rayAngle,
+          rayAngle > mirrorAngle
+        );
+        ctx.stroke();
+
+        // Add labels
+        ctx.fillStyle = '#27ae60';
+        ctx.font = '18px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(((rayAngle-mirrorAngle)*180.0/Math.PI).toFixed(1)+"°",
+            hitPoint.x - LBL_MULT*arcRadius*Math.cos((rayAngle+mirrorAngle)/2) + 20*Math.sin(mirrorAngle),
+            hitPoint.y - LBL_MULT*arcRadius*Math.sin((rayAngle+mirrorAngle)/2) + 10*Math.cos(mirrorAngle)
+        );
+        ctx.fillStyle = '#9b59b6';
+        ctx.fillText(((rayAngle-mirrorAngle)*180.0/Math.PI).toFixed(1)+"°",
+            hitPoint.x - LBL_MULT*(arcRadius+REFL_ARC_ADD)*Math.cos((-rayAngle+3*mirrorAngle)/2) + 20*Math.sin(mirrorAngle),
+            hitPoint.y - LBL_MULT*(arcRadius+REFL_ARC_ADD)*Math.sin((-rayAngle+3*mirrorAngle)/2) + 10*Math.cos(mirrorAngle)
+        );
+      }
+    }
+  }, [circle, eye, gridOn, mirrors, rayAngle, canvasDims, eyeImageLoaded, mirrorAngle, measuringMode, measurementCoords, normalView, anglesView]);
   // Note that rayAngle is required here, even though it's a dependency on cricle + eye + mirrors,
   // because those things updating sets ray angle which triggers a redraw
 
