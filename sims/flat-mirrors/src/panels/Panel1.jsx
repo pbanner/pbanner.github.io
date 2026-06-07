@@ -652,7 +652,7 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
 
       if (anglesView && hitData && imageVisible) {
         const arcRadius = 50;
-        const LBL_MULT = 1.15;
+        const LBL_MULT = 1.25;
         const REFL_ARC_ADD = 10;
         const hitPoint = hitData.hitPoint;
 
@@ -691,13 +691,13 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
         ctx.font = '18px Arial';
         ctx.textAlign = 'right';
         ctx.fillText(((rayAngle-mirrorAngle)*180.0/Math.PI).toFixed(1)+"°",
-            hitPoint.x - LBL_MULT*arcRadius*Math.cos((rayAngle+mirrorAngle)/2) + 20*Math.sin(mirrorAngle),
-            hitPoint.y - LBL_MULT*arcRadius*Math.sin((rayAngle+mirrorAngle)/2) + 10*Math.cos(mirrorAngle)
+            hitPoint.x - LBL_MULT*arcRadius*Math.cos((rayAngle+mirrorAngle)/2) + Math.abs(20*Math.sin(mirrorAngle)),
+            hitPoint.y - LBL_MULT*arcRadius*Math.sin((rayAngle+mirrorAngle)/2) + Math.abs(10*Math.cos(mirrorAngle))
         );
         ctx.fillStyle = '#9b59b6';
         ctx.fillText(((rayAngle-mirrorAngle)*180.0/Math.PI).toFixed(1)+"°",
-            hitPoint.x - LBL_MULT*(arcRadius+REFL_ARC_ADD)*Math.cos((-rayAngle+3*mirrorAngle)/2) + 20*Math.sin(mirrorAngle),
-            hitPoint.y - LBL_MULT*(arcRadius+REFL_ARC_ADD)*Math.sin((-rayAngle+3*mirrorAngle)/2) + 10*Math.cos(mirrorAngle)
+            hitPoint.x - LBL_MULT*(arcRadius+REFL_ARC_ADD)*Math.cos((-rayAngle+3*mirrorAngle)/2) + Math.abs(20*Math.sin(mirrorAngle)),
+            hitPoint.y - LBL_MULT*(arcRadius+REFL_ARC_ADD)*Math.sin((-rayAngle+3*mirrorAngle)/2) + Math.abs(10*Math.cos(mirrorAngle))
         );
       }
     }
