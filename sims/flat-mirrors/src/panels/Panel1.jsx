@@ -469,10 +469,13 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
   // Adding Escape and backspace event handlers for during measurement mode
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && measuringMode && dragging === 'measuring') {
-        //console.log('Escape pressed during measurement');
-        setMeasurementCoords(measurementCoords.slice(0, -1))
-        setDragging('')
+      if (measuringMode) {
+        if (e.key === 'Escape' && dragging === 'measuring') {
+          setMeasurementCoords(measurementCoords.slice(0, -1));
+          setDragging('');
+        } else if (e.key === 'Backspace' && measurementCoords.length > 0) {
+          setMeasurementCoords(measurementCoords.slice(0, -1));
+        }
       }
     };
 
@@ -481,7 +484,7 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [measuringMode, dragging]);
+  }, [measuringMode, dragging, measurementCoords]);
 
   // Set the ray angle any time the circle, eye, or mirrors are changed
   // The idea is to set it to the angle that makes the rays go into the eye when
