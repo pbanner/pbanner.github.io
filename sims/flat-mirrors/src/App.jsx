@@ -59,15 +59,11 @@ export default function App() {
           <div className="panel-controls">
             {activePanel === 1 && (
               <div>
-                <h3>Panel 1: Point Object</h3>
-                <div className="control-group">
-                  <label>
-                    <input type="checkbox" checked={gridOn} onChange={(e) => setGridOn(e.target.checked)} />
-                    Show grid
-                  </label>
-                </div>
-                <div className="control-group">
-                  <label>Mirror angle: {(mirrorAngle * 180 / Math.PI).toFixed(1)}°</label>
+                <h3>Instructions</h3>
+                <p>Drag the object or eye around and watch if and when a virtual image is visible.</p>
+
+                <div className="control-group" style={{ 'margin-top': '1.0em', 'margin-bottom': '1.5em' }}>
+                  <label style={{ justifyContent: 'center' }}>Mirror angle: {(mirrorAngle * 180 / Math.PI).toFixed(1)}°</label>
                   <input
                     type="range"
                     min={-Math.PI}
@@ -78,23 +74,33 @@ export default function App() {
                     style={{ width: '100%' }}
                   />
                 </div>
-                <div className="control-group">
-                  <label>
-                    <input type="checkbox" checked={measuringMode} onChange={(e) => setMeasuringMode(e.target.checked)} />
-                    Measure a distance
-                  </label>
+
+                <div className="control-group" style={{ 'margin-top': '1.0em' }}>
+                  <button className={`control-button ${normalView ? 'active' : ''}`} onClick={() => setNormalView(!normalView)}>
+                    {normalView ? 'Hide mirror normal' : 'Show mirror normal'}
+                  </button>
                 </div>
                 <div className="control-group">
-                  <label>
-                    <input type="checkbox" checked={normalView} onChange={(e) => setNormalView(e.target.checked)} />
-                    Show mirror normal
-                  </label>
+                  <button className={`control-button ${anglesView ? 'active' : ''}`} onClick={() => setAnglesView(!anglesView)} disabled={!normalView}>
+                    {anglesView ? 'Hide incident and reflected angles' : 'Show incident and reflected angles'}
+                  </button>
+                </div>
+
+                <div className="control-group" style={{ 'margin-top': '1.0em' }}>
+                  <button className={`control-button ${measuringMode ? 'active-special' : ''}`} onClick={() => setMeasuringMode(!measuringMode)}>
+                    {measuringMode ? 'Disable measuring mode' : 'Enable measuring mode'}
+                  </button>
                 </div>
                 <div className="control-group">
-                  <label>
-                    <input type="checkbox" disabled={!normalView} checked={anglesView} onChange={(e) => setAnglesView(e.target.checked)} />
-                    Show incident and reflected angles
-                  </label>
+                  <button className="control-button">
+                    Clear measurements
+                  </button>
+                </div>
+
+                <div className="control-group" style={{ 'margin-top': '1.0em' }}>
+                  <button className={`control-button ${gridOn ? 'active' : ''}`} onClick={() => setGridOn(!gridOn)}>
+                    {gridOn ? 'Hide grid' : 'Show grid'}
+                  </button>
                 </div>
               </div>
             )}

@@ -116,6 +116,42 @@
   cursor: pointer;
 }
 
+.control-button {
+  padding: 10px 10px;
+  margin: 2px 0px;
+  border: 1px solid #ddd;
+  background: #fff;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #666;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.control-button:hover {
+  background: #f0f0f0;
+  border-color: #bbb;
+}
+
+.control-button.active {
+  background: #3498db;
+  color: white;
+  border-color: #3498db;
+}
+
+.control-button.active-special {
+  background: #972323;
+  color: white;
+  border-color: #972323;
+}
+
+.control-button:disabled {
+  background: #d0d0d0;
+  border-color: #bbb;
+}
+
 /* Responsive for smaller screens */
 @media (max-width: 800px) {
   .sidebar {
