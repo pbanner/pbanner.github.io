@@ -7,6 +7,9 @@ import eyeImage from '../assets/eye-small.png';
  * 
 ************************************************/
 
+const RAY_COUNT = 5;
+const RAY_ANGLE_SPREAD = 2 * Math.PI / 180.0;
+
 function rayHitsMirror(rayOrigin, rayDirection, mirrorStart, mirrorEnd, maxDist = Infinity) {
   // rayOrigin: {x, y}
   // rayDirection: angle in radians
@@ -330,9 +333,6 @@ function findNearestSnappable(point, circle, eye, mirrors, mirrorAngle, mirrorHe
       }
     }
   }
-  // If the nearest point on the mirror is within SNAP_DISTANCE of any of the measurement points,
-  // remove the mirror point so we snap to the measurement point preferentially
-  // ......
 
   // Circle center
   candidates.push({
@@ -347,13 +347,16 @@ function findNearestSnappable(point, circle, eye, mirrors, mirrorAngle, mirrorHe
     label: 'eye'
   });
   // Virtual image
-  const mirrorEndpoints = getMirrorEndpoints(mirrors[0], mirrorAngle, mirrorHeight);
-  const viPoint = reflectPointAcrossLine(circle, mirrorEndpoints.start, mirrorEndpoints.end);
-  candidates.push({
-    point: { x: viPoint.x, y: viPoint.y },
-    distance: Math.sqrt((point.x - viPoint.x) ** 2 + (point.y - viPoint.y) ** 2),
-    label: 'virtual image'
-  });
+  const imageVisible = canSeeVirtualImage(circle, eye, mirrors, mirrorAngle, RAY_COUNT, RAY_ANGLE_SPREAD, mirrorHeight);
+  if (imageVisible) {
+    const mirrorEndpoints = getMirrorEndpoints(mirrors[0], mirrorAngle, mirrorHeight);
+    const viPoint = reflectPointAcrossLine(circle, mirrorEndpoints.start, mirrorEndpoints.end);
+    candidates.push({
+      point: { x: viPoint.x, y: viPoint.y },
+      distance: Math.sqrt((point.x - viPoint.x) ** 2 + (point.y - viPoint.y) ** 2),
+      label: 'virtual image'
+    });
+  }
   
   // Return closest if within snap distance
   const nearest = candidates.reduce((a, b) => a.distance < b.distance ? a : b);
@@ -399,8 +402,6 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
   const MIRROR_WIDTH = 10;
   const MIRROR_HEIGHT_RATIO = 0.6;  // Height as fraction of canvas height
   const MAX_RAY_DISTANCE = 1000;
-  const RAY_COUNT = 5;
-  const RAY_ANGLE_SPREAD = 2 * Math.PI / 180.0;
   const EYE_HEIGHT = 50; // pixels
   const EYE_WIDTH = 40; // pixels
 
