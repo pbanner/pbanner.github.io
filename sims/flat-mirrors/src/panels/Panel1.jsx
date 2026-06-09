@@ -466,6 +466,23 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
     return () => window.removeEventListener('resize', resizeCanvas);
   }, []);
 
+  // Adding Escape and backspace event handlers for during measurement mode
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && measuringMode && dragging === 'measuring') {
+        //console.log('Escape pressed during measurement');
+        setMeasurementCoords(measurementCoords.slice(0, -1))
+        setDragging('')
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [measuringMode, dragging]);
+
   // Set the ray angle any time the circle, eye, or mirrors are changed
   // The idea is to set it to the angle that makes the rays go into the eye when
   // they do so (i.e. when the virtual image is visible), and to do nothing otherwise.
