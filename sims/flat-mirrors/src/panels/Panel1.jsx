@@ -454,6 +454,7 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
       canvas.height = newHeight;
       setCanvasDims({ width: newWidth, height: newHeight });
     };
+    resizeCanvas();
 
     // Put the mirror center in the center of canvas
     // Round the horizontal position to the nearest grid line
@@ -462,9 +463,8 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
     setMirrors([{ x: mirrorCenterX, y: mirrorCenterY }]);
 
     // Make simulation responsive to window size changes
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
-    return () => window.removeEventListener('resize', resizeCanvas);
+    //window.addEventListener('resize', resizeCanvas);
+    //return () => window.removeEventListener('resize', resizeCanvas);
   }, []);
 
   // Adding Escape and backspace event handlers for during measurement mode
