@@ -660,7 +660,7 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
         ctx.font = '14px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(`${distance.toFixed(1)} px`, midX, midY - 15);
+        ctx.fillText(`${(distance/50.0).toFixed(2)} cm`, midX, midY - 15);
       }
     }
 
