@@ -14,12 +14,14 @@ export default function App() {
   // 0 = no angles shown, 1 = angles shown
   const [anglesView, setAnglesView] = useState(0);
   const [mirrorAngle, setMirrorAngle] = useState(0);
+  // Measurement coordinates
+  const [measurementCoords, setMeasurementCoords] = useState([])
 
   return (
     <div className="app-layout">
       {/* Main Canvas Area */}
       <div className="canvas-area">
-        {activePanel === 1 && <Panel1 gridOn={gridOn} mirrorAngle={mirrorAngle} measuringMode={measuringMode} normalView={normalView} anglesView={anglesView} />}
+        {activePanel === 1 && <Panel1 gridOn={gridOn} mirrorAngle={mirrorAngle} measuringMode={measuringMode} normalView={normalView} anglesView={anglesView} measurementCoords={measurementCoords} setMeasurementCoords={setMeasurementCoords} />}
         {activePanel === 2 && <Panel2 gridOn={gridOn} />}
         {activePanel === 3 && <Panel3 gridOn={gridOn} />}
       </div>
@@ -62,7 +64,7 @@ export default function App() {
                 <h3>Instructions</h3>
                 <p>Drag the object or eye around and watch if and when a virtual image is visible.</p>
 
-                <div className="control-group" style={{ 'margin-top': '1.0em', 'margin-bottom': '1.5em' }}>
+                <div className="control-group" style={{ marginTop: '1.0em', marginBottom: '1.5em' }}>
                   <label style={{ justifyContent: 'center' }}>Mirror angle: {(mirrorAngle * 180 / Math.PI).toFixed(1)}°</label>
                   <input
                     type="range"
@@ -75,7 +77,7 @@ export default function App() {
                   />
                 </div>
 
-                <div className="control-group" style={{ 'margin-top': '1.0em' }}>
+                <div className="control-group" style={{ marginTop: '1.0em' }}>
                   <button className={`control-button ${normalView ? 'active' : ''}`} onClick={() => setNormalView(!normalView)}>
                     {normalView ? 'Hide mirror normal' : 'Show mirror normal'}
                   </button>
@@ -86,18 +88,18 @@ export default function App() {
                   </button>
                 </div>
 
-                <div className="control-group" style={{ 'margin-top': '1.0em' }}>
+                <div className="control-group" style={{ marginTop: '1.0em' }}>
                   <button className={`control-button ${measuringMode ? 'active-special' : ''}`} onClick={() => setMeasuringMode(!measuringMode)}>
                     {measuringMode ? 'Disable measuring mode' : 'Enable measuring mode'}
                   </button>
                 </div>
                 <div className="control-group">
-                  <button className="control-button">
+                  <button className="control-button" onClick={() => setMeasurementCoords([])}>
                     Clear measurements
                   </button>
                 </div>
 
-                <div className="control-group" style={{ 'margin-top': '1.0em' }}>
+                <div className="control-group" style={{ marginTop: '1.0em' }}>
                   <button className={`control-button ${gridOn ? 'active' : ''}`} onClick={() => setGridOn(!gridOn)}>
                     {gridOn ? 'Hide grid' : 'Show grid'}
                   </button>

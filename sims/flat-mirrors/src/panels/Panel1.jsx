@@ -361,7 +361,7 @@ function findCentralRayIntersection(circle, rayAngle, mirrors, mirrorAngle, mirr
  * 
 ************************************************/
 
-export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView, anglesView }) {
+export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView, anglesView, measurementCoords, setMeasurementCoords }) {
 
   const GRID_SPACING = 50;
   const MIRROR_WIDTH = 10;
@@ -395,8 +395,6 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
   const [dragging, setDragging] = useState('')
   // Used for dragging seamlessly
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  // Measurement coordinates
-  const [measurementCoords, setMeasurementCoords] = useState({ start: { x: 0, y: 0 }, end: { x: 0, y: 0 } })
 
   // On initialization: resize canvas to fill container, then set the
   // mirror to be centered vertically and horizontally on the sized canvas.
@@ -599,36 +597,42 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
     // Here we determine "active" to mean measurement mode has to be active AND
     // either we must be dragging the mouse or the start and end measurement coordinates
     // must be different
-    if (measuringMode && (dragging === 'measuring' || measurementCoords.start != measurementCoords.end)) {
-      const dx = measurementCoords.end.x - measurementCoords.start.x;
-      const dy = measurementCoords.end.y - measurementCoords.start.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+    if (measuringMode && measurementCoords) {
+      for (let i = 0; i < measurementCoords.length; i++) {
+        const coord = measurementCoords[i];
 
-      // Draw line
-      ctx.strokeStyle = '#303030';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(measurementCoords.start.x, measurementCoords.start.y);
-      ctx.lineTo(measurementCoords.end.x, measurementCoords.end.y);
-      ctx.stroke();
+        if ((i === measurementCoords.length - 1) && (coord.start == coord.end)) break;
 
-      // Draw end caps
-      ctx.fillStyle = '#303030';
-      ctx.beginPath();
-      ctx.arc(measurementCoords.start.x, measurementCoords.start.y, 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(measurementCoords.end.x, measurementCoords.end.y, 4, 0, Math.PI * 2);
-      ctx.fill();
+        const dx = coord.end.x - coord.start.x;
+        const dy = coord.end.y - coord.start.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
 
-      // Draw distance label
-      const midX = (measurementCoords.start.x + measurementCoords.end.x) / 2;
-      const midY = (measurementCoords.start.y + measurementCoords.end.y) / 2;
-      ctx.fillStyle = '#303030';
-      ctx.font = '14px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(`${distance.toFixed(1)} px`, midX, midY - 15);
+        // Draw line
+        ctx.strokeStyle = '#303030';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(coord.start.x, coord.start.y);
+        ctx.lineTo(coord.end.x, coord.end.y);
+        ctx.stroke();
+
+        // Draw end caps
+        ctx.fillStyle = '#303030';
+        ctx.beginPath();
+        ctx.arc(coord.start.x, coord.start.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(coord.end.x, coord.end.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Draw distance label
+        const midX = (coord.start.x + coord.end.x) / 2;
+        const midY = (coord.start.y + coord.end.y) / 2;
+        ctx.fillStyle = '#303030';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${distance.toFixed(1)} px`, midX, midY - 15);
+      }
     }
 
     // Draw normal line to the mirror
@@ -733,19 +737,16 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
       const mouseY = e.clientY - rect.top;
       let startPoint = { x: mouseX, y: mouseY };
 
-      // If in measuring mode, start measurement
-      if (measuringMode) {
-        // Snap if Shift is held
-        if (e.shiftKey) {
-          const mirrorHeight = canvasDims.height * MIRROR_HEIGHT_RATIO;
-          const snapped = findNearestSnappable(startPoint, circle, eye, mirrors, mirrorAngle, mirrorHeight);
-          if (snapped) {
-            startPoint = snapped;
-          }
+      // Snap if Shift is held
+      if (e.shiftKey) {
+        const mirrorHeight = canvasDims.height * MIRROR_HEIGHT_RATIO;
+        const snapped = findNearestSnappable(startPoint, circle, eye, mirrors, mirrorAngle, mirrorHeight);
+        if (snapped) {
+          startPoint = snapped;
         }
       }
 
-      setMeasurementCoords({ start: startPoint, end: startPoint });
+      setMeasurementCoords([ ...measurementCoords, { start: startPoint, end: startPoint }]);
       setDragging('measuring');
       return;
     }
@@ -780,7 +781,10 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
             endPoint = snapped;
           }
         }
-        setMeasurementCoords({ ...measurementCoords, end: endPoint });
+        setMeasurementCoords(measurementCoords => [
+          ...measurementCoords.slice(0, -1),
+          { ...measurementCoords[measurementCoords.length - 1], end: endPoint }
+        ])
         return;
       }
       return;
