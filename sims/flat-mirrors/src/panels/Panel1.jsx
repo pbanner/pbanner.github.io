@@ -859,6 +859,16 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
 
   const handlePointerUp = () => {
     setDragging('');
+    // If we were in measurement mode and the user was trying to snap with Shift, it's possible
+    // that they left a 0-px measurement; let's clean that up here
+    if (measuringMode && measurementCoords.length > 0) {
+      const lastMeas = measurementCoords.at(-1);
+      const dx = lastMeas.start.x - lastMeas.end.x;
+      const dy = lastMeas.start.y - lastMeas.end.y;
+      if ((dx*dx + dy*dy) < 1e-8) {
+        setMeasurementCoords(measurementCoords.slice(0, -1));
+      }
+    }
   };
 
   return (
