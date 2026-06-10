@@ -396,7 +396,7 @@ function findCentralRayIntersection(circle, rayAngle, mirrors, mirrorAngle, mirr
  * 
 ************************************************/
 
-export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView, anglesView, measurementCoords, setMeasurementCoords, showMeasurements, showVirtualImage }) {
+export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView, anglesView, measurementCoords, setMeasurementCoords, showMeasurements, showVirtualImage, showAddlRays }) {
 
   const GRID_SPACING = 50;
   const MIRROR_WIDTH = 10;
@@ -566,23 +566,65 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
 
     // Calculate ray segments for drawing
     var allRaySegments = [];
-    for (let i = 0; i < RAY_COUNT; i++) {
-      const angle = rayAngle + (i / (RAY_COUNT - 1) - 0.5) * RAY_ANGLE_SPREAD;
-      const raySegments = traceRay(
-        { x: circle.x, y: circle.y },
-        angle,
-        mirrors,
-        mirrorAngle,
-        mirrorHeight,
-        5,
-        MAX_RAY_DISTANCE
-      );
-      allRaySegments.push(...raySegments);
-    }
-    // Truncate ray segments at the eye if they're entering the eye
     if (imageVisible) {
+      for (let i = 0; i < RAY_COUNT; i++) {
+        const angle = rayAngle + (i / (RAY_COUNT - 1) - 0.5) * RAY_ANGLE_SPREAD;
+        const raySegments = traceRay(
+          { x: circle.x, y: circle.y },
+          angle,
+          mirrors,
+          mirrorAngle,
+          mirrorHeight,
+          5,
+          MAX_RAY_DISTANCE
+        );
+        allRaySegments.push(...raySegments);
+      }
+      // Truncate ray segments at the eye if they're entering the eye
+      if (imageVisible) {
+        const eyeHitbox = 25;
+        allRaySegments = allRaySegments.map(seg => {
+          if (seg.bounced) {
+            const closest = closestPointOnSegment(eye, seg.start, seg.end);
+            // If eye is close to this segment, truncate at closest point
+            if (closest.distance < eyeHitbox && closest.t < 1) {
+              return { ...seg, end: closest.point };
+            }
+          }
+          return seg;
+        });
+      }
+      // Draw the ray segments
+      ctx.strokeStyle = '#202020';
+      ctx.lineWidth = 1.5;
+      allRaySegments.forEach(seg => {
+        ctx.beginPath();
+        ctx.moveTo(seg.start.x, seg.start.y);
+        ctx.lineTo(seg.end.x, seg.end.y);
+        ctx.stroke();
+      });
+    }
+
+    // Draw additional rays if desired
+    if (showAddlRays) {
+      const ADDL_RAYS_NUM = 20;
+      var addlRaySegments = [];
+      for (let i = 0; i < ADDL_RAYS_NUM; i++) {
+        const angle = i*2*Math.PI/ADDL_RAYS_NUM;
+        const raySegments = traceRay(
+          { x: circle.x, y: circle.y },
+          angle,
+          mirrors,
+          mirrorAngle,
+          mirrorHeight,
+          5,
+          MAX_RAY_DISTANCE
+        );
+        addlRaySegments.push(...raySegments);
+      }
+      // Truncate ray segments at the eye if they're entering the eye
       const eyeHitbox = 25;
-      allRaySegments = allRaySegments.map(seg => {
+      addlRaySegments = addlRaySegments.map(seg => {
         if (seg.bounced) {
           const closest = closestPointOnSegment(eye, seg.start, seg.end);
           // If eye is close to this segment, truncate at closest point
@@ -592,22 +634,25 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
         }
         return seg;
       });
+      // Draw the ray segments
+      ctx.strokeStyle = '#206491';
+      ctx.lineWidth = 1.0;
+      addlRaySegments.forEach(seg => {
+        ctx.beginPath();
+        ctx.moveTo(seg.start.x, seg.start.y);
+        ctx.lineTo(seg.end.x, seg.end.y);
+        ctx.stroke();
+      });
+      // The next thing we will do is calculate tracebacks for all the rays
+      // We want these additional rays to be part of that, so let's push
+      // these rays into allRaySegments
+      allRaySegments.push(...addlRaySegments);
     }
-
-    // Draw the ray segments
-    ctx.strokeStyle = '#202020';
-    ctx.lineWidth = 1;
-    allRaySegments.forEach(seg => {
-      ctx.beginPath();
-      ctx.moveTo(seg.start.x, seg.start.y);
-      ctx.lineTo(seg.end.x, seg.end.y);
-      ctx.stroke();
-    });
 
     // Draw virtual rays and image if visible
     if (imageVisible && showVirtualImage) {
       ctx.strokeStyle = '#999999'; //was #999999
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.5;
       ctx.setLineDash([10, 8]);
       
       allRaySegments.forEach(seg => {
@@ -833,7 +878,7 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
         );
       }
     }
-  }, [circle, eye, gridOn, mirrors, rayAngle, canvasDims, eyeImageLoaded, mirrorAngle, measuringMode, measurementCoords, normalView, anglesView, showMeasurements, showVirtualImage]);
+  }, [circle, eye, gridOn, mirrors, rayAngle, canvasDims, eyeImageLoaded, mirrorAngle, measuringMode, measurementCoords, normalView, anglesView, showMeasurements, showVirtualImage, showAddlRays]);
   // Note that rayAngle is required here, even though it's a dependency on cricle + eye + mirrors,
   // because those things updating sets ray angle which triggers a redraw
 
