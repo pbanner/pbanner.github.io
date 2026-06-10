@@ -759,9 +759,21 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
           incidentRayAngle, (incidentRayAngle + 2*Math.PI*(cond === 2)) < (normalAngle + 2*Math.PI*(cond === 1))
         );
         ctx.stroke();
+        // For the incident angle label
+        const incidentMidAngle = (normalAngle + incidentRayAngle + 2*Math.PI*(cond === 1) + 2*Math.PI*(cond === 2)) / 2;
+        const labelRadius = incidentArcRadius/2 + 25; // arc radius + offset
+        const labelX = hitPoint.x + labelRadius * Math.cos(incidentMidAngle);
+        const labelY = hitPoint.y + labelRadius * Math.sin(incidentMidAngle);
 
-        console.log((incidentRayAngle.toFixed(2)), (normalAngle.toFixed(2)), (reflectedRayAngle.toFixed(2)), cond)
-        console.log((incidentRayAngle + 2*Math.PI*(cond === 2)) < (normalAngle + 2*Math.PI*(cond === 1)))
+        ctx.fillStyle = '#27ae60';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(
+          (Math.abs(incidentRayAngle + 2*Math.PI*(cond === 2) - normalAngle - 2*Math.PI*(cond === 1)) * 180 / Math.PI).toFixed(1) + "°",
+          labelX,
+          labelY
+        );
         
         // Now we will apply the same logic to the reflected ray. It's kind of crazy that we can apply the
         // exact same logic, but there are actually two subtle sign flips. First, there is one sign flip
@@ -789,25 +801,21 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
           reflectedRayAngle, (reflectedRayAngle + 2*Math.PI*(cond === 2)) < (normalAngle + 2*Math.PI*(cond === 1))
         );
         ctx.stroke();
+        // For the incident angle label
+        const reflectedMidAngle = (normalAngle + reflectedRayAngle + 2*Math.PI*(cond === 1) + 2*Math.PI*(cond === 2)) / 2;
+        const reflectedLabelRadius = reflectedArcRadius/2 + 25; // arc radius + offset
+        const labelXR = hitPoint.x + reflectedLabelRadius * Math.cos(reflectedMidAngle);
+        const labelYR = hitPoint.y + reflectedLabelRadius * Math.sin(reflectedMidAngle);
 
-        console.log((reflectedRayAngle + 2*Math.PI*(cond === 2)) < (normalAngle + 2*Math.PI*(cond === 1)))
-
-
-        /*
-        // Add labels
-        ctx.fillStyle = '#27ae60';
-        ctx.font = '18px Arial';
-        ctx.textAlign = 'right';
-        ctx.fillText(((rayAngle-mirrorAngle)*180.0/Math.PI).toFixed(1)+"°",
-            hitPoint.x - LBL_MULT*arcRadius*Math.cos((rayAngle+mirrorAngle)/2) + Math.abs(20*Math.sin(mirrorAngle)),
-            hitPoint.y - LBL_MULT*arcRadius*Math.sin((rayAngle+mirrorAngle)/2) + Math.abs(10*Math.cos(mirrorAngle))
-        );
         ctx.fillStyle = '#9b59b6';
-        ctx.fillText(((rayAngle-mirrorAngle)*180.0/Math.PI).toFixed(1)+"°",
-            hitPoint.x - LBL_MULT*(arcRadius+REFL_ARC_ADD)*Math.cos((-rayAngle+3*mirrorAngle)/2) + Math.abs(20*Math.sin(mirrorAngle)),
-            hitPoint.y - LBL_MULT*(arcRadius+REFL_ARC_ADD)*Math.sin((-rayAngle+3*mirrorAngle)/2) + Math.abs(10*Math.cos(mirrorAngle))
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(
+          (Math.abs(reflectedRayAngle + 2*Math.PI*(cond === 2) - normalAngle - 2*Math.PI*(cond === 1)) * 180 / Math.PI).toFixed(1) + "°",
+          labelXR,
+          labelYR
         );
-        */
       }
     }
   }, [circle, eye, gridOn, mirrors, rayAngle, canvasDims, eyeImageLoaded, mirrorAngle, measuringMode, measurementCoords, normalView, anglesView]);
