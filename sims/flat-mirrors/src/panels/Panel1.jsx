@@ -544,21 +544,25 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
       ctx.stroke();
     }
 
-    // Draw mirror (using placed and rotated endpoints)
+    // Some things that will be used a lot
+    const mirrorHeight = canvasDims.height * MIRROR_HEIGHT_RATIO;
+    // Calculate visibility once
+    const imageVisible = canSeeVirtualImage(circle, eye, mirrors, mirrorAngle, RAY_COUNT, RAY_ANGLE_SPREAD, mirrorHeight);
+    // Get the mirror endpoints... if there's ever no mirrors, well, give up
+    let mirrorEndpoints = null;
     if (mirrors.length > 0) {
-      const mirrorHeight = canvasDims.height * MIRROR_HEIGHT_RATIO;
-      const mirrorEndpoints = getMirrorEndpoints(mirrors[0], mirrorAngle, mirrorHeight);
-      ctx.strokeStyle = '#3498db';
-      ctx.lineWidth = MIRROR_WIDTH;
-      ctx.beginPath();
-      ctx.moveTo(mirrorEndpoints.start.x, mirrorEndpoints.start.y);
-      ctx.lineTo(mirrorEndpoints.end.x, mirrorEndpoints.end.y);
-      ctx.stroke();
+      mirrorEndpoints = getMirrorEndpoints(mirrors[0], mirrorAngle, mirrorHeight);
+    } else {
+      return;
     }
 
-    // Calculate visibility once
-    const mirrorHeight = canvasDims.height * MIRROR_HEIGHT_RATIO;
-    const imageVisible = canSeeVirtualImage(circle, eye, mirrors, mirrorAngle, RAY_COUNT, RAY_ANGLE_SPREAD, mirrorHeight);
+    // Draw mirror (using placed and rotated endpoints)
+    ctx.strokeStyle = '#3498db';
+    ctx.lineWidth = MIRROR_WIDTH;
+    ctx.beginPath();
+    ctx.moveTo(mirrorEndpoints.start.x, mirrorEndpoints.start.y);
+    ctx.lineTo(mirrorEndpoints.end.x, mirrorEndpoints.end.y);
+    ctx.stroke();
 
     // Calculate ray segments for drawing
     var allRaySegments = [];
@@ -579,10 +583,12 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
     if (imageVisible) {
       const eyeHitbox = 25;
       allRaySegments = allRaySegments.map(seg => {
-        const closest = closestPointOnSegment(eye, seg.start, seg.end);
-        // If eye is close to this segment, truncate at closest point
-        if (closest.distance < eyeHitbox && closest.t < 1) {
-          return { ...seg, end: closest.point };
+        if (seg.bounced) {
+          const closest = closestPointOnSegment(eye, seg.start, seg.end);
+          // If eye is close to this segment, truncate at closest point
+          if (closest.distance < eyeHitbox && closest.t < 1) {
+            return { ...seg, end: closest.point };
+          }
         }
         return seg;
       });
@@ -599,10 +605,7 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
     });
 
     // Draw virtual rays and image if visible
-    if (imageVisible && mirrors.length > 0) {
-      const mirrorHeight = canvasDims.height * MIRROR_HEIGHT_RATIO;
-      const mirrorEndpoints = getMirrorEndpoints(mirrors[0], mirrorAngle, mirrorHeight);
-
+    if (imageVisible) {
       ctx.strokeStyle = '#999999';
       ctx.lineWidth = 1;
       ctx.setLineDash([5, 5]);
@@ -642,8 +645,22 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
     ctx.stroke();
 
     // Draw eye
+    // if (eyeImageRef.current && eyeImageRef.current.complete) {
+    //   ctx.drawImage(eyeImageRef.current, eye.x - EYE_WIDTH / 2, eye.y - EYE_HEIGHT / 2, EYE_WIDTH, EYE_HEIGHT);
+    // }
+    // Draw eye
+    let eyeAngle = 0
+    const hitData = findCentralRayIntersection(circle, rayAngle, mirrors, mirrorAngle, mirrorHeight);
+    if (hitData && imageVisible) {
+      const hitPoint = hitData.hitPoint;
+      eyeAngle = Math.atan2(hitPoint.y - eye.y, hitPoint.x - eye.x);
+    }
     if (eyeImageRef.current && eyeImageRef.current.complete) {
-      ctx.drawImage(eyeImageRef.current, eye.x - EYE_WIDTH / 2, eye.y - EYE_HEIGHT / 2, EYE_WIDTH, EYE_HEIGHT);
+      ctx.save();
+      ctx.translate(eye.x, eye.y);           // Move origin to eye center
+      ctx.rotate(eyeAngle);                  // Rotate around that point
+      ctx.drawImage(eyeImageRef.current, -EYE_WIDTH / 2, -EYE_HEIGHT / 2, EYE_WIDTH, EYE_HEIGHT);
+      ctx.restore();
     }
 
     // Draw measurements if active
@@ -687,8 +704,6 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
 
     // Draw normal line to the mirror
     if (normalView) {
-      const mirrorHeight = canvasDims.height * MIRROR_HEIGHT_RATIO;
-      const mirrorEndpoints = getMirrorEndpoints(mirrors[0], mirrorAngle, mirrorHeight);
       let mirrorNormal = getMirrorNormal(mirrorEndpoints.start, mirrorEndpoints.end);
       // Normal line will always be on the same side of the mirror as the eye;
       // check via dot product with eye-mirror vector. Use the mirror endpoint
