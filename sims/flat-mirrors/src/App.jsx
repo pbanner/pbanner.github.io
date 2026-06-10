@@ -14,14 +14,15 @@ export default function App() {
   // 0 = no angles shown, 1 = angles shown
   const [anglesView, setAnglesView] = useState(0);
   const [mirrorAngle, setMirrorAngle] = useState(0);
-  // Measurement coordinates
-  const [measurementCoords, setMeasurementCoords] = useState([])
+  // Measurement coordinates and viewing
+  const [showMeasurements, setShowMeasurements] = useState(true);
+  const [measurementCoords, setMeasurementCoords] = useState([]);
 
   return (
     <div className="app-layout">
       {/* Main Canvas Area */}
       <div className="canvas-area">
-        {activePanel === 1 && <Panel1 gridOn={gridOn} mirrorAngle={mirrorAngle} measuringMode={measuringMode} normalView={normalView} anglesView={anglesView} measurementCoords={measurementCoords} setMeasurementCoords={setMeasurementCoords} />}
+        {activePanel === 1 && <Panel1 gridOn={gridOn} mirrorAngle={mirrorAngle} measuringMode={measuringMode} normalView={normalView} anglesView={anglesView} measurementCoords={measurementCoords} setMeasurementCoords={setMeasurementCoords} showMeasurements={showMeasurements} />}
         {activePanel === 2 && <Panel2 gridOn={gridOn} />}
         {activePanel === 3 && <Panel3 gridOn={gridOn} />}
       </div>
@@ -93,7 +94,10 @@ export default function App() {
                     {measuringMode ? 'Disable measuring mode' : 'Enable measuring mode'}
                   </button>
                 </div>
-                <div className="control-group">
+                <div className="control-group" style={{ flexDirection: 'row' }}>
+                  <button className={`control-button ${showMeasurements ? 'active' : ''}`} onClick={() => setShowMeasurements(!showMeasurements)}>
+                    {showMeasurements ? 'Hide measurements' : 'Show measurements'}
+                  </button>
                   <button className="control-button" onClick={() => setMeasurementCoords([])}>
                     Clear measurements
                   </button>
