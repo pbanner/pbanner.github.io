@@ -713,7 +713,13 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
       for (let i = 0; i < measurementCoords.length; i++) {
         const coord = measurementCoords[i];
 
-        if ((i === measurementCoords.length - 1) && (coord.start == coord.end)) break;
+        if ((i === measurementCoords.length - 1) && (coord.start == coord.end)) {
+          ctx.fillStyle = '#303030';
+          ctx.beginPath();
+          ctx.arc(coord.start.x, coord.start.y, 4, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
 
         const dx = coord.end.x - coord.start.x;
         const dy = coord.end.y - coord.start.y;
