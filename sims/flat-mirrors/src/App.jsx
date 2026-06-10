@@ -64,8 +64,10 @@ export default function App() {
           <div className="panel-controls">
             {activePanel === 1 && (
               <div>
-                <h3>Instructions</h3>
-                <p>Drag the object or eye around and watch if and when a virtual image is visible.</p>
+                <h3>Instructions and Controls</h3>
+                <p>Drag the object or eye around and watch if and where a virtual image is visible!
+                If desired, right-click in the simulation area to save an image of the current setup.
+                Rotate the mirror and explore other controls below!</p>
 
                 <div className="control-group" style={{ marginTop: '1.0em', marginBottom: '1.5em' }}>
                   <label style={{ justifyContent: 'center' }}>Mirror angle: {(mirrorAngle * 180 / Math.PI).toFixed(1)}°</label>
@@ -104,6 +106,11 @@ export default function App() {
                     Clear measurements
                   </button>
                 </div>
+                <p style={{ marginTop: '0.5em' }}><b>Measurement mode instructions: </b>
+                If this mode is enabled, press down and drag to make a measurement.
+                Hold Shift before or during measurement to snap the measuring tool to nearby objects or previous measurement points.
+                While dragging, you can use Escape to stop the current measurement.
+                Use Backspace to delete measurements.</p>
 
                 <div className="control-group" style={{ marginTop: '1.0em' }}>
                   <button className={`control-button ${showAddlRays ? 'active' : ''}`} onClick={() => setShowAddlRays(!showAddlRays)}>
