@@ -1,4 +1,4 @@
-name: Build Simulations
+name: Build Test Simulation
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - 'sims/**'
-      - '.github/workflows/build-and-deploy.yml'
+      - '.github/workflows/build-test-sim.yml'
 
 jobs:
   build:
@@ -38,5 +38,5 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add sims/test-sim/dist/
-          git commit -m "Build: update dist folder" || echo "No changes to commit"
+          git commit -m "Build: update test-sim dist folder" || echo "No changes to commit"
           git push
