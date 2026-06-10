@@ -689,7 +689,14 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
     if (normalView) {
       const mirrorHeight = canvasDims.height * MIRROR_HEIGHT_RATIO;
       const mirrorEndpoints = getMirrorEndpoints(mirrors[0], mirrorAngle, mirrorHeight);
-      const mirrorNormal = getMirrorNormal(mirrorEndpoints.start, mirrorEndpoints.end);
+      let mirrorNormal = getMirrorNormal(mirrorEndpoints.start, mirrorEndpoints.end);
+      // Normal line will always be on the same side of the mirror as the eye;
+      // check via dot product with eye-mirror vector. Use the mirror endpoint
+      // start to form the vector.
+      const dotProductCheck = mirrorNormal.x*(eye.x - mirrorEndpoints.start.x) + mirrorNormal.y*(eye.y - mirrorEndpoints.start.y);
+      if (dotProductCheck < 0) {
+        mirrorNormal = { x: -mirrorNormal.x, y: -mirrorNormal.y };
+      }
       const hitData = findCentralRayIntersection(circle, rayAngle, mirrors, mirrorAngle, mirrorHeight);
       let startPoint = mirrors[0]
       if (hitData) {
@@ -704,28 +711,72 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
       ctx.stroke();
       ctx.setLineDash([]);
 
+      // Draw the incident and reflected angles
       if (anglesView && hitData && imageVisible) {
-        const arcRadius = 50;
         const LBL_MULT = 1.25;
         const REFL_ARC_ADD = 10;
         const hitPoint = hitData.hitPoint;
+        const normalAngle = Math.atan2(mirrorNormal.y, mirrorNormal.x);
+        const incidentRayAngle = Math.atan2(circle.y - hitPoint.y, circle.x - hitPoint.x);
+        const reflectedRayAngle = Math.atan2(eye.y - hitPoint.y, eye.x - hitPoint.x);
 
-        //console.log((rayAngle*180/Math.PI).toFixed(1), (mirrorAngle*180/Math.PI).toFixed(1))
-        
-        // Incident angle arc
+        const incidentArcRadius = Math.sqrt((circle.x - hitPoint.x)**2 + (circle.y - hitPoint.y)**2);
+        const reflectedArcRadius = Math.sqrt((eye.x - hitPoint.x)**2 + (eye.y - hitPoint.y)**2);
+
+        /*
+        Drawing arcs in JSX is incredibly stupid. The start and end angles are measured *clockwise*
+        from the positive x-axis, and by default the arc between them is drawn clockwise. In other
+        words, the drawing direction isn't set by the one that produces the shortest arc, it's set by
+        some default or some input condition. So we need to determine this direction ourselves. All
+        angles wrap at ±180°, so we must also contend with that.
+
+        The shortest way I found to do it is this. Normally (e.g. if both angles are positive and neither
+        has wrapped), then if the incident angle is greater than the normal angle, we need to draw clockwise.
+        If one of the angles has wrapped, we can tell by checking |normal angle - incident angle| > 180°, 
+        which it can never be due to the physics of the situation alone. If that happens, we know we have 
+        wrapping to contend with; to fix this, we add 2*pi to the negative one. That brings the original
+        condition back to being enforced correctly. 
+        */
+
+        // cond = 0 means neither angle will be adjusted, 1 = normalAngle, 2 = incidentRayAngle
+        let cond = 0;
+        if (Math.abs(normalAngle - incidentRayAngle) > Math.PI) {
+          if (normalAngle < 0) {
+            cond = 1;
+          } else {
+            cond = 2;
+          }
+        }      
+        // Draw the incident angle arc
         ctx.strokeStyle = '#27ae60';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.arc(
           hitPoint.x,
           hitPoint.y,
-          arcRadius,
-          Math.PI + mirrorAngle,
-          Math.PI + rayAngle,
-          rayAngle < mirrorAngle
+          incidentArcRadius/2,
+          normalAngle,
+          incidentRayAngle, (incidentRayAngle + 2*Math.PI*(cond === 2)) < (normalAngle + 2*Math.PI*(cond === 1))
         );
         ctx.stroke();
 
+        console.log((incidentRayAngle.toFixed(2)), (normalAngle.toFixed(2)), (reflectedRayAngle.toFixed(2)), cond)
+        console.log((incidentRayAngle + 2*Math.PI*(cond === 2)) < (normalAngle + 2*Math.PI*(cond === 1)))
+        
+        // Now we will apply the same logic to the reflected ray. It's kind of crazy that we can apply the
+        // exact same logic, but there are actually two subtle sign flips. First, there is one sign flip
+        // caused by starting both arcs (incident and reflected) at the normal angle. Second, there is a 
+        // subtle sign flip caused by enforcing both incidentAngle < normalAngle *and* reflectedAngle < normalAngle.
+        // This is due to the law of reflection: reflectedAngle = 2*normalAngle - incidentAngle (ignoring wrapping).
+        // So reflectedAngle < normalAngle really means incidentAngle > normalAngle! Physics.
+        cond = 0;
+        if (Math.abs(normalAngle - reflectedRayAngle) > Math.PI) {
+          if (normalAngle < 0) {
+            cond = 1;
+          } else {
+            cond = 2;
+          }
+        }
         // Reflected angle arc
         ctx.strokeStyle = '#9b59b6';
         ctx.lineWidth = 1.5;
@@ -733,13 +784,16 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
         ctx.arc(
           hitPoint.x,
           hitPoint.y,
-          arcRadius + REFL_ARC_ADD,
-          Math.PI + mirrorAngle,
-          Math.PI + 2*mirrorAngle - rayAngle,
-          rayAngle > mirrorAngle
+          reflectedArcRadius/2,
+          normalAngle,
+          reflectedRayAngle, (reflectedRayAngle + 2*Math.PI*(cond === 2)) < (normalAngle + 2*Math.PI*(cond === 1))
         );
         ctx.stroke();
 
+        console.log((reflectedRayAngle + 2*Math.PI*(cond === 2)) < (normalAngle + 2*Math.PI*(cond === 1)))
+
+
+        /*
         // Add labels
         ctx.fillStyle = '#27ae60';
         ctx.font = '18px Arial';
@@ -753,6 +807,7 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
             hitPoint.x - LBL_MULT*(arcRadius+REFL_ARC_ADD)*Math.cos((-rayAngle+3*mirrorAngle)/2) + Math.abs(20*Math.sin(mirrorAngle)),
             hitPoint.y - LBL_MULT*(arcRadius+REFL_ARC_ADD)*Math.sin((-rayAngle+3*mirrorAngle)/2) + Math.abs(10*Math.cos(mirrorAngle))
         );
+        */
       }
     }
   }, [circle, eye, gridOn, mirrors, rayAngle, canvasDims, eyeImageLoaded, mirrorAngle, measuringMode, measurementCoords, normalView, anglesView]);
