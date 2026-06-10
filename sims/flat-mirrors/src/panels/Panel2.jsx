@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 
-export default function Panel1({ gridOn }) {
+export default function Panel1({ displayBools }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [circle, setCircle] = useState({ x: 300, y: 200, radius: 8 });
@@ -40,7 +40,7 @@ export default function Panel1({ gridOn }) {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Draw grid
-    ctx.strokeStyle = gridOn ? '#e0e0e0' : '#ffffff';
+    ctx.strokeStyle = displayBools.gridOn ? '#e0e0e0' : '#ffffff';
     ctx.lineWidth = 1;
     for (let i = 0; i <= canvas.width; i += 50) {
       ctx.beginPath();
@@ -65,7 +65,7 @@ export default function Panel1({ gridOn }) {
     ctx.strokeStyle = circleColor ? '#c0392b' : '#2bb929';
     ctx.lineWidth = 2;
     ctx.stroke();
-  }, [circle, circleColor, gridOn, canvasDims]); // ← Added canvasDims dependency
+  }, [circle, circleColor, canvasDims, displayBools]);
 
   // Mouse handlers
   const handleMouseDown = (e) => {

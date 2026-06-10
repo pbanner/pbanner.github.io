@@ -396,7 +396,7 @@ function findCentralRayIntersection(circle, rayAngle, mirrors, mirrorAngle, mirr
  * 
 ************************************************/
 
-export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView, anglesView, measurementCoords, setMeasurementCoords, showMeasurements, showVirtualImage, showAddlRays }) {
+export default function Panel1({ mirrorAngle, measuringMode, measurementCoords, setMeasurementCoords, displayBools }) {
 
   const GRID_SPACING = 50;
   const MIRROR_WIDTH = 10;
@@ -529,7 +529,7 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Draw grid
-    ctx.strokeStyle = gridOn ? '#e0e0e0' : '#ffffff';
+    ctx.strokeStyle = displayBools.gridOn ? '#e0e0e0' : '#ffffff';
     ctx.lineWidth = 1;
     for (let i = 0; i <= canvas.width; i += GRID_SPACING) {
       ctx.beginPath();
@@ -606,7 +606,7 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
     }
 
     // Draw additional rays if desired
-    if (showAddlRays) {
+    if (displayBools.showAddlRays) {
       const ADDL_RAYS_NUM = 20;
       var addlRaySegments = [];
       for (let i = 0; i < ADDL_RAYS_NUM; i++) {
@@ -650,7 +650,7 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
     }
 
     // Draw virtual rays and image if visible
-    if (imageVisible && showVirtualImage) {
+    if (imageVisible && displayBools.showVirtualImage) {
       ctx.strokeStyle = '#999999'; //was #999999
       ctx.lineWidth = 1.5;
       ctx.setLineDash([10, 8]);
@@ -709,7 +709,7 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
     }
 
     // Draw measurements if active
-    if (showMeasurements && measurementCoords) {
+    if (displayBools.showMeasurements && measurementCoords) {
       for (let i = 0; i < measurementCoords.length; i++) {
         const coord = measurementCoords[i];
 
@@ -754,7 +754,7 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
     }
 
     // Draw normal line to the mirror
-    if (normalView) {
+    if (displayBools.normalView) {
       let mirrorNormal = getMirrorNormal(mirrorEndpoints.start, mirrorEndpoints.end);
       // Normal line will always be on the same side of the mirror as the eye;
       // check via dot product with eye-mirror vector. Use the mirror endpoint
@@ -780,7 +780,7 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
       ctx.setLineDash([]);
 
       // Draw the incident and reflected angles
-      if (anglesView && hitData && imageVisible) {
+      if (displayBools.anglesView && hitData && imageVisible) {
         const LBL_MULT = 1.25;
         const REFL_ARC_ADD = 10;
         const hitPoint = hitData.hitPoint;
@@ -886,7 +886,7 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
         );
       }
     }
-  }, [circle, eye, gridOn, mirrors, rayAngle, canvasDims, eyeImageLoaded, mirrorAngle, measuringMode, measurementCoords, normalView, anglesView, showMeasurements, showVirtualImage, showAddlRays]);
+  }, [circle, eye, mirrors, rayAngle, canvasDims, eyeImageLoaded, mirrorAngle, measuringMode, measurementCoords, displayBools]);
   // Note that rayAngle is required here, even though it's a dependency on cricle + eye + mirrors,
   // because those things updating sets ray angle which triggers a redraw
 

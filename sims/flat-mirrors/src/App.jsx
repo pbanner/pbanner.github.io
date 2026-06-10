@@ -8,25 +8,28 @@ export default function App() {
   const [activePanel, setActivePanel] = useState(1);
   
   // Panel 1 state
-  const [gridOn, setGridOn] = useState(true);
-  const [measuringMode, setMeasuringMode] = useState(false);
-  const [normalView, setNormalView] = useState(false);
-  const [showVirtualImage, setShowVirtualImage] = useState(true);
-  const [showAddlRays, setShowAddlRays] = useState(false);
-  // 0 = no angles shown, 1 = angles shown
-  const [anglesView, setAnglesView] = useState(0);
+  const [displayBools, setDisplayBools] = useState({
+    gridOn: true,             // Displaying the grid
+    normalView: false,        // Displaying the mirror normal line
+    showVirtualImage: true,   // Displaying the virtual image and ray tracebacks
+    showAddlRays: false,      // Displaying additional rays from the object
+    anglesView: false,        // Displaying the incident and reflected angles, arcs and values; old: // 0 = no angles shown, 1 = angles shown
+    showMeasurements: true    // Show measurements made by user
+
+  });
+  const [measuringMode, setMeasuringMode] = useState(false);  
+  // Mirror angle can be rotated by a UI slider
   const [mirrorAngle, setMirrorAngle] = useState(0);
-  // Measurement coordinates and viewing
-  const [showMeasurements, setShowMeasurements] = useState(true);
+  // Measurement coordinates
   const [measurementCoords, setMeasurementCoords] = useState([]);
 
   return (
     <div className="app-layout">
       {/* Main Canvas Area */}
       <div className="canvas-area">
-        {activePanel === 1 && <Panel1 gridOn={gridOn} mirrorAngle={mirrorAngle} measuringMode={measuringMode} normalView={normalView} anglesView={anglesView} measurementCoords={measurementCoords} setMeasurementCoords={setMeasurementCoords} showMeasurements={showMeasurements} showVirtualImage={showVirtualImage} showAddlRays={showAddlRays} />}
-        {activePanel === 2 && <Panel2 gridOn={gridOn} />}
-        {activePanel === 3 && <Panel3 gridOn={gridOn} />}
+        {activePanel === 1 && <Panel1 mirrorAngle={mirrorAngle} measuringMode={measuringMode} measurementCoords={measurementCoords} setMeasurementCoords={setMeasurementCoords} displayBools={displayBools} />}
+        {activePanel === 2 && <Panel2 displayBools={displayBools} />}
+        {activePanel === 3 && <Panel3 displayBools={displayBools} />}
       </div>
 
       {/* Right Sidebar */}
@@ -83,13 +86,13 @@ export default function App() {
                 </div>
 
                 <div className="control-group" style={{ marginTop: '1.0em' }}>
-                  <button className={`control-button ${normalView ? 'active' : ''}`} onClick={() => setNormalView(!normalView)}>
-                    {normalView ? 'Hide mirror normal' : 'Show mirror normal'}
+                  <button className={`control-button ${displayBools.normalView ? 'active' : ''}`} onClick={() => setDisplayBools({ ...displayBools, normalView: !displayBools.normalView })}>
+                    {displayBools.normalView ? 'Hide mirror normal' : 'Show mirror normal'}
                   </button>
                 </div>
                 <div className="control-group">
-                  <button className={`control-button ${anglesView ? 'active' : ''}`} onClick={() => setAnglesView(!anglesView)} disabled={!normalView}>
-                    {anglesView ? 'Hide incident and reflected angles' : 'Show incident and reflected angles'}
+                  <button className={`control-button ${displayBools.anglesView ? 'active' : ''}`} onClick={() => setDisplayBools({ ...displayBools, anglesView: !displayBools.anglesView })} disabled={!displayBools.normalView}>
+                    {displayBools.anglesView ? 'Hide incident and reflected angles' : 'Show incident and reflected angles'}
                   </button>
                 </div>
 
@@ -99,8 +102,8 @@ export default function App() {
                   </button>
                 </div>
                 <div className="control-group" style={{ flexDirection: 'row' }}>
-                  <button className={`control-button ${showMeasurements ? 'active' : ''}`} onClick={() => setShowMeasurements(!showMeasurements)}>
-                    {showMeasurements ? 'Hide measurements' : 'Show measurements'}
+                  <button className={`control-button ${displayBools.showMeasurements ? 'active' : ''}`} onClick={() => setDisplayBools({ ...displayBools, showMeasurements: !displayBools.showMeasurements })}>
+                    {displayBools.showMeasurements ? 'Hide measurements' : 'Show measurements'}
                   </button>
                   <button className="control-button" onClick={() => setMeasurementCoords([])}>
                     Clear measurements
@@ -113,18 +116,18 @@ export default function App() {
                 Use Backspace to delete measurements.</p>
 
                 <div className="control-group" style={{ marginTop: '1.0em' }}>
-                  <button className={`control-button ${showAddlRays ? 'active' : ''}`} onClick={() => setShowAddlRays(!showAddlRays)}>
-                    {showAddlRays ? 'Hide additional rays' : 'Show additional rays'}
+                  <button className={`control-button ${displayBools.showAddlRays ? 'active' : ''}`} onClick={() => setDisplayBools({ ...displayBools, showAddlRays: !displayBools.showAddlRays })}>
+                    {displayBools.showAddlRays ? 'Hide additional rays' : 'Show additional rays'}
                   </button>
                 </div>
                 <div className="control-group" style={{ marginTop: '1.0em' }}>
-                  <button className={`control-button ${showVirtualImage ? 'active' : ''}`} onClick={() => setShowVirtualImage(!showVirtualImage)}>
-                    {showVirtualImage ? 'Hide virtual image' : 'Show virtual image'}
+                  <button className={`control-button ${displayBools.showVirtualImage ? 'active' : ''}`} onClick={() => setDisplayBools({ ...displayBools, showVirtualImage: !displayBools.showVirtualImage })}>
+                    {displayBools.showVirtualImage ? 'Hide virtual image' : 'Show virtual image'}
                   </button>
                 </div>
                 <div className="control-group">
-                  <button className={`control-button ${gridOn ? 'active' : ''}`} onClick={() => setGridOn(!gridOn)}>
-                    {gridOn ? 'Hide grid' : 'Show grid'}
+                  <button className={`control-button ${displayBools.gridOn ? 'active' : ''}`} onClick={() => setDisplayBools({ ...displayBools, gridOn: !displayBools.gridOn })}>
+                    {displayBools.gridOn ? 'Hide grid' : 'Show grid'}
                   </button>
                 </div>
               </div>
@@ -135,7 +138,7 @@ export default function App() {
                 <p>Instructions and controls will appear here.</p>
                 <div className="control-group">
                   <label>
-                    <input type="checkbox" checked={gridOn} onChange={(e) => setGridOn(e.target.checked)} />
+                    <input type="checkbox" checked={displayBools.gridOn} onChange={(e) => setDisplayBools({ ...displayBools, gridOn: e.target.checked })} />
                     Show grid
                   </label>
                 </div>
@@ -147,7 +150,7 @@ export default function App() {
                 <p>Instructions and controls will appear here.</p>
                 <div className="control-group">
                   <label>
-                    <input type="checkbox" checked={gridOn} onChange={(e) => setGridOn(e.target.checked)} />
+                    <input type="checkbox" checked={displayBools.gridOn} onChange={(e) => setDisplayBools({ ...displayBools, gridOn: e.target.checked })} />
                     Show grid
                   </label>
                 </div>

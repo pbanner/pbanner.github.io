@@ -291,7 +291,7 @@ function getMirrorEndpoints(mirrorCenter, mirrorAngle, mirrorHeight) {
  * 
 ************************************************/
 
-export default function Panel3({ gridOn }) {
+export default function Panel3({ displayBools }) {
   const GRID_SPACING = 50;
   const MIRROR_WIDTH = 10;
   const MIRROR_HEIGHT_RATIO = 0.6;  // Height as fraction of canvas height
@@ -405,7 +405,7 @@ export default function Panel3({ gridOn }) {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Draw grid
-    ctx.strokeStyle = gridOn ? '#e0e0e0' : '#ffffff';
+    ctx.strokeStyle = displayBools.gridOn ? '#e0e0e0' : '#ffffff';
     ctx.lineWidth = 1;
     for (let i = 0; i <= canvas.width; i += GRID_SPACING) {
       ctx.beginPath();
@@ -522,7 +522,7 @@ export default function Panel3({ gridOn }) {
       ctx.drawImage(eyeImageRef.current, eye.x - EYE_WIDTH / 2, eye.y - EYE_HEIGHT / 2, EYE_WIDTH, EYE_HEIGHT);
     }
 
-  }, [circle, eye, gridOn, mirrors, rayAngle, canvasDims, eyeImageLoaded, mirrorAngle]);
+  }, [circle, eye, mirrors, rayAngle, canvasDims, eyeImageLoaded, mirrorAngle, displayBools]);
   // Note that rayAngle is required here, even though it's a dependency on cricle + eye + mirrors,
   // because those things updating sets ray angle which triggers a redraw
 
