@@ -759,8 +759,10 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
       }
       const hitData = findCentralRayIntersection(circle, rayAngle, mirrors, mirrorAngle, mirrorHeight);
       let startPoint = mirrors[0]
-      if (hitData) {
+      if (hitData && imageVisible) {
         startPoint = hitData.hitPoint
+      } else {
+        startPoint = { x: startPoint.x - mirrorNormal.x*250, y: startPoint.y - mirrorNormal.y*250 }
       }
       ctx.strokeStyle = '#236d9e';
       ctx.lineWidth = 2.0;
