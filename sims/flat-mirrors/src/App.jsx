@@ -11,6 +11,7 @@ export default function App() {
   const [gridOn, setGridOn] = useState(true);
   const [measuringMode, setMeasuringMode] = useState(false);
   const [normalView, setNormalView] = useState(false);
+  const [showVirtualImage, setShowVirtualImage] = useState(true);
   // 0 = no angles shown, 1 = angles shown
   const [anglesView, setAnglesView] = useState(0);
   const [mirrorAngle, setMirrorAngle] = useState(0);
@@ -22,7 +23,7 @@ export default function App() {
     <div className="app-layout">
       {/* Main Canvas Area */}
       <div className="canvas-area">
-        {activePanel === 1 && <Panel1 gridOn={gridOn} mirrorAngle={mirrorAngle} measuringMode={measuringMode} normalView={normalView} anglesView={anglesView} measurementCoords={measurementCoords} setMeasurementCoords={setMeasurementCoords} showMeasurements={showMeasurements} />}
+        {activePanel === 1 && <Panel1 gridOn={gridOn} mirrorAngle={mirrorAngle} measuringMode={measuringMode} normalView={normalView} anglesView={anglesView} measurementCoords={measurementCoords} setMeasurementCoords={setMeasurementCoords} showMeasurements={showMeasurements} showVirtualImage={showVirtualImage} />}
         {activePanel === 2 && <Panel2 gridOn={gridOn} />}
         {activePanel === 3 && <Panel3 gridOn={gridOn} />}
       </div>
@@ -104,6 +105,11 @@ export default function App() {
                 </div>
 
                 <div className="control-group" style={{ marginTop: '1.0em' }}>
+                  <button className={`control-button ${showVirtualImage ? 'active' : ''}`} onClick={() => setShowVirtualImage(!showVirtualImage)}>
+                    {showVirtualImage ? 'Hide virtual image' : 'Show virtual image'}
+                  </button>
+                </div>
+                <div className="control-group">
                   <button className={`control-button ${gridOn ? 'active' : ''}`} onClick={() => setGridOn(!gridOn)}>
                     {gridOn ? 'Hide grid' : 'Show grid'}
                   </button>

@@ -396,7 +396,7 @@ function findCentralRayIntersection(circle, rayAngle, mirrors, mirrorAngle, mirr
  * 
 ************************************************/
 
-export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView, anglesView, measurementCoords, setMeasurementCoords, showMeasurements }) {
+export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView, anglesView, measurementCoords, setMeasurementCoords, showMeasurements, showVirtualImage }) {
 
   const GRID_SPACING = 50;
   const MIRROR_WIDTH = 10;
@@ -605,10 +605,10 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
     });
 
     // Draw virtual rays and image if visible
-    if (imageVisible) {
-      ctx.strokeStyle = '#999999';
+    if (imageVisible && showVirtualImage) {
+      ctx.strokeStyle = '#999999'; //was #999999
       ctx.lineWidth = 1;
-      ctx.setLineDash([5, 5]);
+      ctx.setLineDash([10, 8]);
       
       allRaySegments.forEach(seg => {
         if (seg.bounced) {
@@ -833,7 +833,7 @@ export default function Panel1({ gridOn, mirrorAngle, measuringMode, normalView,
         );
       }
     }
-  }, [circle, eye, gridOn, mirrors, rayAngle, canvasDims, eyeImageLoaded, mirrorAngle, measuringMode, measurementCoords, normalView, anglesView, showMeasurements]);
+  }, [circle, eye, gridOn, mirrors, rayAngle, canvasDims, eyeImageLoaded, mirrorAngle, measuringMode, measurementCoords, normalView, anglesView, showMeasurements, showVirtualImage]);
   // Note that rayAngle is required here, even though it's a dependency on cricle + eye + mirrors,
   // because those things updating sets ray angle which triggers a redraw
 
