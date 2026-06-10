@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'sims/**'
+      - 'sims/flat-mirrors/**'
       - '.github/workflows/build-flat-mirror-sim.yml'
 
 jobs:
