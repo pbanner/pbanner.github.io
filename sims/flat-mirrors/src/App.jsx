@@ -48,14 +48,16 @@ export default function App() {
               <button 
                 className={`nav-button ${activePanel === 2 ? 'active' : ''}`}
                 onClick={() => setActivePanel(2)}
+                disabled={true}
               >
-                Panel 2: Extended Object
+                Panel 2: Extended Object (coming soon)
               </button>
               <button 
                 className={`nav-button ${activePanel === 3 ? 'active' : ''}`}
                 onClick={() => setActivePanel(3)}
+                disabled={true}
               >
-                Panel 3: Playground
+                Panel 3: Playground (coming soon)
               </button>
             </div>
           </div>
