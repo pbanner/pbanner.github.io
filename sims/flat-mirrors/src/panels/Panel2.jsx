@@ -115,6 +115,7 @@ export default function Panel1({ displayBools }) {
         style={{
           cursor: draggingCircle ? 'grabbing' : 'grab',
           display: 'block',
+          touchAction: 'none',
         }}
       />
     </div>

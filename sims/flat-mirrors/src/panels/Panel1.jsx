@@ -1014,6 +1014,7 @@ export default function Panel1({ mirrorAngle, measuringMode, measurementCoords, 
         style={{
           cursor: measuringMode ? 'crosshair' : (dragging != '' ? 'grabbing' : (hovering != '' ? 'move' : 'default')),
           display: 'block',
+          touchAction: 'none',
         }}
       />
     </div>
