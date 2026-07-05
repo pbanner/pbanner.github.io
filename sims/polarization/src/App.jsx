@@ -1,122 +1,91 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import React, { useState } from 'react';
+import './App.css';
+import Panel1 from './panels/Panel1';
+import Panel2 from './panels/Panel2';
+import Panel3 from './panels/Panel3';
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const [activePanel, setActivePanel] = useState(1);
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="app-layout">
+      {/* Main Canvas Area */}
+      <div className="canvas-area">
+        {activePanel === 1 && <Panel1 displayBools={displayBools} />}
+        {activePanel === 2 && <Panel2 displayBools={displayBools} />}
+        {activePanel === 3 && <Panel3 displayBools={displayBools} />}
+      </div>
 
-      <div className="ticks"></div>
+      {/* Right Sidebar */}
+      <aside className="sidebar">
+        <div className="sidebar-content">
+          {/* Navigation */}
+          <div className="nav-section">
+            <h2>Panels</h2>
+            <div className="nav-buttons">
+              <button 
+                className={`nav-button ${activePanel === 1 ? 'active' : ''}`}
+                onClick={() => setActivePanel(1)}
+              >
+                Panel 1: Point Object
+              </button>
+              <button 
+                className={`nav-button ${activePanel === 2 ? 'active' : ''}`}
+                onClick={() => setActivePanel(2)}
+                disabled={true}
+              >
+                Panel 2: Extended Object (coming soon)
+              </button>
+              <button 
+                className={`nav-button ${activePanel === 3 ? 'active' : ''}`}
+                onClick={() => setActivePanel(3)}
+                disabled={true}
+              >
+                Panel 3: Playground (coming soon)
+              </button>
+            </div>
+          </div>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+          {/* Divider */}
+          <hr className="sidebar-divider" />
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+          {/* Panel-Specific Content */}
+          <div className="panel-controls">
+            {activePanel === 1 && (
+              <div>
+                <h3>Instructions and Controls</h3>
+                <p>Drag the object or eye around and watch if and where a virtual image is visible!
+                If desired, right-click in the simulation area to save an image of the current setup.
+                Rotate the mirror and explore other controls below!</p>
+              </div>
+            )}
+            {activePanel === 2 && (
+              <div>
+                <h3>Panel 2 Controls</h3>
+                <p>Instructions and controls will appear here.</p>
+                <div className="control-group">
+                  <label>
+                    <input type="checkbox" checked={displayBools.gridOn} onChange={(e) => setDisplayBools({ ...displayBools, gridOn: e.target.checked })} />
+                    Show grid
+                  </label>
+                </div>
+              </div>
+            )}
+            {activePanel === 3 && (
+              <div>
+                <h3>Panel 3 Controls</h3>
+                <p>Instructions and controls will appear here.</p>
+                <div className="control-group">
+                  <label>
+                    <input type="checkbox" checked={displayBools.gridOn} onChange={(e) => setDisplayBools({ ...displayBools, gridOn: e.target.checked })} />
+                    Show grid
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </aside>
+    </div>
+  );
 }
-
-export default App
