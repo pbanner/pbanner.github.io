@@ -6,6 +6,9 @@ import Panel3 from './panels/Panel3';
 
 export default function App() {
   const [activePanel, setActivePanel] = useState(1);
+  const [displayBools, setDisplayBools] = useState({
+    gridOn: true,             // Displaying the grid
+  });
 
   return (
     <div className="app-layout">
