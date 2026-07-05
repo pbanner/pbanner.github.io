@@ -1,6 +1,7 @@
 import React, { useMemo, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
+import ThickArrowHelper from './ThickArrowHelper.jsx';
 import * as THREE from 'three';
 
 // ---- Physical parameters ----
@@ -39,7 +40,7 @@ const xs = Array.from(
 function Axes() {
   return (
     <>
-      <arrowHelper args={[new THREE.Vector3(1, 0, 0), new THREE.Vector3(X_MIN, 0, 0), X_MAX - X_MIN, 0x000000, 0.3, 0.15]} />
+      <ThickArrowHelper args={[new THREE.Vector3(1, 0, 0), new THREE.Vector3(X_MIN, 0, 0), X_MAX - X_MIN, 0x000000, 0.3, 0.15]} />
       <arrowHelper args={[new THREE.Vector3(0, 1, 0), new THREE.Vector3(X_MIN, -1, 0), 2, 0x000000, 0.2, 0.1]} />
       <arrowHelper args={[new THREE.Vector3(0, 0, 1), new THREE.Vector3(X_MIN, 0, -1), 2, 0x000000, 0.2, 0.1]} />
     </>
@@ -106,7 +107,7 @@ function FieldCurtain({ fieldFn, axis, color, opacity }) {
   return (
     <>
       <line geometry={lineGeometry}>
-        <lineBasicMaterial color="black" />
+        <lineBasicMaterial color="#666666" lineWidth={1} />
       </line>
       <mesh geometry={ribbonGeometry}>
         <meshBasicMaterial color={color} transparent opacity={opacity} side={THREE.DoubleSide} depthWrite={false} />
