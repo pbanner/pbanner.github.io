@@ -30,21 +30,19 @@ export default function App() {
                 className={`nav-button ${activePanel === 1 ? 'active' : ''}`}
                 onClick={() => setActivePanel(1)}
               >
-                Panel 1: Point Object
+                Panel 1: Polarization Measurement
               </button>
               <button 
                 className={`nav-button ${activePanel === 2 ? 'active' : ''}`}
                 onClick={() => setActivePanel(2)}
-                disabled={true}
               >
-                Panel 2: Extended Object (coming soon)
+                Panel 2: Physics of Polarization
               </button>
               <button 
                 className={`nav-button ${activePanel === 3 ? 'active' : ''}`}
                 onClick={() => setActivePanel(3)}
-                disabled={true}
               >
-                Panel 3: Playground (coming soon)
+                Panel 3: Birefringence
               </button>
             </div>
           </div>
