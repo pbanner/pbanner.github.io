@@ -85,7 +85,7 @@ function drawAxisArrows(ctx, cx, cy, scale) {
   const extent = 1.5;
   ctx.strokeStyle = 'black';
   ctx.fillStyle = 'black';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 1;
 
   const hEnd = toPixel(extent, 0, cx, cy, scale);
   ctx.beginPath();
@@ -220,28 +220,6 @@ function FieldVectors() {
   );
 }
 
-// Sign of the field vector's rotation in the (Ehoriz, Evert) plane — computed
-// numerically so it stays correct no matter how theta/phi/omega end up set.
-function useRotationSign() {
-  return useMemo(() => {
-    const dt = 1e-3;
-    const h0 = Ehoriz(0, 0), v0 = Evert(0, 0);
-    const h1 = Ehoriz(0, dt), v1 = Evert(0, dt);
-    const cross = h0 * v1 - v0 * h1;
-    return cross >= 0 ? 1 : -1; // +1 = counterclockwise on screen, -1 = clockwise
-  }, []);
-}
-function computeHandednessArcPoints(sign, samples = 64) {
-  const radius = 1.3;
-  const arcSpan = (5 / 6) * 2 * Math.PI; // ~300°, leaves a gap
-  const pts = [];
-  for (let i = 0; i <= samples; i++) {
-    const angle = sign * (i / samples) * arcSpan;
-    pts.push({ h: radius * Math.cos(angle), v: radius * Math.sin(angle) });
-  }
-  return pts;
-}
-
 // Dimension-agnostic: just the (horizontal, vertical) field-vector-tip
 // trace over one period. Both renderers consume this directly.
 function computeEllipsePoints(samples = 200) {
@@ -276,8 +254,6 @@ function EllipseVisualizer() {
   const canvasRef = useRef();
 
   const points = useMemo(() => computeEllipsePoints(), []);
-  const sign = useRotationSign();
-  const arcPoints = useMemo(() => computeHandednessArcPoints(sign), [sign]);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -295,25 +271,32 @@ function EllipseVisualizer() {
 
       const cx = width / 2;
       const cy = height / 2;
-      const scale = Math.min(width, height) / (2 * 1.5); // fit the +-1.5 axis extent
+      const margin = 24;
+      const scale = (Math.min(width, height) - 2 * margin) / (2 * 1.5);
 
       ctx.clearRect(0, 0, width, height);
       drawAxisArrows(ctx, cx, cy, scale);
-      drawPolyline(ctx, points, cx, cy, scale, 'green', 2);
-      drawPolyline(ctx, arcPoints, cx, cy, scale, 'green', 2);
+      drawPolyline(ctx, points, cx, cy, scale*1.5, 'green', 2);
 
-      const tip = arcPoints[arcPoints.length - 1];
-      const prev = arcPoints[arcPoints.length - 2];
-      const angle = Math.atan2(-(tip.v - prev.v), tip.h - prev.h);
-      ctx.fillStyle = 'green';
-      drawArrowhead(ctx, toPixel(tip.h, tip.v, cx, cy, scale), angle, 10);
+      // Only drawing if ellipticity >~ 6°
+      if (PHI > 0.001) {
+        // Handedness marker: an arrowhead riding directly on the ellipse,
+        // tangent to its own path — the point order already encodes the
+        // true direction of travel, so no separate rotation-sign math needed.
+        const idx = Math.floor(points.length * 0.25);
+        const p0 = points[idx];
+        const p1 = points[idx + 1];
+        const angle = Math.atan2(-(p1.v - p0.v), p1.h - p0.h);
+        ctx.fillStyle = 'green';
+        drawArrowhead(ctx, toPixel(p0.h, p0.v, cx, cy, scale*1.5), angle, 10);
+      }
     }
 
     draw();
     const observer = new ResizeObserver(draw);
     observer.observe(container);
     return () => observer.disconnect();
-  }, [points, arcPoints]);
+  }, [points]);
 
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%' }}>
