@@ -5,7 +5,7 @@ import Panel2 from './panels/Panel2';
 import Panel3 from './panels/Panel3';
 
 export default function App() {
-  const [activePanel, setActivePanel] = useState(1);
+  const [activePanel, setActivePanel] = useState(2);
   const [displayBools, setDisplayBools] = useState({
     gridOn: true,             // Displaying the grid
   });

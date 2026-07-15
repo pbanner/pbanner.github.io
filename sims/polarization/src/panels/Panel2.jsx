@@ -36,6 +36,20 @@ const xs = Array.from(
   (_, i) => X_MIN + (i * (X_MAX - X_MIN)) / (N_SAMPLES - 1)
 );
 
+const placeholderStyle = {
+  width: '100%',
+  height: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  border: '1px dashed #999',
+  borderRadius: '4px',
+  color: '#666',
+  fontSize: '0.9rem',
+  textAlign: 'center',
+  boxSizing: 'border-box',
+};
+
 // Fixed reference frame: propagation axis + local transverse-axis indicators at the source
 function Axes() {
   return (
@@ -169,16 +183,60 @@ function PolarizationEllipse() {
   return <Line points={points} color="green" lineWidth={2} />;
 }
 
+function ControlsPlaceholder() {
+  return (
+    <div style={placeholderStyle}>
+      <span>Basis controls — coming soon</span>
+    </div>
+  );
+}
+
+function EllipseVisualizerPlaceholder() {
+  return (
+    <div style={placeholderStyle}>
+      <span>Polarization ellipse (head-on) — coming soon</span>
+    </div>
+  );
+}
+
+function PoincareSpherePlaceholder() {
+  return (
+    <Canvas camera={{ position: [2, 2, 2], fov: 40 }} style={{ width: '100%', height: '100%' }}>
+      <mesh>
+        <sphereGeometry args={[1, 16, 16]} />
+        <meshBasicMaterial color="steelblue" wireframe />
+      </mesh>
+      <OrbitControls />
+    </Canvas>
+  );
+}
+
 export default function Panel2() {
   return (
-    <Canvas camera={{ position: [6, 3, 6], fov: 35 }} style={{ width: '100%', height: '100%' }}>
-      <Axes />
-      <ObservationPlane />
-      <PolarizationEllipse />
-      <FieldCurtain fieldFn={Ehoriz} axis="Z" color="red" opacity={0.25} />
-      <FieldCurtain fieldFn={Evert} axis="Y" color="#00ccff" opacity={0.15} />
-      <FieldVectors />
-      <OrbitControls target={[-2, 0, 0]} />
-    </Canvas>
+    <div style={{ display: 'grid', gridTemplateColumns: '60% 40%', gap: '0.75rem', width: '100%', height: '100%', boxSizing: 'border-box' }}>
+      {/* Left column: wave animation (75%) + controls (25%) */}
+      <div style={{ display: 'grid', gridTemplateRows: '75% 25%', gap: '0.75rem', minHeight: 0 }}>
+        <div style={{ minHeight: 0 }}>
+          <Canvas camera={{ position: [6, 3, 6], fov: 35 }} style={{ width: '100%', height: '100%' }}>
+            <Axes />
+            <ObservationPlane />
+            <PolarizationEllipse />
+            <FieldCurtain fieldFn={Ehoriz} axis="Z" color="red" opacity={0.25} />
+            <FieldCurtain fieldFn={Evert} axis="Y" color="#00ccff" opacity={0.15} />
+            <FieldVectors />
+            <OrbitControls target={[-2, 0, 0]} />
+          </Canvas>
+        </div>
+        <ControlsPlaceholder />
+      </div>
+
+      {/* Right column: ellipse view (top half) + Poincaré sphere (bottom half) */}
+      <div style={{ display: 'grid', gridTemplateRows: '1fr 1fr', gap: '0.75rem', minHeight: 0 }}>
+        <EllipseVisualizerPlaceholder />
+        <div style={{ minHeight: 0 }}>
+          <PoincareSpherePlaceholder />
+        </div>
+      </div>
+    </div>
   );
 }
