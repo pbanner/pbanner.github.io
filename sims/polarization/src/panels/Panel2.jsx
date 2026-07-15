@@ -40,7 +40,7 @@ const xs = Array.from(
 function Axes() {
   return (
     <>
-      <ThickArrowHelper args={[new THREE.Vector3(1, 0, 0), new THREE.Vector3(X_MIN, 0, 0), X_MAX - X_MIN, 0x000000, 0.3, 0.15]} />
+      <ThickArrowHelper dir={new THREE.Vector3(1, 0, 0)} origin={new THREE.Vector3(X_MIN, 0, 0)} length={X_MAX - X_MIN} color={0x000000} headLength={0.3} headWidth={0.15} shaftWidth={2} />
       <arrowHelper args={[new THREE.Vector3(0, 1, 0), new THREE.Vector3(X_MIN, -1, 0), 2, 0x000000, 0.2, 0.1]} />
       <arrowHelper args={[new THREE.Vector3(0, 0, 1), new THREE.Vector3(X_MIN, 0, -1), 2, 0x000000, 0.2, 0.1]} />
     </>
