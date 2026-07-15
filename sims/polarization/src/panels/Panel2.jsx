@@ -338,8 +338,8 @@ export default function Panel2() {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '60% 40%', gap: '0.75rem', width: '100%', height: '100%', boxSizing: 'border-box' }}>
       {/* Left column: wave animation (75%) + controls (25%) */}
-      <div style={{ display: 'grid', gridTemplateRows: '75% 25%', gap: '0.75rem', minHeight: 0 }}>
-        <div style={{ minHeight: 0 }}>
+      <div style={{ display: 'grid', gridTemplateRows: '75% 25%', gap: '0.75rem', minWidth: 0, minHeight: 0 }}>
+        <div style={{ minWidth: 0, minHeight: 0 }}>
           <Canvas camera={{ position: [6, 3, 6], fov: 35 }} style={{ width: '100%', height: '100%' }}>
             <Axes />
             <ObservationPlane />
@@ -354,11 +354,11 @@ export default function Panel2() {
       </div>
 
       {/* Right column: ellipse view (top half) + Poincaré sphere (bottom half) */}
-      <div style={{ display: 'grid', gridTemplateRows: '1fr 1fr', gap: '0.75rem', minHeight: 0 }}>
-        <div style={{ minHeight: 0 }}>
+      <div style={{ display: 'grid', gridTemplateRows: '1fr 1fr', gap: '0.75rem', minWidth: 0, minHeight: 0 }}>
+        <div style={{ minWidth: 0, minHeight: 0 }}>
           <EllipseVisualizer />
         </div>
-        <div style={{ minHeight: 0 }}>
+        <div style={{ minWidth: 0, minHeight: 0 }}>
           <PoincareSpherePlaceholder />
         </div>
       </div>
