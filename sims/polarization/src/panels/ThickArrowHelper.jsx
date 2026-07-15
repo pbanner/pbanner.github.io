@@ -1,4 +1,4 @@
-import React, { forwardRef, useImperativeHandle, useRef } from 'react';
+import React, { forwardRef, useImperativeHandle, useLayoutEffect, useRef } from 'react';
 import { Line } from '@react-three/drei';
 import * as THREE from 'three';
 
@@ -41,6 +41,10 @@ const ThickArrowHelper = forwardRef(function ThickArrowHelper(
     const shaftEnd = origin.clone().addScaledVector(dir, Math.max(0, length - headLength));
     line.geometry.setPositions([origin.x, origin.y, origin.z, shaftEnd.x, shaftEnd.y, shaftEnd.z]);
   }
+
+  useLayoutEffect(() => {
+    sync();
+  }, []);
 
   useImperativeHandle(ref, () => ({
     setDirection(newDir) {

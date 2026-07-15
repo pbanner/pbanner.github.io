@@ -40,9 +40,9 @@ const xs = Array.from(
 function Axes() {
   return (
     <>
-      <ThickArrowHelper dir={new THREE.Vector3(1, 0, 0)} origin={new THREE.Vector3(X_MIN, 0, 0)} length={X_MAX - X_MIN} color={0x000000} headLength={0.3} headWidth={0.15} shaftWidth={2} />
-      <arrowHelper args={[new THREE.Vector3(0, 1, 0), new THREE.Vector3(X_MIN, -1, 0), 2, 0x000000, 0.2, 0.1]} />
-      <arrowHelper args={[new THREE.Vector3(0, 0, 1), new THREE.Vector3(X_MIN, 0, -1), 2, 0x000000, 0.2, 0.1]} />
+      <ThickArrowHelper dir={new THREE.Vector3(1, 0, 0)} origin={new THREE.Vector3(X_MIN, 0, 0)} length={X_MAX - X_MIN} color={0x000000} headLength={0.2} headWidth={0.1} shaftWidth={2} />
+      <ThickArrowHelper dir={new THREE.Vector3(0, 1, 0)} origin={new THREE.Vector3(X_MIN, -1, 0)} length={2} color={0x000000} headLength={0.2} headWidth={0.1} shaftWidth={2} />
+      <ThickArrowHelper dir={new THREE.Vector3(0, 0, 1)} origin={new THREE.Vector3(X_MIN, 0, -1)} length={2} color={0x000000} headLength={0.2} headWidth={0.1} shaftWidth={2} />
     </>
   );
 }
@@ -147,9 +147,9 @@ function FieldVectors() {
 
   return (
     <>
-      <arrowHelper ref={redArrow} args={[new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), 0.01, 0xff0000]} />
-      <arrowHelper ref={blueArrow} args={[new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 0), 0.01, 0x00ccff]} />
-      <arrowHelper ref={greenArrow} args={[new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 0), 0.01, 0x008000]} />
+      <ThickArrowHelper ref={redArrow} dir={new THREE.Vector3(0, 0, 1)} origin={new THREE.Vector3(0, 0, 0)} length={0.01} color={0xff0000} shaftWidth={1.5} />
+      <ThickArrowHelper ref={blueArrow} dir={new THREE.Vector3(0, 1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={0.01} color={0x00ccff} shaftWidth={1.5} />
+      <ThickArrowHelper ref={greenArrow} dir={new THREE.Vector3(0, 1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={0.01} color={0x008000} shaftWidth={1.5} />
     </>
   );
 }
