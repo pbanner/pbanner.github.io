@@ -355,7 +355,9 @@ export default function Panel2() {
 
       {/* Right column: ellipse view (top half) + Poincaré sphere (bottom half) */}
       <div style={{ display: 'grid', gridTemplateRows: '1fr 1fr', gap: '0.75rem', minHeight: 0 }}>
-        <EllipseVisualizer />
+        <div style={{ minHeight: 0 }}>
+          <EllipseVisualizer />
+        </div>
         <div style={{ minHeight: 0 }}>
           <PoincareSpherePlaceholder />
         </div>
