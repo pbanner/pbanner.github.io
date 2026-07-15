@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useLayoutEffect, useMemo, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
 import ThickArrowHelper from './ThickArrowHelper.jsx';
@@ -49,6 +49,58 @@ const placeholderStyle = {
   textAlign: 'center',
   boxSizing: 'border-box',
 };
+
+// 2D drawing helpers
+// Physics (h, v) -> pixel coordinates. Note the v-flip: canvas y increases
+// downward, but we want +v to read as "up" on screen.
+function toPixel(h, v, cx, cy, scale) {
+  return { x: cx + h * scale, y: cy - v * scale };
+}
+
+function drawPolyline(ctx, points, cx, cy, scale, color, width) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.beginPath();
+  points.forEach(({ h, v }, i) => {
+    const { x, y } = toPixel(h, v, cx, cy, scale);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+}
+
+// tip/angle/size are all in plain pixel space — a fixed-size arrowhead,
+// no length-scaling gotcha like we had with ArrowHelper.
+function drawArrowhead(ctx, tip, angle, size) {
+  const spread = Math.PI / 7;
+  ctx.beginPath();
+  ctx.moveTo(tip.x, tip.y);
+  ctx.lineTo(tip.x - size * Math.cos(angle - spread), tip.y - size * Math.sin(angle - spread));
+  ctx.lineTo(tip.x - size * Math.cos(angle + spread), tip.y - size * Math.sin(angle + spread));
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawAxisArrows(ctx, cx, cy, scale) {
+  const extent = 1.5;
+  ctx.strokeStyle = 'black';
+  ctx.fillStyle = 'black';
+  ctx.lineWidth = 2;
+
+  const hEnd = toPixel(extent, 0, cx, cy, scale);
+  ctx.beginPath();
+  ctx.moveTo(toPixel(-extent, 0, cx, cy, scale).x, cy);
+  ctx.lineTo(hEnd.x, hEnd.y);
+  ctx.stroke();
+  drawArrowhead(ctx, hEnd, 0, 10);
+
+  const vEnd = toPixel(0, extent, cx, cy, scale);
+  ctx.beginPath();
+  ctx.moveTo(cx, toPixel(0, -extent, cx, cy, scale).y);
+  ctx.lineTo(vEnd.x, vEnd.y);
+  ctx.stroke();
+  drawArrowhead(ctx, vEnd, -Math.PI / 2, 10);
+}
 
 // Fixed reference frame: propagation axis + local transverse-axis indicators at the source
 function Axes() {
@@ -168,18 +220,46 @@ function FieldVectors() {
   );
 }
 
-// Static reference curve: the polarization ellipse traced by the field vector's tip
-function PolarizationEllipse() {
-  const points = useMemo(() => {
-    const period = (2 * Math.PI) / OMEGA;
-    const M = 200;
-    const pts = [];
-    for (let i = 0; i <= M; i++) {
-      const t = (i / M) * period;
-      pts.push(new THREE.Vector3(0, Evert(0, t), Ehoriz(0, t)));
-    }
-    return pts;
+// Sign of the field vector's rotation in the (Ehoriz, Evert) plane — computed
+// numerically so it stays correct no matter how theta/phi/omega end up set.
+function useRotationSign() {
+  return useMemo(() => {
+    const dt = 1e-3;
+    const h0 = Ehoriz(0, 0), v0 = Evert(0, 0);
+    const h1 = Ehoriz(0, dt), v1 = Evert(0, dt);
+    const cross = h0 * v1 - v0 * h1;
+    return cross >= 0 ? 1 : -1; // +1 = counterclockwise on screen, -1 = clockwise
   }, []);
+}
+function computeHandednessArcPoints(sign, samples = 64) {
+  const radius = 1.3;
+  const arcSpan = (5 / 6) * 2 * Math.PI; // ~300°, leaves a gap
+  const pts = [];
+  for (let i = 0; i <= samples; i++) {
+    const angle = sign * (i / samples) * arcSpan;
+    pts.push({ h: radius * Math.cos(angle), v: radius * Math.sin(angle) });
+  }
+  return pts;
+}
+
+// Dimension-agnostic: just the (horizontal, vertical) field-vector-tip
+// trace over one period. Both renderers consume this directly.
+function computeEllipsePoints(samples = 200) {
+  const period = (2 * Math.PI) / OMEGA;
+  const pts = [];
+  for (let i = 0; i <= samples; i++) {
+    const t = (i / samples) * period;
+    pts.push({ h: Ehoriz(0, t), v: Evert(0, t) });
+  }
+  return pts;
+}
+
+// 3D version — used inside the wave-animation Canvas, unchanged call site
+function PolarizationEllipse() {
+  const points = useMemo(
+    () => computeEllipsePoints().map(({ h, v }) => new THREE.Vector3(0, v, h)),
+    []
+  );
   return <Line points={points} color="green" lineWidth={2} />;
 }
 
@@ -191,10 +271,53 @@ function ControlsPlaceholder() {
   );
 }
 
-function EllipseVisualizerPlaceholder() {
+function EllipseVisualizer() {
+  const containerRef = useRef();
+  const canvasRef = useRef();
+
+  const points = useMemo(() => computeEllipsePoints(), []);
+  const sign = useRotationSign();
+  const arcPoints = useMemo(() => computeHandednessArcPoints(sign), [sign]);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+
+    function draw() {
+      const { width, height } = container.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      const cx = width / 2;
+      const cy = height / 2;
+      const scale = Math.min(width, height) / (2 * 1.5); // fit the +-1.5 axis extent
+
+      ctx.clearRect(0, 0, width, height);
+      drawAxisArrows(ctx, cx, cy, scale);
+      drawPolyline(ctx, points, cx, cy, scale, 'green', 2);
+      drawPolyline(ctx, arcPoints, cx, cy, scale, 'green', 2);
+
+      const tip = arcPoints[arcPoints.length - 1];
+      const prev = arcPoints[arcPoints.length - 2];
+      const angle = Math.atan2(-(tip.v - prev.v), tip.h - prev.h);
+      ctx.fillStyle = 'green';
+      drawArrowhead(ctx, toPixel(tip.h, tip.v, cx, cy, scale), angle, 10);
+    }
+
+    draw();
+    const observer = new ResizeObserver(draw);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [points, arcPoints]);
+
   return (
-    <div style={placeholderStyle}>
-      <span>Polarization ellipse (head-on) — coming soon</span>
+    <div ref={containerRef} style={{ width: '100%', height: '100%' }}>
+      <canvas ref={canvasRef} />
     </div>
   );
 }
@@ -232,7 +355,7 @@ export default function Panel2() {
 
       {/* Right column: ellipse view (top half) + Poincaré sphere (bottom half) */}
       <div style={{ display: 'grid', gridTemplateRows: '1fr 1fr', gap: '0.75rem', minHeight: 0 }}>
-        <EllipseVisualizerPlaceholder />
+        <EllipseVisualizer />
         <div style={{ minHeight: 0 }}>
           <PoincareSpherePlaceholder />
         </div>
