@@ -93,7 +93,7 @@ function DummyAngleRow({ label, defaultValue, min, max }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
       <span style={{ minWidth: '14px' }}>{label}</span>
       <input type="range" defaultValue={defaultValue} min={min} max={max} style={{ flex: 1 }} />
-      <input type="number" defaultValue={defaultValue} min={min} max={max} style={{ width: '48px' }} />
+      <input type="number" defaultValue={defaultValue} min={min} max={max} style={{ width: '48px', padding: '2px' }} />
     </div>
   );
 }

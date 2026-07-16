@@ -10,7 +10,7 @@ const toRad = (deg) => deg * (Math.PI / 180);
 function AngleControl({ label, valueDeg, onChangeDeg, min, max, step }) {
   return (
     <div className="control-group">
-      <label>{label}: {valueDeg.toFixed(1)}°</label>
+      <label style={{ margin: '-0.25em 0em' }}>{label}: {valueDeg.toFixed(1)}°</label>
       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
         <input
           type="range"
@@ -31,7 +31,7 @@ function AngleControl({ label, valueDeg, onChangeDeg, min, max, step }) {
             const v = parseFloat(e.target.value);
             if (!Number.isNaN(v)) onChangeDeg(v);
           }}
-          style={{ width: '70px' }}
+          style={{ width: '70px', padding: '2px' }}
         />
       </div>
     </div>
