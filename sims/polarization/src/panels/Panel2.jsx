@@ -243,7 +243,7 @@ function PolarizationEllipse({ theta, phi }) {
   return <Line points={points} color="green" lineWidth={2} />;
 }
 
-function ControlsPlaceholder({ paused, setPaused }) {
+function AnimControls({ paused, setPaused }) {
   return (
     <div style={placeholderStyle}>
       <button className="control-button" onClick={() => setPaused((p) => !p)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
@@ -375,7 +375,7 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
           </div>
         </div>
         <div style={{ display: showAnimation ? 'block' : 'none', width: '100%', height: '100%' }}>
-          <ControlsPlaceholder polState={polState} setPolState={setPolState} paused={paused} setPaused={setPaused} />
+          <AnimControls polState={polState} setPolState={setPolState} paused={paused} setPaused={setPaused} />
         </div>
       </div>
 
