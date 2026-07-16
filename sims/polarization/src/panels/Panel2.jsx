@@ -22,8 +22,10 @@ function Ehoriz(x, t, theta) {
   return Math.cos(theta) * Math.cos(K * x - OMEGA * t);
 }
 // Vertical (blue) component -> drawn along Three.js Y
+// The minus sign accounts for the way JS defines "positive" and how
+//    we view everything.
 function Evert(x, t, theta, phi) {
-  return Math.sin(theta) * Math.cos(K * x - OMEGA * t + phi);
+  return -Math.sin(theta) * Math.cos(K * x - OMEGA * t + phi);
 }
 
 const xs = Array.from(
