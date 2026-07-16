@@ -360,6 +360,9 @@ function AnimControls({ paused, setPaused, onHomeView, animDisplayBools, setAnim
           <p style={{ margin: '0 0 10px 0', fontWeight: 'bold' }}>Component basis</p>
           <DummyAngleRow label="θ" defaultValue={45} min={0} max={90} />
           <DummyAngleRow label="φ" defaultValue={0} min={-180} max={180} />
+          <div style={{ textAlign: 'center', marginTop: '8px' }}>
+            <button className="control-button">Reset to H/V</button>
+          </div>
         </div>
       </div>
     </div>
