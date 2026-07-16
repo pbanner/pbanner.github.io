@@ -336,20 +336,29 @@ function graticuleRing(fixedAxis, segments = 96) {
 // there's no DOM/CSS layer whose positioning can go wrong relative to the
 // surrounding page.
 function makeTextSpriteTexture(text, { color = '#333333', fontSizePx = 64 } = {}) {
+  // Rendered well above the on-screen size the label actually ends up at, so
+  // there's plenty of texel density to spare -- then sampled with plain
+  // linear filtering and no mipmap chain, which for a mild downscale looks
+  // crisper than relying on WebGL's own mip selection (the previous, blurry
+  // result) or on the browser's own upscaling of a lower-res source.
+  const supersample = 4;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
-  const font = `bold ${fontSizePx}px sans-serif`;
+  const font = `bold ${fontSizePx * supersample}px sans-serif`;
   ctx.font = font;
   const textWidth = ctx.measureText(text).width;
-  const padding = fontSizePx * 0.3;
+  const padding = fontSizePx * supersample * 0.3;
   canvas.width = Math.ceil(textWidth + padding * 2);
-  canvas.height = Math.ceil(fontSizePx * 1.4);
+  canvas.height = Math.ceil(fontSizePx * supersample * 1.4);
   ctx.font = font;
   ctx.fillStyle = color;
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'center';
   ctx.fillText(text, canvas.width / 2, canvas.height / 2);
   const texture = new THREE.CanvasTexture(canvas);
+  //texture.generateMipmaps = false;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
   texture.needsUpdate = true;
   return { texture, aspect: canvas.width / canvas.height };
 }
@@ -380,7 +389,7 @@ function PoincareStateArrow({ theta, phi }) {
     arrowRef.current?.setDirection(new THREE.Vector3(s1, s3, s2));
   });
   return (
-    <ThickArrowHelper ref={arrowRef} dir={new THREE.Vector3(1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={1} color={0xcc0000} headLength={0.15} headWidth={0.08} shaftWidth={2.5} />
+    <ThickArrowHelper ref={arrowRef} dir={new THREE.Vector3(1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={1} color={0xcc0000} headLength={0.20} headWidth={0.12} shaftWidth={3.0} />
   );
 }
 
@@ -392,7 +401,7 @@ function PoincareSphere({ theta, phi }) {
   const meridianB = useMemo(() => graticuleRing('s1'), []);
 
   return (
-    <Canvas camera={{ position: [3.3, 2.4, 3.6], fov: 35 }} style={{ width: '100%', height: '100%' }}>
+    <Canvas camera={{ position: [3.3, 2.4, 3.6], fov: 30 }} style={{ width: '100%', height: '100%' }}>
       <mesh>
         <sphereGeometry args={[1, 32, 32]} />
         <meshBasicMaterial color="gray" transparent opacity={0.25} side={THREE.DoubleSide} depthWrite={false} />
@@ -412,7 +421,7 @@ function PoincareSphere({ theta, phi }) {
 
       <PoincareStateArrow theta={theta} phi={phi} />
 
-      <OrbitControls />
+      <OrbitControls target={[0, 0.32, 0]} />
     </Canvas>
   );
 }
