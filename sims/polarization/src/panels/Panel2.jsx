@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useLayoutEffect, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
 import ThickArrowHelper from './ThickArrowHelper.jsx';
@@ -335,6 +335,27 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
   const { theta, phi } = polState;
   const { animation: showAnimation, ellipse: showEllipse, sphere: showSphere } = panel2displayBools;
   const [paused, setPaused] = useState(false);
+
+  // Switching tabs such that this sim is no longer visible should pause the animation.
+  // Create a ref so that the paused state survives re-render (paused must remain state
+  // so a re-render is triggered when it changes).
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+  // Keep this to track whether the user had manually paused the animation before switch.
+  const pausedBeforeHideRef = useRef(false);
+  // Effect is created once but relies on ref variables
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.hidden) {
+        pausedBeforeHideRef.current = pausedRef.current;
+        setPaused(true);
+      } else if (!pausedBeforeHideRef.current) {
+        setPaused(false);
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '60% 40%', gap: '0.75rem', width: '100%', height: '100%', boxSizing: 'border-box' }}>
