@@ -274,7 +274,7 @@ function EllipseVisualizer({ theta, phi }) {
       drawPolyline(ctx, points, cx, cy, scale*1.5, 'green', 2);
 
       // Only drawing if ellipticity >~ 6°
-      if (Math.abs(phi) > 0.001) {
+      if ((Math.abs(theta) > 0.001) && (Math.abs(theta - 0.5*Math.PI) > 0.001)) {
         // Handedness marker: an arrowhead riding directly on the ellipse,
         // tangent to its own path — the point order already encodes the
         // true direction of travel, so no separate rotation-sign math needed.
