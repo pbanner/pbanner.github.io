@@ -41,21 +41,54 @@ const pieceStyle = {
   //background: '#eef6ff'
 };
 
-const placeholderStyle = {
+const animControlsWrapperStyle = {
   width: '100%',
   height: '100%',
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
-  justifyContent: 'center',
-  gap: '12px',
-  border: '1px dashed #999',
-  borderRadius: '4px',
+  justifyContent: 'flex-end',
+  gap: '6px',
+  //border: '1px dashed #999',
+  //borderRadius: '4px',
   color: '#666',
   fontSize: '0.9rem',
   textAlign: 'center',
   boxSizing: 'border-box',
+  padding: '6px 6px 20px 6px',
 };
+
+// One of the two "lower" boxes inside AnimControls — a labeled group with a
+// light border, distinct from the outer dashed AnimControls box.
+const controlBoxStyle = {
+  flex: 1,
+  border: '1px solid #ccc',
+  borderRadius: '6px',
+  padding: '8px 10px',
+  textAlign: 'left',
+  fontSize: '0.72rem',
+  lineHeight: 1.2,
+  boxSizing: 'border-box',
+};
+
+const checkboxColumnStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '4px',
+  whiteSpace: 'nowrap',
+};
+
+// One row of a slider + a synced number box, matching AngleControl in
+// App.jsx in spirit — inert for now, not wired to any state yet.
+function DummyAngleRow({ label, defaultValue, min, max }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+      <span style={{ minWidth: '14px' }}>{label}</span>
+      <input type="range" defaultValue={defaultValue} min={min} max={max} style={{ flex: 1 }} />
+      <input type="number" defaultValue={defaultValue} min={min} max={max} style={{ width: '48px' }} />
+    </div>
+  );
+}
 
 // 2D drawing helpers
 // Physics (h, v) -> pixel coordinates. Note the v-flip: canvas y increases
@@ -253,12 +286,36 @@ function PolarizationEllipse({ theta, phi }) {
 
 function AnimControls({ paused, setPaused }) {
   return (
-    <div style={placeholderStyle}>
-      <button className="control-button" onClick={() => setPaused((p) => !p)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+    <div style={animControlsWrapperStyle}>
+      {/* Row 1: play/pause, centered on its own */}
+      <button className="control-button" onClick={() => setPaused((p) => !p)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', margin: 0 }}>
         <span aria-hidden="true">{paused ? '▶' : '⏸'}</span>
         {paused ? 'Start' : 'Pause'}
       </button>
-      <p>Basis controls — coming soon</p>
+
+      {/* Row 2: visibility checkboxes (left) + component basis (right) */}
+      <div style={{ display: 'flex', width: '100%', gap: '10px', alignItems: 'stretch' }}>
+        <div style={controlBoxStyle}>
+          <p style={{ margin: '0 0 10px 0', fontWeight: 'bold' }}>Change what is visible</p>
+          <div style={{ display: 'flex', gap: '14px' }}>
+            <div style={checkboxColumnStyle}>
+              <label><input type="checkbox" defaultChecked /> Wave components</label>
+              <label><input type="checkbox" defaultChecked /> Total wave</label>
+            </div>
+            <div style={checkboxColumnStyle}>
+              <label><input type="checkbox" defaultChecked /> Observation plane</label>
+              <label><input type="checkbox" defaultChecked /> Component field vectors</label>
+              <label><input type="checkbox" defaultChecked /> Total field vector</label>
+            </div>
+          </div>
+        </div>
+
+        <div style={controlBoxStyle}>
+          <p style={{ margin: '0 0 10px 0', fontWeight: 'bold' }}>Component basis</p>
+          <DummyAngleRow label="θ" defaultValue={45} min={0} max={90} />
+          <DummyAngleRow label="φ" defaultValue={0} min={-180} max={180} />
+        </div>
+      </div>
     </div>
   );
 }
