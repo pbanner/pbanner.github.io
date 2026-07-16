@@ -83,16 +83,6 @@ const checkboxColumnStyle = {
   whiteSpace: 'nowrap',
 };
 
-// For resetting 3D animation view
-const controlsRef = useRef();
-const resetView = () => {
-  const controls = controlsRef.current;
-  if (!controls) return;
-  controls.object.position.set(...INITIAL_CAMERA_POSITION);
-  controls.target.set(...INITIAL_CAMERA_TARGET);
-  controls.update();
-};
-
 // One row of a slider + a synced number box, matching AngleControl in
 // App.jsx in spirit — inert for now, not wired to any state yet.
 function DummyAngleRow({ label, defaultValue, min, max }) {
@@ -302,17 +292,48 @@ function PolarizationEllipse({ theta, phi, visible }) {
   return <Line points={points} color="green" lineWidth={2} visible={visible} />;
 }
 
+// Unicode glyphs (▶ ⏸ ⌂) bake their own, font-dependent vertical padding
+// into the glyph box, so flexbox centering lines up the boxes but not the
+// visible ink — hence the icon-vs-text misalignment. Drawing the icons
+// ourselves as SVG paths sidesteps that: there's no hidden glyph metrics,
+// so `alignItems: 'center'` centers exactly what's visible.
+function PlayIcon({ size = '0.9em' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style={{ display: 'block' }}>
+      <path d="M4 2l10 6-10 6z" />
+    </svg>
+  );
+}
+
+function PauseIcon({ size = '0.9em' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style={{ display: 'block' }}>
+      <rect x="3" y="2" width="4" height="12" />
+      <rect x="9" y="2" width="4" height="12" />
+    </svg>
+  );
+}
+
+function HomeIcon({ size = '1em' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: 'block' }}>
+      <path d="M2 7.5L8 2l6 5.5" />
+      <path d="M3.5 6.5V14h9V6.5" />
+    </svg>
+  );
+}
+
 function AnimControls({ paused, setPaused, onHomeView, animDisplayBools, setAnimDisplayBools }) {
   return (
     <div style={animControlsWrapperStyle}>
       {/* Row 1: play/pause and Home View, centered */}
-      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginBottom: '5px' }}>
         <button className="control-button" onClick={() => setPaused((p) => !p)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', margin: 0, fontSize: '1.1rem' }}>
-          <span aria-hidden="true">{paused ? '▶' : '⏸'}</span>
+          {paused ? <PlayIcon /> : <PauseIcon />}
           {paused ? 'Start' : 'Pause'}
         </button>
         <button className="control-button" onClick={onHomeView} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', margin: 0, fontSize: '1.1rem' }}>
-          <span aria-hidden="true">⌂</span>
+          <HomeIcon />
           Home View
         </button>
       </div>
@@ -448,6 +469,16 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
+  // For resetting 3D animation view
+  const controlsRef = useRef();
+  const resetView = () => {
+    const controls = controlsRef.current;
+    if (!controls) return;
+    controls.object.position.set(...INITIAL_CAMERA_POSITION);
+    controls.target.set(...INITIAL_CAMERA_TARGET);
+    controls.update();
+  };
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: '0.75rem', width: '100%', height: '100%', padding: '20px', boxSizing: 'border-box' }}>
       {/* Left column: wave animation + controls, as one bordered piece */}
@@ -474,7 +505,7 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
             </Canvas>
           </div>
           <div style={{ minWidth: 0, minHeight: 0 }}>
-            <AnimControls paused={paused} setPaused={setPaused} onHomeView={0} animDisplayBools={animDisplayBools} setAnimDisplayBools={setAnimDisplayBools} />
+            <AnimControls paused={paused} setPaused={setPaused} onHomeView={resetView} animDisplayBools={animDisplayBools} setAnimDisplayBools={setAnimDisplayBools} />
           </div>
         </div>
       </div>
