@@ -363,6 +363,7 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
       <div style={{ display: 'grid', gridTemplateRows: '75% 25%', gap: '0.75rem', minWidth: 0, minHeight: 0 }}>
         <div style={{ minWidth: 0, minHeight: 0 }}>
           <div style={{ display: showAnimation ? 'block' : 'none', width: '100%', height: '100%' }}>
+            <p style={{ textAlign: 'center', marginTop: '1.0em', marginBottom: '-1.0em' }} ><b>Electric Field Components</b></p>
             <Canvas camera={{ position: [4, 2, 4], fov: 32 }} style={{ width: '100%', height: '100%' }}>
               <Axes />
               <ObservationPlane />
