@@ -384,7 +384,7 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
               <ObservationPlane />
               <PolarizationEllipse theta={theta} phi={phi} />
               <FieldCurtain vectorFn={(x, t) => ({ y: 0, z: Ehoriz(x, t, theta) })} color="red" opacity={0.25} paused={paused} />
-              <FieldCurtain vectorFn={(x, t) => ({ y: Evert(x, t, theta, phi), z: 0 })} color="#00ccff" opacity={0.15} paused={paused} />
+              <FieldCurtain vectorFn={(x, t) => ({ y: Evert(x, t, theta, phi), z: 0 })} color="#00ccff" opacity={0.2} paused={paused} />
               <FieldCurtain vectorFn={(x, t) => ({ y: Evert(x, t, theta, phi), z: Ehoriz(x, t, theta) })} color="green" opacity={0.15} paused={paused} />
               <FieldVectors theta={theta} phi={phi} paused={paused} />
               <OrbitControls target={[-1.5, -0.3, 0]} />
