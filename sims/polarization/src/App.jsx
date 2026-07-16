@@ -106,25 +106,27 @@ export default function App() {
             {activePanel === 2 && (
               <div>
                 <h3>Panel 2 Controls</h3>
-                <p>Adjust the polarization state below.</p>
-                <AngleControl
-                  label="θ (relative amplitude)"
-                  valueDeg={toDeg(polState.theta)}
-                  onChangeDeg={(deg) => setPolState((s) => ({ ...s, theta: toRad(deg) }))}
-                  min={0}
-                  max={90}
-                  step={1}
-                />
-                <AngleControl
-                  label="φ (relative phase)"
-                  valueDeg={toDeg(polState.phi)}
-                  onChangeDeg={(deg) => setPolState((s) => ({ ...s, phi: toRad(deg) }))}
-                  min={-180}
-                  max={180}
-                  step={1}
-                />
-                <div className="control-group">
-                  <p>Change what is visible:</p>
+                <h5 style={{ marginTop: '1.0em' }}>Polarization state:</h5>
+                <div className="control-group" style={{ marginTop: '0.5em' }}>
+                  <AngleControl
+                    label="θ (relative amplitude)"
+                    valueDeg={toDeg(polState.theta)}
+                    onChangeDeg={(deg) => setPolState((s) => ({ ...s, theta: toRad(deg) }))}
+                    min={0}
+                    max={90}
+                    step={1}
+                  />
+                  <AngleControl
+                    label="φ (relative phase)"
+                    valueDeg={toDeg(polState.phi)}
+                    onChangeDeg={(deg) => setPolState((s) => ({ ...s, phi: toRad(deg) }))}
+                    min={-180}
+                    max={180}
+                    step={1}
+                  />
+                </div>
+                <div className="control-group" style={{ marginTop: '1.0em', gap: '0px' }}>
+                  <h5>Change what is visible:</h5>
                   <label>
                     <input type="checkbox" checked={panel2displayBools.animation} onChange={(e) => setPanel2displayBools({ ...panel2displayBools, animation: e.target.checked })} />
                     Show animation &amp; controls
