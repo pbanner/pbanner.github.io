@@ -7,7 +7,7 @@ import * as THREE from 'three';
 const PLACEHOLDER_POINTS = [[0, 0, 0], [0, 0, 0.001]];
 
 const ThickArrowHelper = forwardRef(function ThickArrowHelper(
-  { dir, origin, length, color, headLength = 0.2 * length, headWidth = 0.2 * headLength, shaftWidth = 2 },
+  { dir, origin, length, color, headLength = 0.2 * length, headWidth = 0.2 * headLength, shaftWidth = 2, visible = true },
   ref
 ) {
   const arrowRef = useRef();
@@ -23,6 +23,9 @@ const ThickArrowHelper = forwardRef(function ThickArrowHelper(
     headWidth,
   });
 
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+
   const initialArgs = useMemo(
     () => [dir, origin, length, color, headLength, headWidth],
     []
@@ -34,13 +37,10 @@ const ThickArrowHelper = forwardRef(function ThickArrowHelper(
     const line = lineRef.current;
     if (!arrow || !line) return;
 
-    if (length < 1e-4) {
-      arrow.visible = false;
-      line.visible = false;
-      return;
-    }
-    arrow.visible = true;
-    line.visible = true;
+    const shouldShow = visibleRef.current && length >= 1e-4;
+    arrow.visible = shouldShow;
+    line.visible = shouldShow;
+    if (!shouldShow) return;
 
     arrow.position.copy(origin);
     arrow.setDirection(dir);
@@ -53,7 +53,7 @@ const ThickArrowHelper = forwardRef(function ThickArrowHelper(
 
   useLayoutEffect(() => {
     sync();
-  }, []);
+  }, [visible]);
 
   useImperativeHandle(ref, () => ({
     setDirection(newDir) {

@@ -167,7 +167,7 @@ function ObservationPlane() {
 
 // One field component's traveling sinusoid: an outline curve plus a translucent "curtain"
 // down to the propagation axis. axis is 'Y' or 'Z' depending on which component this is.
-function FieldCurtain({ vectorFn, color, opacity, paused }) {
+function FieldCurtain({ vectorFn, color, opacity, paused, visible }) {
   const lineGeometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N_SAMPLES * 3), 3));
@@ -213,10 +213,10 @@ function FieldCurtain({ vectorFn, color, opacity, paused }) {
 
   return (
     <>
-      <line geometry={lineGeometry}>
+      <line geometry={lineGeometry} visible={visible}>
         <lineBasicMaterial color="#666666" lineWidth={1} />
       </line>
-      <mesh geometry={ribbonGeometry}>
+      <mesh geometry={ribbonGeometry} visible={visible}>
         <meshBasicMaterial color={color} transparent opacity={opacity} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
     </>
@@ -237,11 +237,14 @@ function updateArrow(arrow, vec) {
 }
 
 // Red/blue component arrows and the green total-field arrow, all evaluated at x = 0
-function FieldVectors({ theta, phi, paused }) {
+function FieldVectors({ theta, phi, paused, displayBools }) {
   const redArrow = useRef();
   const blueArrow = useRef();
   const greenArrow = useRef();
   const simTime = useRef(0);
+
+  const showCompArrows = (displayBools.obsPlane && displayBools.compArrows);
+  const showTotalArrow = (displayBools.obsPlane && displayBools.totalArrow);
 
   useFrame((state, delta) => {
     if (!paused) simTime.current += delta;
@@ -256,9 +259,9 @@ function FieldVectors({ theta, phi, paused }) {
 
   return (
     <>
-      <ThickArrowHelper ref={redArrow} dir={new THREE.Vector3(0, 0, 1)} origin={new THREE.Vector3(0, 0, 0)} length={0.01} color={0xff0000} shaftWidth={1.5} />
-      <ThickArrowHelper ref={blueArrow} dir={new THREE.Vector3(0, 1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={0.01} color={0x00ccff} shaftWidth={1.5} />
-      <ThickArrowHelper ref={greenArrow} dir={new THREE.Vector3(0, 1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={0.01} color={0x008000} shaftWidth={1.5} />
+      <ThickArrowHelper ref={redArrow} dir={new THREE.Vector3(0, 0, 1)} origin={new THREE.Vector3(0, 0, 0)} length={0.01} color={0xff0000} shaftWidth={1.5} visible={showCompArrows} />
+      <ThickArrowHelper ref={blueArrow} dir={new THREE.Vector3(0, 1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={0.01} color={0x00ccff} shaftWidth={1.5} visible={showCompArrows} />
+      <ThickArrowHelper ref={greenArrow} dir={new THREE.Vector3(0, 1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={0.01} color={0x008000} shaftWidth={1.5} visible={showTotalArrow} />
     </>
   );
 }
@@ -276,15 +279,15 @@ function computeEllipsePoints(theta, phi, samples = 200) {
 }
 
 // 3D version — used inside the wave-animation Canvas
-function PolarizationEllipse({ theta, phi }) {
+function PolarizationEllipse({ theta, phi, visible }) {
   const points = useMemo(
     () => computeEllipsePoints(theta, phi).map(({ h, v }) => new THREE.Vector3(0, v, h)),
     [theta, phi]
   );
-  return <Line points={points} color="green" lineWidth={2} />;
+  return <Line points={points} color="green" lineWidth={2} visible={visible} />;
 }
 
-function AnimControls({ paused, setPaused }) {
+function AnimControls({ paused, setPaused, animDisplayBools, setAnimDisplayBools }) {
   return (
     <div style={animControlsWrapperStyle}>
       {/* Row 1: play/pause, centered on its own */}
@@ -299,13 +302,14 @@ function AnimControls({ paused, setPaused }) {
           <p style={{ margin: '0 0 10px 0', fontWeight: 'bold' }}>Change what is visible</p>
           <div style={{ display: 'flex', gap: '14px' }}>
             <div style={checkboxColumnStyle}>
-              <label><input type="checkbox" defaultChecked /> Wave components</label>
-              <label><input type="checkbox" defaultChecked /> Total wave</label>
+              <label><input type="checkbox" checked={animDisplayBools.compFields} onChange={(e) => setAnimDisplayBools({ ...animDisplayBools, compFields: e.target.checked })} /> Wave components</label>
+              <label><input type="checkbox" checked={animDisplayBools.totalField} onChange={(e) => setAnimDisplayBools({ ...animDisplayBools, totalField: e.target.checked })} /> Total wave</label>
             </div>
             <div style={checkboxColumnStyle}>
-              <label><input type="checkbox" defaultChecked /> Observation plane</label>
-              <label><input type="checkbox" defaultChecked /> Component field vectors</label>
-              <label><input type="checkbox" defaultChecked /> Total field vector</label>
+              <label><input type="checkbox" checked={animDisplayBools.obsPlane} onChange={(e) => setAnimDisplayBools({ ...animDisplayBools, obsPlane: e.target.checked })} /> Observation plane</label>
+              <label><input type="checkbox" disabled={!animDisplayBools.obsPlane} checked={animDisplayBools.obsPlaneEllipse} onChange={(e) => setAnimDisplayBools({ ...animDisplayBools, obsPlaneEllipse: e.target.checked })} /> Polarization ellipse</label>
+              <label><input type="checkbox" disabled={!animDisplayBools.obsPlane} checked={animDisplayBools.compArrows} onChange={(e) => setAnimDisplayBools({ ...animDisplayBools, compArrows: e.target.checked })} /> Component field vectors</label>
+              <label><input type="checkbox" disabled={!animDisplayBools.obsPlane} checked={animDisplayBools.totalArrow} onChange={(e) => setAnimDisplayBools({ ...animDisplayBools, totalArrow: e.target.checked })} /> Total field vector</label>
             </div>
           </div>
         </div>
@@ -400,6 +404,7 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
   const { theta, phi } = polState;
   const { animation: showAnimation, ellipse: showEllipse, sphere: showSphere } = panel2displayBools;
   const [paused, setPaused] = useState(false);
+  const [animDisplayBools, setAnimDisplayBools] = useState({ compFields: false, totalField: true, obsPlane: true, obsPlaneEllipse: false, compArrows: false, totalArrow: true });
 
   // Switching tabs such that this sim is no longer visible should pause the animation.
   // Create a ref so that the paused state survives re-render (paused must remain state
@@ -438,17 +443,17 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
             <h3 style={{ textAlign: 'center', marginTop: '0.75em', marginBottom: '-0.75em' }}>Electric Field Components</h3>
             <Canvas camera={{ position: [4, 2, 4], fov: 32 }} style={{ width: '100%', height: '100%' }}>
               <Axes />
-              <ObservationPlane />
-              <PolarizationEllipse theta={theta} phi={phi} />
-              <FieldCurtain vectorFn={(x, t) => ({ y: 0, z: Ehoriz(x, t, theta) })} color="red" opacity={0.25} paused={paused} />
-              <FieldCurtain vectorFn={(x, t) => ({ y: Evert(x, t, theta, phi), z: 0 })} color="#00ccff" opacity={0.2} paused={paused} />
-              <FieldCurtain vectorFn={(x, t) => ({ y: Evert(x, t, theta, phi), z: Ehoriz(x, t, theta) })} color="green" opacity={0.15} paused={paused} />
-              <FieldVectors theta={theta} phi={phi} paused={paused} />
+              {animDisplayBools.obsPlane && <ObservationPlane />}
+              <PolarizationEllipse theta={theta} phi={phi} visible={animDisplayBools.obsPlane && animDisplayBools.obsPlaneEllipse} />
+              <FieldCurtain vectorFn={(x, t) => ({ y: 0, z: Ehoriz(x, t, theta) })} color="red" opacity={0.25} paused={paused} visible={animDisplayBools.compFields} />
+              <FieldCurtain vectorFn={(x, t) => ({ y: Evert(x, t, theta, phi), z: 0 })} color="#00ccff" opacity={0.2} paused={paused} visible={animDisplayBools.compFields} />
+              <FieldCurtain vectorFn={(x, t) => ({ y: Evert(x, t, theta, phi), z: Ehoriz(x, t, theta) })} color="green" opacity={0.15} paused={paused} visible={animDisplayBools.totalField} />
+              <FieldVectors theta={theta} phi={phi} paused={paused} displayBools={animDisplayBools} />
               <OrbitControls target={[-1.5, -0.3, 0]} />
             </Canvas>
           </div>
           <div style={{ minWidth: 0, minHeight: 0 }}>
-            <AnimControls polState={polState} setPolState={setPolState} paused={paused} setPaused={setPaused} />
+            <AnimControls paused={paused} setPaused={setPaused} animDisplayBools={animDisplayBools} setAnimDisplayBools={setAnimDisplayBools} />
           </div>
         </div>
       </div>
