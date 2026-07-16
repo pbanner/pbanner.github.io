@@ -4,6 +4,40 @@ import Panel1 from './panels/Panel1';
 import Panel2 from './panels/Panel2';
 import Panel3 from './panels/Panel3';
 
+const toDeg = (rad) => rad * (180 / Math.PI);
+const toRad = (deg) => deg * (Math.PI / 180);
+
+function AngleControl({ label, valueDeg, onChangeDeg, min, max, step }) {
+  return (
+    <div className="control-group">
+      <label>{label}: {valueDeg.toFixed(1)}°</label>
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={valueDeg}
+          onChange={(e) => onChangeDeg(parseFloat(e.target.value))}
+          style={{ flex: 1 }}
+        />
+        <input
+          type="number"
+          min={min}
+          max={max}
+          step={step}
+          value={valueDeg}
+          onChange={(e) => {
+            const v = parseFloat(e.target.value);
+            if (!Number.isNaN(v)) onChangeDeg(v);
+          }}
+          style={{ width: '70px' }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [activePanel, setActivePanel] = useState(2);
   const [displayBools, setDisplayBools] = useState({
@@ -19,7 +53,7 @@ export default function App() {
       {/* Main Canvas Area */}
       <div className="canvas-area">
         {activePanel === 1 && <Panel1 displayBools={displayBools} />}
-        {activePanel === 2 && <Panel2 displayBools={displayBools} polState={polState} setPolState={setPolState} />}
+        {activePanel === 2 && <Panel2 polState={polState} setPolState={setPolState} />}
         {activePanel === 3 && <Panel3 displayBools={displayBools} />}
       </div>
 
@@ -67,13 +101,23 @@ export default function App() {
             {activePanel === 2 && (
               <div>
                 <h3>Panel 2 Controls</h3>
-                <p>Instructions and controls will appear here.</p>
-                <div className="control-group">
-                  <label>
-                    <input type="checkbox" checked={displayBools.gridOn} onChange={(e) => setDisplayBools({ ...displayBools, gridOn: e.target.checked })} />
-                    Show grid
-                  </label>
-                </div>
+                <p>Adjust the polarization state below.</p>
+                <AngleControl
+                  label="θ (amplitude split)"
+                  valueDeg={toDeg(polState.theta)}
+                  onChangeDeg={(deg) => setPolState((s) => ({ ...s, theta: toRad(deg) }))}
+                  min={0}
+                  max={90}
+                  step={1}
+                />
+                <AngleControl
+                  label="φ (relative phase)"
+                  valueDeg={toDeg(polState.phi)}
+                  onChangeDeg={(deg) => setPolState((s) => ({ ...s, phi: toRad(deg) }))}
+                  min={-180}
+                  max={180}
+                  step={1}
+                />
               </div>
             )}
             {activePanel === 3 && (
