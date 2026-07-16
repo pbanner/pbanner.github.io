@@ -47,13 +47,18 @@ export default function App() {
     theta: Math.atan(1),           // splits the amplitude between the two field components
     phi: 90 * (Math.PI / 180),     // relative phase between them (V minus H)
   });
+  const [panel2displayBools, setPanel2displayBools] = useState({
+    animation: true,
+    ellipse: false,
+    sphere: false,
+  });
 
   return (
     <div className="app-layout">
       {/* Main Canvas Area */}
       <div className="canvas-area">
         {activePanel === 1 && <Panel1 displayBools={displayBools} />}
-        {activePanel === 2 && <Panel2 polState={polState} setPolState={setPolState} panel2displayBools={null} />}
+        {activePanel === 2 && <Panel2 polState={polState} setPolState={setPolState} panel2displayBools={panel2displayBools} />}
         {activePanel === 3 && <Panel3 displayBools={displayBools} />}
       </div>
 
@@ -118,6 +123,21 @@ export default function App() {
                   max={180}
                   step={1}
                 />
+                <div className="control-group">
+                  <p>Change what is visible:</p>
+                  <label>
+                    <input type="checkbox" checked={panel2displayBools.animation} onChange={(e) => setPanel2displayBools({ ...panel2displayBools, animation: e.target.checked })} />
+                    Show animation &amp; controls
+                  </label>
+                  <label>
+                    <input type="checkbox" checked={panel2displayBools.ellipse} onChange={(e) => setPanel2displayBools({ ...panel2displayBools, ellipse: e.target.checked })} />
+                    Show polarization ellipse
+                  </label>
+                  <label>
+                    <input type="checkbox" checked={panel2displayBools.sphere} onChange={(e) => setPanel2displayBools({ ...panel2displayBools, sphere: e.target.checked })} />
+                    Show Poincaré sphere
+                  </label>
+                </div>
               </div>
             )}
             {activePanel === 3 && (

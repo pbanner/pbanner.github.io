@@ -322,32 +322,35 @@ function PoincareSpherePlaceholder() {
 
 export default function Panel2({ polState, setPolState, panel2displayBools }) {
   const { theta, phi } = polState;
+  const { showAnimation, showEllipse, showSphere } = panel2displayBools;
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '60% 40%', gap: '0.75rem', width: '100%', height: '100%', boxSizing: 'border-box' }}>
       {/* Left column: wave animation (75%) + controls (25%) */}
       <div style={{ display: 'grid', gridTemplateRows: '75% 25%', gap: '0.75rem', minWidth: 0, minHeight: 0 }}>
         <div style={{ minWidth: 0, minHeight: 0 }}>
-          <Canvas camera={{ position: [4, 2, 4], fov: 32 }} style={{ width: '100%', height: '100%' }}>
-            <Axes />
-            <ObservationPlane />
-            <PolarizationEllipse theta={theta} phi={phi} />
-            <FieldCurtain fieldFn={(x, t) => Ehoriz(x, t, theta)} axis="Z" color="red" opacity={0.25} />
-            <FieldCurtain fieldFn={(x, t) => Evert(x, t, theta, phi)} axis="Y" color="#00ccff" opacity={0.15} />
-            <FieldVectors theta={theta} phi={phi} />
-            <OrbitControls target={[-1.5, -0.3, 0]} />
-          </Canvas>
+          {showAnimation &&
+            <Canvas camera={{ position: [4, 2, 4], fov: 32 }} style={{ width: '100%', height: '100%' }}>
+              <Axes />
+              <ObservationPlane />
+              <PolarizationEllipse theta={theta} phi={phi} />
+              <FieldCurtain fieldFn={(x, t) => Ehoriz(x, t, theta)} axis="Z" color="red" opacity={0.25} />
+              <FieldCurtain fieldFn={(x, t) => Evert(x, t, theta, phi)} axis="Y" color="#00ccff" opacity={0.15} />
+              <FieldVectors theta={theta} phi={phi} />
+              <OrbitControls target={[-1.5, -0.3, 0]} />
+            </Canvas>
+          }
         </div>
-        <ControlsPlaceholder polState={polState} setPolState={setPolState} />
+        {showAnimation && <ControlsPlaceholder polState={polState} setPolState={setPolState} />}
       </div>
 
       {/* Right column: ellipse view (top half) + Poincaré sphere (bottom half) */}
       <div style={{ display: 'grid', gridTemplateRows: '1fr 1fr', gap: '0.75rem', minWidth: 0, minHeight: 0 }}>
         <div style={{ minWidth: 0, minHeight: 0 }}>
-          <EllipseVisualizer theta={theta} phi={phi} />
+          {showEllipse && <EllipseVisualizer theta={theta} phi={phi} />}
         </div>
         <div style={{ minWidth: 0, minHeight: 0 }}>
-          <PoincareSpherePlaceholder />
+          {showSphere && <PoincareSpherePlaceholder />}
         </div>
       </div>
     </div>
