@@ -603,12 +603,11 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
           ...pieceStyle,
           display: showAnimation ? 'flex' : 'none',
           flexDirection: 'column',
-          gridTemplateRows: '70% 30%',
           gap: '0.75rem',
           width: '100%',
           height: '100%',
         }}>
-          <div style={{ minWidth: 0, minHeight: 0 }}>
+          <div style={{ flex: 7, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <h3 style={{ textAlign: 'center', margin: '0 0 0.25em 0', flexShrink: 0 }}>Electric Field Components</h3>
             <div style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
               <Canvas camera={{ position: INITIAL_CAMERA_POSITION, fov: 32 }} style={{ width: '100%', height: '100%' }}>
@@ -623,7 +622,7 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
               </Canvas>
             </div>
           </div>
-          <div style={{ minWidth: 0, minHeight: 0 }}>
+          <div style={{ flex: 3, minWidth: 0, minHeight: 0 }}>
             <AnimControls paused={paused} setPaused={setPaused} onHomeView={resetView} animDisplayBools={animDisplayBools} setAnimDisplayBools={setAnimDisplayBools} />
           </div>
         </div>
