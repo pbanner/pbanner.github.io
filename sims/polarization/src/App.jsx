@@ -53,7 +53,7 @@ export default function App() {
       {/* Main Canvas Area */}
       <div className="canvas-area">
         {activePanel === 1 && <Panel1 displayBools={displayBools} />}
-        {activePanel === 2 && <Panel2 polState={polState} setPolState={setPolState} />}
+        {activePanel === 2 && <Panel2 polState={polState} setPolState={setPolState} panel2displayBools={null} />}
         {activePanel === 3 && <Panel3 displayBools={displayBools} />}
       </div>
 
@@ -103,7 +103,7 @@ export default function App() {
                 <h3>Panel 2 Controls</h3>
                 <p>Adjust the polarization state below.</p>
                 <AngleControl
-                  label="θ (amplitude split)"
+                  label="θ (relative amplitude)"
                   valueDeg={toDeg(polState.theta)}
                   onChangeDeg={(deg) => setPolState((s) => ({ ...s, theta: toRad(deg) }))}
                   min={0}

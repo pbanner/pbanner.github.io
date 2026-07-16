@@ -248,7 +248,15 @@ function EllipseVisualizer({ theta, phi }) {
   const containerRef = useRef();
   const canvasRef = useRef();
 
-  const points = useMemo(() => computeEllipsePoints(theta, phi), [theta, phi]);
+  // Negate h: the 3D wave-animation Canvas views the observation plane from
+  // a camera on the +x side looking back toward the source, which mirrors
+  // the horizontal axis relative to this panel's plain (h, v) -> (right, up)
+  // pixel mapping. Flipping h here keeps this head-on view in agreement
+  // with that Canvas's ellipse shape and rotation direction.
+  const points = useMemo(
+    () => computeEllipsePoints(theta, phi).map(({ h, v }) => ({ h: -h, v })),
+    [theta, phi]
+  );
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -271,10 +279,10 @@ function EllipseVisualizer({ theta, phi }) {
 
       ctx.clearRect(0, 0, width, height);
       drawAxisArrows(ctx, cx, cy, scale);
-      drawPolyline(ctx, points, cx, cy, scale*1.5, 'green', 2);
+      drawPolyline(ctx, points, cx, cy, scale*1.4, 'green', 2);
 
       // Only drawing if ellipticity >~ 6°
-      if ((Math.abs(theta) > 0.001) && (Math.abs(theta - 0.5*Math.PI) > 0.001)) {
+      if (((Math.abs(theta) > 0.001) && (Math.abs(theta - 0.5*Math.PI) > 0.001)) && ((Math.abs(phi) > 0.001) && (Math.abs(phi - Math.PI) > 0.001) && (Math.abs(phi + Math.PI) > 0.001))) {
         // Handedness marker: an arrowhead riding directly on the ellipse,
         // tangent to its own path — the point order already encodes the
         // true direction of travel, so no separate rotation-sign math needed.
@@ -283,7 +291,7 @@ function EllipseVisualizer({ theta, phi }) {
         const p1 = points[idx + 1];
         const angle = Math.atan2(-(p1.v - p0.v), p1.h - p0.h);
         ctx.fillStyle = 'green';
-        drawArrowhead(ctx, toPixel(p0.h, p0.v, cx, cy, scale*1.5), angle, 10);
+        drawArrowhead(ctx, toPixel(p0.h, p0.v, cx, cy, scale*1.4), angle, 10);
       }
     }
 
@@ -312,7 +320,7 @@ function PoincareSpherePlaceholder() {
   );
 }
 
-export default function Panel2({ polState, setPolState }) {
+export default function Panel2({ polState, setPolState, panel2displayBools }) {
   const { theta, phi } = polState;
 
   return (
@@ -320,14 +328,14 @@ export default function Panel2({ polState, setPolState }) {
       {/* Left column: wave animation (75%) + controls (25%) */}
       <div style={{ display: 'grid', gridTemplateRows: '75% 25%', gap: '0.75rem', minWidth: 0, minHeight: 0 }}>
         <div style={{ minWidth: 0, minHeight: 0 }}>
-          <Canvas camera={{ position: [6, 3, 6], fov: 35 }} style={{ width: '100%', height: '100%' }}>
+          <Canvas camera={{ position: [4, 2, 4], fov: 32 }} style={{ width: '100%', height: '100%' }}>
             <Axes />
             <ObservationPlane />
             <PolarizationEllipse theta={theta} phi={phi} />
             <FieldCurtain fieldFn={(x, t) => Ehoriz(x, t, theta)} axis="Z" color="red" opacity={0.25} />
             <FieldCurtain fieldFn={(x, t) => Evert(x, t, theta, phi)} axis="Y" color="#00ccff" opacity={0.15} />
             <FieldVectors theta={theta} phi={phi} />
-            <OrbitControls target={[-2, 0, 0]} />
+            <OrbitControls target={[-1.5, -0.3, 0]} />
           </Canvas>
         </div>
         <ControlsPlaceholder polState={polState} setPolState={setPolState} />
