@@ -292,6 +292,131 @@ function PolarizationEllipse({ theta, phi, visible }) {
   return <Line points={points} color="green" lineWidth={2} visible={visible} />;
 }
 
+// Stokes-parameter coordinates for the current polarization state, using the
+// same (theta, phi) convention as the wave animation: theta splits the H/V
+// amplitude, phi is the V-relative-to-H phase. This is the standard Poincare
+// sphere parametrization -- polar angle 2*theta measured from the S1 axis,
+// azimuthal angle phi around it -- so (s1,s2,s3) automatically lands exactly
+// on the unit sphere for any (theta, phi).
+//
+// The sign of s3 is the one physically meaningful choice here (s1's sign
+// just picks which pole is "H" vs "V", and s2's sign just picks which
+// diagonal is +45 deg -- neither has a required convention). It's chosen so
+// that theta=45deg, phi=+90deg sits at the TOP (s3=+1): with this app's
+// Evert sign convention, that state traces counterclockwise as seen by an
+// observer facing the oncoming wave -- the same viewpoint used by the wave
+// Canvas's camera and the flat Polarization Ellipse panel -- which is the
+// rotation sense this sphere calls "left-circular".
+function stokesFromState(theta, phi) {
+  const s1 = Math.cos(2 * theta);
+  const s2 = Math.sin(2 * theta) * Math.cos(phi);
+  const s3 = Math.sin(2 * theta) * Math.sin(phi);
+  return { s1, s2, s3 };
+}
+
+// One full ring of the sphere's orthogonal graticule, radius 1. Three.js axes
+// map to Stokes axes as (x, y, z) = (S1, S3, S2) -- S3 vertical per the
+// requested convention; S1/S2 split across the two horizontal axes since
+// neither has a required orientation.
+function graticuleRing(fixedAxis, segments = 96) {
+  const pts = [];
+  for (let i = 0; i <= segments; i++) {
+    const t = (i / segments) * Math.PI * 2;
+    const c = Math.cos(t), s = Math.sin(t);
+    if (fixedAxis === 's3') pts.push(new THREE.Vector3(c, 0, s));       // S1-S2 equator
+    else if (fixedAxis === 's2') pts.push(new THREE.Vector3(c, s, 0));  // S1-S3 meridian
+    else pts.push(new THREE.Vector3(0, c, s));                          // S2-S3 meridian
+  }
+  return pts;
+}
+
+// Drawn once per label text onto an offscreen 2D canvas, then used as a
+// sprite texture. Sprites always billboard to face the camera, which is
+// exactly what a floating axis label wants -- and unlike drei's <Html>,
+// there's no DOM/CSS layer whose positioning can go wrong relative to the
+// surrounding page.
+function makeTextSpriteTexture(text, { color = '#333333', fontSizePx = 64 } = {}) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const font = `bold ${fontSizePx}px sans-serif`;
+  ctx.font = font;
+  const textWidth = ctx.measureText(text).width;
+  const padding = fontSizePx * 0.3;
+  canvas.width = Math.ceil(textWidth + padding * 2);
+  canvas.height = Math.ceil(fontSizePx * 1.4);
+  ctx.font = font;
+  ctx.fillStyle = color;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  return { texture, aspect: canvas.width / canvas.height };
+}
+
+function AxisLabel({ text, position, size = 0.28 }) {
+  const { texture, aspect } = useMemo(() => makeTextSpriteTexture(text), [text]);
+  return (
+    <sprite position={position} scale={[size * aspect, size, 1]}>
+      <spriteMaterial map={texture} transparent depthWrite={false} />
+    </sprite>
+  );
+}
+
+// The state arrow's direction depends on theta/phi, but ThickArrowHelper only
+// re-syncs when its imperative setDirection/setLength handle is called --
+// passing a new `dir` prop alone won't move it (same reasoning as Axes()
+// being static vs. FieldVectors driving its arrows imperatively). It has to
+// be done with useFrame from *inside* the Canvas tree, not a useLayoutEffect
+// in the component that renders the <Canvas>: R3F mounts a Canvas's children
+// through its own reconciler on its own schedule, decoupled from the outer
+// DOM tree's commit -- a useLayoutEffect up there fires before the arrow
+// ref even exists yet, silently no-ops, and (since theta/phi may not change
+// again) never gets a second chance.
+function PoincareStateArrow({ theta, phi }) {
+  const arrowRef = useRef();
+  useFrame(() => {
+    const { s1, s2, s3 } = stokesFromState(theta, phi);
+    arrowRef.current?.setDirection(new THREE.Vector3(s1, s3, s2));
+  });
+  return (
+    <ThickArrowHelper ref={arrowRef} dir={new THREE.Vector3(1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={1} color={0xcc0000} headLength={0.15} headWidth={0.08} shaftWidth={2.5} />
+  );
+}
+
+const SPHERE_AXIS_EXTENT = 1.3;
+
+function PoincareSphere({ theta, phi }) {
+  const equator = useMemo(() => graticuleRing('s3'), []);
+  const meridianA = useMemo(() => graticuleRing('s2'), []);
+  const meridianB = useMemo(() => graticuleRing('s1'), []);
+
+  return (
+    <Canvas camera={{ position: [3.3, 2.4, 3.6], fov: 35 }} style={{ width: '100%', height: '100%' }}>
+      <mesh>
+        <sphereGeometry args={[1, 32, 32]} />
+        <meshBasicMaterial color="gray" transparent opacity={0.25} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
+
+      <Line points={equator} color="gray" lineWidth={1} dashed dashSize={0.06} gapSize={0.05} />
+      <Line points={meridianA} color="gray" lineWidth={1} dashed dashSize={0.06} gapSize={0.05} />
+      <Line points={meridianB} color="gray" lineWidth={1} dashed dashSize={0.06} gapSize={0.05} />
+
+      <ThickArrowHelper dir={new THREE.Vector3(1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.15} headWidth={0.07} shaftWidth={1.5} />
+      <ThickArrowHelper dir={new THREE.Vector3(0, 1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.15} headWidth={0.07} shaftWidth={1.5} />
+      <ThickArrowHelper dir={new THREE.Vector3(0, 0, 1)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.15} headWidth={0.07} shaftWidth={1.5} />
+
+      <AxisLabel text="S₁" position={[SPHERE_AXIS_EXTENT + 0.2, 0, 0]} />
+      <AxisLabel text="S₃" position={[0, SPHERE_AXIS_EXTENT + 0.2, 0]} />
+      <AxisLabel text="S₂" position={[0, 0, SPHERE_AXIS_EXTENT + 0.2]} />
+
+      <PoincareStateArrow theta={theta} phi={phi} />
+
+      <OrbitControls />
+    </Canvas>
+  );
+}
+
 // Unicode glyphs (▶ ⏸ ⌂) bake their own, font-dependent vertical padding
 // into the glyph box, so flexbox centering lines up the boxes but not the
 // visible ink — hence the icon-vs-text misalignment. Drawing the icons
@@ -433,18 +558,6 @@ function EllipseVisualizer({ theta, phi }) {
   );
 }
 
-function PoincareSpherePlaceholder() {
-  return (
-    <Canvas camera={{ position: [2, 2, 2], fov: 40 }} style={{ width: '100%', height: '100%' }}>
-      <mesh>
-        <sphereGeometry args={[1, 16, 16]} />
-        <meshBasicMaterial color="steelblue" wireframe />
-      </mesh>
-      <OrbitControls />
-    </Canvas>
-  );
-}
-
 export default function Panel2({ polState, setPolState, panel2displayBools }) {
   const { theta, phi } = polState;
   const { animation: showAnimation, ellipse: showEllipse, sphere: showSphere } = panel2displayBools;
@@ -488,24 +601,27 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
       <div style={{ minWidth: 0, minHeight: 0 }}>
         <div style={{
           ...pieceStyle,
-          display: showAnimation ? 'grid' : 'none',
+          display: showAnimation ? 'flex' : 'none',
+          flexDirection: 'column',
           gridTemplateRows: '70% 30%',
           gap: '0.75rem',
           width: '100%',
           height: '100%',
         }}>
           <div style={{ minWidth: 0, minHeight: 0 }}>
-            <h3 style={{ textAlign: 'center', marginTop: '0.75em', marginBottom: '-0.75em' }}>Electric Field Components</h3>
-            <Canvas camera={{ position: INITIAL_CAMERA_POSITION, fov: 32 }} style={{ width: '100%', height: '100%' }}>
-              <Axes />
-              {animDisplayBools.obsPlane && <ObservationPlane />}
-              <PolarizationEllipse theta={theta} phi={phi} visible={animDisplayBools.obsPlane && animDisplayBools.obsPlaneEllipse} />
-              <FieldCurtain vectorFn={(x, t) => ({ y: 0, z: Ehoriz(x, t, theta) })} color="red" opacity={0.25} paused={paused} visible={animDisplayBools.compFields} />
-              <FieldCurtain vectorFn={(x, t) => ({ y: Evert(x, t, theta, phi), z: 0 })} color="#00ccff" opacity={0.2} paused={paused} visible={animDisplayBools.compFields} />
-              <FieldCurtain vectorFn={(x, t) => ({ y: Evert(x, t, theta, phi), z: Ehoriz(x, t, theta) })} color="green" opacity={0.15} paused={paused} visible={animDisplayBools.totalField} />
-              <FieldVectors theta={theta} phi={phi} paused={paused} displayBools={animDisplayBools} />
-              <OrbitControls ref={controlsRef} target={INITIAL_CAMERA_TARGET} />
-            </Canvas>
+            <h3 style={{ textAlign: 'center', margin: '0 0 0.25em 0', flexShrink: 0 }}>Electric Field Components</h3>
+            <div style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+              <Canvas camera={{ position: INITIAL_CAMERA_POSITION, fov: 32 }} style={{ width: '100%', height: '100%' }}>
+                <Axes />
+                {animDisplayBools.obsPlane && <ObservationPlane />}
+                <PolarizationEllipse theta={theta} phi={phi} visible={animDisplayBools.obsPlane && animDisplayBools.obsPlaneEllipse} />
+                <FieldCurtain vectorFn={(x, t) => ({ y: 0, z: Ehoriz(x, t, theta) })} color="red" opacity={0.25} paused={paused} visible={animDisplayBools.compFields} />
+                <FieldCurtain vectorFn={(x, t) => ({ y: Evert(x, t, theta, phi), z: 0 })} color="#00ccff" opacity={0.2} paused={paused} visible={animDisplayBools.compFields} />
+                <FieldCurtain vectorFn={(x, t) => ({ y: Evert(x, t, theta, phi), z: Ehoriz(x, t, theta) })} color="green" opacity={0.15} paused={paused} visible={animDisplayBools.totalField} />
+                <FieldVectors theta={theta} phi={phi} paused={paused} displayBools={animDisplayBools} />
+                <OrbitControls ref={controlsRef} target={INITIAL_CAMERA_TARGET} />
+              </Canvas>
+            </div>
           </div>
           <div style={{ minWidth: 0, minHeight: 0 }}>
             <AnimControls paused={paused} setPaused={setPaused} onHomeView={resetView} animDisplayBools={animDisplayBools} setAnimDisplayBools={setAnimDisplayBools} />
@@ -522,9 +638,22 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
           </div>
         </div>
         <div style={{ minWidth: 0, minHeight: 0 }}>
-          <div style={{ ...pieceStyle, display: showSphere ? 'block' : 'none', width: '100%', height: '100%' }}>
-            <h3 style={{ textAlign: 'center', marginTop: '0.0em', marginBottom: '-0.5em' }}>Poincare Sphere</h3>
-            <PoincareSpherePlaceholder />
+          <div style={{
+            ...pieceStyle,
+            display: showSphere ? 'flex' : 'none',
+            flexDirection: 'column',
+            width: '100%',
+            height: '100%',
+          }}>
+            <h3 style={{ textAlign: 'center', margin: '0 0 0.25em 0', flexShrink: 0 }}>Poincare Sphere</h3>
+            {/* The heading takes its own natural height above; without this
+                wrapper, the Canvas's height: 100% resolves against the whole
+                bordered box (ignoring the heading's height) and the sphere's
+                viewport ends up overlapping the heading text. flex: 1 here
+                makes it fill only the space actually left over. */}
+            <div style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+              <PoincareSphere theta={theta} phi={phi} />
+            </div>
           </div>
         </div>
       </div>
