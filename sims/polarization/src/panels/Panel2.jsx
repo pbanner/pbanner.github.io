@@ -10,25 +10,20 @@ import * as THREE from 'three';
 // spatial wavelength and the apparent speed of the wave
 const K = 2.7;
 const OMEGA = 2;
-// theta splits the amplitude between the two components
-const THETA = Math.atan(1);
-// phi is the relative phase between the components, V minus H
-const PHI = 90 * (Math.PI / 180);
 
 const X_MIN = -5;   // source end
 const X_MAX = 0;    // observation plane
 const N_SAMPLES = 251;
 
-const cosT = Math.cos(THETA);
-const sinT = Math.sin(THETA);
-
 // Horizontal (red) component -> drawn along Three.js Z
-function Ehoriz(x, t) {
-  return cosT * Math.cos(K * x - OMEGA * t);
+// theta splits the amplitude between the two components,
+// phi is the relative phase between them (V minus H)
+function Ehoriz(x, t, theta) {
+  return Math.cos(theta) * Math.cos(K * x - OMEGA * t);
 }
 // Vertical (blue) component -> drawn along Three.js Y
-function Evert(x, t) {
-  return sinT * Math.cos(K * x - OMEGA * t + PHI);
+function Evert(x, t, theta, phi) {
+  return Math.sin(theta) * Math.cos(K * x - OMEGA * t + phi);
 }
 
 const xs = Array.from(
@@ -196,15 +191,15 @@ function updateArrow(arrow, vec) {
 }
 
 // Red/blue component arrows and the green total-field arrow, all evaluated at x = 0
-function FieldVectors() {
+function FieldVectors({ theta, phi }) {
   const redArrow = useRef();
   const blueArrow = useRef();
   const greenArrow = useRef();
 
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
-    const eh = Ehoriz(0, t);
-    const ev = Evert(0, t);
+    const eh = Ehoriz(0, t, theta);
+    const ev = Evert(0, t, theta, phi);
 
     updateArrow(redArrow.current, new THREE.Vector3(0, 0, eh));
     updateArrow(blueArrow.current, new THREE.Vector3(0, ev, 0));
@@ -222,21 +217,21 @@ function FieldVectors() {
 
 // Dimension-agnostic: just the (horizontal, vertical) field-vector-tip
 // trace over one period. Both renderers consume this directly.
-function computeEllipsePoints(samples = 200) {
+function computeEllipsePoints(theta, phi, samples = 200) {
   const period = (2 * Math.PI) / OMEGA;
   const pts = [];
   for (let i = 0; i <= samples; i++) {
     const t = (i / samples) * period;
-    pts.push({ h: Ehoriz(0, t), v: Evert(0, t) });
+    pts.push({ h: Ehoriz(0, t, theta), v: Evert(0, t, theta, phi) });
   }
   return pts;
 }
 
-// 3D version — used inside the wave-animation Canvas, unchanged call site
-function PolarizationEllipse() {
+// 3D version — used inside the wave-animation Canvas
+function PolarizationEllipse({ theta, phi }) {
   const points = useMemo(
-    () => computeEllipsePoints().map(({ h, v }) => new THREE.Vector3(0, v, h)),
-    []
+    () => computeEllipsePoints(theta, phi).map(({ h, v }) => new THREE.Vector3(0, v, h)),
+    [theta, phi]
   );
   return <Line points={points} color="green" lineWidth={2} />;
 }
@@ -249,11 +244,11 @@ function ControlsPlaceholder() {
   );
 }
 
-function EllipseVisualizer() {
+function EllipseVisualizer({ theta, phi }) {
   const containerRef = useRef();
   const canvasRef = useRef();
 
-  const points = useMemo(() => computeEllipsePoints(), []);
+  const points = useMemo(() => computeEllipsePoints(theta, phi), [theta, phi]);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -279,7 +274,7 @@ function EllipseVisualizer() {
       drawPolyline(ctx, points, cx, cy, scale*1.5, 'green', 2);
 
       // Only drawing if ellipticity >~ 6°
-      if (Math.abs(PHI) > 0.001) {
+      if (Math.abs(phi) > 0.001) {
         // Handedness marker: an arrowhead riding directly on the ellipse,
         // tangent to its own path — the point order already encodes the
         // true direction of travel, so no separate rotation-sign math needed.
@@ -296,7 +291,7 @@ function EllipseVisualizer() {
     const observer = new ResizeObserver(draw);
     observer.observe(container);
     return () => observer.disconnect();
-  }, [points]);
+  }, [points, phi]);
 
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%' }}>
@@ -317,7 +312,9 @@ function PoincareSpherePlaceholder() {
   );
 }
 
-export default function Panel2() {
+export default function Panel2({ polState, setPolState }) {
+  const { theta, phi } = polState;
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '60% 40%', gap: '0.75rem', width: '100%', height: '100%', boxSizing: 'border-box' }}>
       {/* Left column: wave animation (75%) + controls (25%) */}
@@ -326,20 +323,20 @@ export default function Panel2() {
           <Canvas camera={{ position: [6, 3, 6], fov: 35 }} style={{ width: '100%', height: '100%' }}>
             <Axes />
             <ObservationPlane />
-            <PolarizationEllipse />
-            <FieldCurtain fieldFn={Ehoriz} axis="Z" color="red" opacity={0.25} />
-            <FieldCurtain fieldFn={Evert} axis="Y" color="#00ccff" opacity={0.15} />
-            <FieldVectors />
+            <PolarizationEllipse theta={theta} phi={phi} />
+            <FieldCurtain fieldFn={(x, t) => Ehoriz(x, t, theta)} axis="Z" color="red" opacity={0.25} />
+            <FieldCurtain fieldFn={(x, t) => Evert(x, t, theta, phi)} axis="Y" color="#00ccff" opacity={0.15} />
+            <FieldVectors theta={theta} phi={phi} />
             <OrbitControls target={[-2, 0, 0]} />
           </Canvas>
         </div>
-        <ControlsPlaceholder />
+        <ControlsPlaceholder polState={polState} setPolState={setPolState} />
       </div>
 
       {/* Right column: ellipse view (top half) + Poincaré sphere (bottom half) */}
       <div style={{ display: 'grid', gridTemplateRows: '1fr 1fr', gap: '0.75rem', minWidth: 0, minHeight: 0 }}>
         <div style={{ minWidth: 0, minHeight: 0 }}>
-          <EllipseVisualizer />
+          <EllipseVisualizer theta={theta} phi={phi} />
         </div>
         <div style={{ minWidth: 0, minHeight: 0 }}>
           <PoincareSpherePlaceholder />

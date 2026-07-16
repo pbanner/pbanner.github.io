@@ -9,13 +9,17 @@ export default function App() {
   const [displayBools, setDisplayBools] = useState({
     gridOn: true,             // Displaying the grid
   });
+  const [polState, setPolState] = useState({
+    theta: Math.atan(1),           // splits the amplitude between the two field components
+    phi: 90 * (Math.PI / 180),     // relative phase between them (V minus H)
+  });
 
   return (
     <div className="app-layout">
       {/* Main Canvas Area */}
       <div className="canvas-area">
         {activePanel === 1 && <Panel1 displayBools={displayBools} />}
-        {activePanel === 2 && <Panel2 displayBools={displayBools} />}
+        {activePanel === 2 && <Panel2 displayBools={displayBools} polState={polState} setPolState={setPolState} />}
         {activePanel === 3 && <Panel3 displayBools={displayBools} />}
       </div>
 
