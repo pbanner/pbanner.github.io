@@ -1,6 +1,10 @@
-import React, { forwardRef, useImperativeHandle, useLayoutEffect, useRef } from 'react';
+import React, { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef } from 'react';
 import { Line } from '@react-three/drei';
 import * as THREE from 'three';
+
+// The shaft's initial placeholder segment — never depends on props, so it
+// only needs to exist once, not be rebuilt as a fresh array every render.
+const PLACEHOLDER_POINTS = [[0, 0, 0], [0, 0, 0.001]];
 
 const ThickArrowHelper = forwardRef(function ThickArrowHelper(
   { dir, origin, length, color, headLength = 0.2 * length, headWidth = 0.2 * headLength, shaftWidth = 2 },
@@ -18,6 +22,11 @@ const ThickArrowHelper = forwardRef(function ThickArrowHelper(
     headLength,
     headWidth,
   });
+
+  const initialArgs = useMemo(
+    () => [dir, origin, length, color, headLength, headWidth],
+    []
+  );
 
   function sync() {
     const { dir, origin, length, headLength, headWidth } = state.current;
@@ -61,8 +70,8 @@ const ThickArrowHelper = forwardRef(function ThickArrowHelper(
 
   return (
     <>
-      <arrowHelper ref={arrowRef} args={[dir, origin, length, color, headLength, headWidth]} />
-      <Line ref={lineRef} points={[[0, 0, 0], [0, 0, 0.001]]} color={color} lineWidth={shaftWidth} />
+      <arrowHelper ref={arrowRef} args={initialArgs} />
+      <Line ref={lineRef} points={PLACEHOLDER_POINTS} color={color} lineWidth={shaftWidth} />
     </>
   );
 });
