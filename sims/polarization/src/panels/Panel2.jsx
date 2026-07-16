@@ -134,7 +134,7 @@ function ObservationPlane() {
 
 // One field component's traveling sinusoid: an outline curve plus a translucent "curtain"
 // down to the propagation axis. axis is 'Y' or 'Z' depending on which component this is.
-function FieldCurtain({ fieldFn, axis, color, opacity, paused }) {
+function FieldCurtain({ vectorFn, color, opacity, paused }) {
   const lineGeometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N_SAMPLES * 3), 3));
@@ -163,9 +163,7 @@ function FieldCurtain({ fieldFn, axis, color, opacity, paused }) {
 
     for (let i = 0; i < N_SAMPLES; i++) {
       const x = xs[i];
-      const value = fieldFn(x, t);
-      const y = axis === 'Y' ? value : 0;
-      const z = axis === 'Z' ? value : 0;
+      const { y, z } = vectorFn(x, t);
 
       linePos[3 * i] = x;
       linePos[3 * i + 1] = y;
@@ -385,8 +383,9 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
               <Axes />
               <ObservationPlane />
               <PolarizationEllipse theta={theta} phi={phi} />
-              <FieldCurtain fieldFn={(x, t) => Ehoriz(x, t, theta)} axis="Z" color="red" opacity={0.25} paused={paused} />
-              <FieldCurtain fieldFn={(x, t) => Evert(x, t, theta, phi)} axis="Y" color="#00ccff" opacity={0.15} paused={paused} />
+              <FieldCurtain vectorFn={(x, t) => ({ y: 0, z: Ehoriz(x, t, theta) })} color="red" opacity={0.25} paused={paused} />
+              <FieldCurtain vectorFn={(x, t) => ({ y: Evert(x, t, theta, phi), z: 0 })} color="#00ccff" opacity={0.15} paused={paused} />
+              <FieldCurtain vectorFn={(x, t) => ({ y: Evert(x, t, theta, phi), z: Ehoriz(x, t, theta) })} color="green" opacity={0.15} paused={paused} />
               <FieldVectors theta={theta} phi={phi} paused={paused} />
               <OrbitControls target={[-1.5, -0.3, 0]} />
             </Canvas>
