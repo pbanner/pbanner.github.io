@@ -31,6 +31,14 @@ const xs = Array.from(
   (_, i) => X_MIN + (i * (X_MAX - X_MIN)) / (N_SAMPLES - 1)
 );
 
+const pieceStyle = {
+  border: '2px solid #333',
+  borderRadius: '20px',
+  padding: '12px',
+  boxSizing: 'border-box',
+  //background: '#eef6ff'
+};
+
 const placeholderStyle = {
   width: '100%',
   height: '100%',
@@ -358,12 +366,19 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
   }, []);
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '60% 40%', gap: '0.75rem', width: '100%', height: '100%', boxSizing: 'border-box' }}>
-      {/* Left column: wave animation (75%) + controls (25%) */}
-      <div style={{ display: 'grid', gridTemplateRows: '75% 25%', gap: '0.75rem', minWidth: 0, minHeight: 0 }}>
-        <div style={{ minWidth: 0, minHeight: 0 }}>
-          <div style={{ display: showAnimation ? 'block' : 'none', width: '100%', height: '100%' }}>
-            <p style={{ textAlign: 'center', marginTop: '1.0em', marginBottom: '-1.0em' }} ><b>Electric Field Components</b></p>
+    <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: '0.75rem', width: '100%', height: '100%', padding: '20px', boxSizing: 'border-box' }}>
+      {/* Left column: wave animation + controls, as one bordered piece */}
+      <div style={{ minWidth: 0, minHeight: 0 }}>
+        <div style={{
+          ...pieceStyle,
+          display: showAnimation ? 'grid' : 'none',
+          gridTemplateRows: '75% 25%',
+          gap: '0.75rem',
+          width: '100%',
+          height: '100%',
+        }}>
+          <div style={{ minWidth: 0, minHeight: 0 }}>
+            <h3 style={{ textAlign: 'center', marginTop: '0.75em', marginBottom: '-0.75em' }}>Electric Field Components</h3>
             <Canvas camera={{ position: [4, 2, 4], fov: 32 }} style={{ width: '100%', height: '100%' }}>
               <Axes />
               <ObservationPlane />
@@ -374,23 +389,23 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
               <OrbitControls target={[-1.5, -0.3, 0]} />
             </Canvas>
           </div>
-        </div>
-        <div style={{ display: showAnimation ? 'block' : 'none', width: '100%', height: '100%' }}>
-          <AnimControls polState={polState} setPolState={setPolState} paused={paused} setPaused={setPaused} />
+          <div style={{ minWidth: 0, minHeight: 0 }}>
+            <AnimControls polState={polState} setPolState={setPolState} paused={paused} setPaused={setPaused} />
+          </div>
         </div>
       </div>
 
       {/* Right column: ellipse view (top half) + Poincaré sphere (bottom half) */}
       <div style={{ display: 'grid', gridTemplateRows: '1fr 1fr', gap: '0.75rem', minWidth: 0, minHeight: 0 }}>
         <div style={{ minWidth: 0, minHeight: 0 }}>
-          <div style={{ display: showEllipse ? 'block' : 'none', width: '100%', height: '100%' }}>
-            <p style={{ textAlign: 'center', marginTop: '1.0em', marginBottom: '-1.0em' }} ><b>Polarization Ellipse</b></p>
+          <div style={{ ...pieceStyle, display: showEllipse ? 'block' : 'none', width: '100%', height: '100%' }}>
+            <h3 style={{ textAlign: 'center', marginTop: '0.0em', marginBottom: '-0.5em' }}>Polarization Ellipse</h3>
             <EllipseVisualizer theta={theta} phi={phi} />
           </div>
         </div>
         <div style={{ minWidth: 0, minHeight: 0 }}>
-          <div style={{ display: showSphere ? 'block' : 'none', width: '100%', height: '100%' }}>
-            <p style={{ textAlign: 'center', marginTop: '1.0em', marginBottom: '-1.0em' }} ><b>Poincare Sphere</b></p>
+          <div style={{ ...pieceStyle, display: showSphere ? 'block' : 'none', width: '100%', height: '100%' }}>
+            <h3 style={{ textAlign: 'center', marginTop: '0.0em', marginBottom: '-0.5em' }}>Poincare Sphere</h3>
             <PoincareSpherePlaceholder />
           </div>
         </div>
