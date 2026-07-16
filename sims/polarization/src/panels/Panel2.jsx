@@ -19,6 +19,9 @@ const N_SAMPLES = 251;
 // values "Home View" restores. Kept in one place so the two never drift apart.
 const INITIAL_CAMERA_POSITION = [4, 2, 4];
 const INITIAL_CAMERA_TARGET = [-1.5, -0.3, 0];
+// Same idea, for the Poincare sphere's own camera + "Reset View" button.
+const SPHERE_INITIAL_CAMERA_POSITION = [3.3, 2.4, 3.6];
+const SPHERE_INITIAL_CAMERA_TARGET = [0, 0.32, 0];
 
 // Horizontal (red) component -> drawn along Three.js Z
 // theta splits the amplitude between the two components,
@@ -79,7 +82,7 @@ const controlBoxStyle = {
 const checkboxColumnStyle = {
   display: 'flex',
   flexDirection: 'column',
-  gap: '4px',
+  gap: '6px',
   whiteSpace: 'nowrap',
 };
 
@@ -396,33 +399,74 @@ function PoincareStateArrow({ theta, phi }) {
 const SPHERE_AXIS_EXTENT = 1.3;
 
 function PoincareSphere({ theta, phi }) {
+  const controlsRef = useRef();
+  // Same reasoning as the wave animation's Home View button: not
+  // controls.reset(), since target0/position0 get captured before drei
+  // applies the `target` prop below, so reset() would snap to the wrong
+  // point. Set both explicitly instead.
+  const resetView = () => {
+    const controls = controlsRef.current;
+    if (!controls) return;
+    controls.object.position.set(...SPHERE_INITIAL_CAMERA_POSITION);
+    controls.target.set(...SPHERE_INITIAL_CAMERA_TARGET);
+    controls.update();
+  };
+
   const equator = useMemo(() => graticuleRing('s3'), []);
   const meridianA = useMemo(() => graticuleRing('s2'), []);
   const meridianB = useMemo(() => graticuleRing('s1'), []);
 
   return (
-    <Canvas camera={{ position: [3.3, 2.4, 3.6], fov: 30 }} style={{ width: '100%', height: '100%' }}>
-      <mesh>
-        <sphereGeometry args={[1, 32, 32]} />
-        <meshBasicMaterial color="gray" transparent opacity={0.25} side={THREE.DoubleSide} depthWrite={false} />
-      </mesh>
+    // position: 'relative' + the button's position: 'absolute' below keeps
+    // the button entirely out of the surrounding flex layout -- it overlays
+    // the canvas rather than becoming a sibling flex item, so it can't
+    // affect the heading/canvas alignment above it.
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <Canvas camera={{ position: SPHERE_INITIAL_CAMERA_POSITION, fov: 30 }} style={{ width: '100%', height: '100%' }}>
+        <mesh>
+          <sphereGeometry args={[1, 32, 32]} />
+          <meshBasicMaterial color="gray" transparent opacity={0.25} side={THREE.DoubleSide} depthWrite={false} />
+        </mesh>
 
-      <Line points={equator} color="gray" lineWidth={1} dashed dashSize={0.06} gapSize={0.05} />
-      <Line points={meridianA} color="gray" lineWidth={1} dashed dashSize={0.06} gapSize={0.05} />
-      <Line points={meridianB} color="gray" lineWidth={1} dashed dashSize={0.06} gapSize={0.05} />
+        <Line points={equator} color="gray" lineWidth={1} dashed dashSize={0.06} gapSize={0.05} />
+        <Line points={meridianA} color="gray" lineWidth={1} dashed dashSize={0.06} gapSize={0.05} />
+        <Line points={meridianB} color="gray" lineWidth={1} dashed dashSize={0.06} gapSize={0.05} />
 
-      <ThickArrowHelper dir={new THREE.Vector3(1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.15} headWidth={0.07} shaftWidth={1.5} />
-      <ThickArrowHelper dir={new THREE.Vector3(0, 1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.15} headWidth={0.07} shaftWidth={1.5} />
-      <ThickArrowHelper dir={new THREE.Vector3(0, 0, 1)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.15} headWidth={0.07} shaftWidth={1.5} />
+        <ThickArrowHelper dir={new THREE.Vector3(1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.15} headWidth={0.07} shaftWidth={1.5} />
+        <ThickArrowHelper dir={new THREE.Vector3(0, 1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.15} headWidth={0.07} shaftWidth={1.5} />
+        <ThickArrowHelper dir={new THREE.Vector3(0, 0, 1)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.15} headWidth={0.07} shaftWidth={1.5} />
 
-      <AxisLabel text="S₁" position={[SPHERE_AXIS_EXTENT + 0.2, 0, 0]} />
-      <AxisLabel text="S₃" position={[0, SPHERE_AXIS_EXTENT + 0.2, 0]} />
-      <AxisLabel text="S₂" position={[0, 0, SPHERE_AXIS_EXTENT + 0.2]} />
+        <AxisLabel text="S₁" position={[SPHERE_AXIS_EXTENT + 0.2, 0, 0]} />
+        <AxisLabel text="S₃" position={[0, SPHERE_AXIS_EXTENT + 0.2, 0]} />
+        <AxisLabel text="S₂" position={[0, 0, SPHERE_AXIS_EXTENT + 0.2]} />
 
-      <PoincareStateArrow theta={theta} phi={phi} />
+        <PoincareStateArrow theta={theta} phi={phi} />
 
-      <OrbitControls target={[0, 0.32, 0]} />
-    </Canvas>
+        <OrbitControls ref={controlsRef} target={SPHERE_INITIAL_CAMERA_TARGET} />
+      </Canvas>
+
+      <button
+        className="control-button"
+        onClick={resetView}
+        style={{
+          position: 'absolute',
+          bottom: '6px',
+          left: '6px',
+          width: '46px',
+          height: '46px',
+          padding: '2px',
+          margin: 0,
+          fontSize: '0.62rem',
+          lineHeight: 1.15,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
+        }}
+      >
+        Reset View
+      </button>
+    </div>
   );
 }
 
@@ -467,8 +511,8 @@ function AnimControls({ paused, setPaused, onHomeView, animDisplayBools, setAnim
           {paused ? 'Start' : 'Pause'}
         </button>
         <button className="control-button" onClick={onHomeView} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', margin: 0, fontSize: '1.1rem' }}>
-          <HomeIcon />
-          Home View
+          {/* <HomeIcon /> */}
+          Reset View
         </button>
       </div>
 
