@@ -15,6 +15,11 @@ const X_MIN = -5;   // source end
 const X_MAX = 0;    // observation plane
 const N_SAMPLES = 251;
 
+// The wave-animation Canvas's starting camera position/target — also the
+// values "Home View" restores. Kept in one place so the two never drift apart.
+const INITIAL_CAMERA_POSITION = [4, 2, 4];
+const INITIAL_CAMERA_TARGET = [-1.5, -0.3, 0];
+
 // Horizontal (red) component -> drawn along Three.js Z
 // theta splits the amplitude between the two components,
 // phi is the relative phase between them (V minus H)
@@ -76,6 +81,16 @@ const checkboxColumnStyle = {
   flexDirection: 'column',
   gap: '4px',
   whiteSpace: 'nowrap',
+};
+
+// For resetting 3D animation view
+const controlsRef = useRef();
+const resetView = () => {
+  const controls = controlsRef.current;
+  if (!controls) return;
+  controls.object.position.set(...INITIAL_CAMERA_POSITION);
+  controls.target.set(...INITIAL_CAMERA_TARGET);
+  controls.update();
 };
 
 // One row of a slider + a synced number box, matching AngleControl in
@@ -287,14 +302,20 @@ function PolarizationEllipse({ theta, phi, visible }) {
   return <Line points={points} color="green" lineWidth={2} visible={visible} />;
 }
 
-function AnimControls({ paused, setPaused, animDisplayBools, setAnimDisplayBools }) {
+function AnimControls({ paused, setPaused, onHomeView, animDisplayBools, setAnimDisplayBools }) {
   return (
     <div style={animControlsWrapperStyle}>
-      {/* Row 1: play/pause, centered on its own */}
-      <button className="control-button" onClick={() => setPaused((p) => !p)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', margin: 0 }}>
-        <span aria-hidden="true">{paused ? '▶' : '⏸'}</span>
-        {paused ? 'Start' : 'Pause'}
-      </button>
+      {/* Row 1: play/pause and Home View, centered */}
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'center' }}>
+        <button className="control-button" onClick={() => setPaused((p) => !p)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', margin: 0, fontSize: '1.1rem' }}>
+          <span aria-hidden="true">{paused ? '▶' : '⏸'}</span>
+          {paused ? 'Start' : 'Pause'}
+        </button>
+        <button className="control-button" onClick={onHomeView} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', margin: 0, fontSize: '1.1rem' }}>
+          <span aria-hidden="true">⌂</span>
+          Home View
+        </button>
+      </div>
 
       {/* Row 2: visibility checkboxes (left) + component basis (right) */}
       <div style={{ display: 'flex', width: '100%', gap: '10px', alignItems: 'stretch' }}>
@@ -434,14 +455,14 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
         <div style={{
           ...pieceStyle,
           display: showAnimation ? 'grid' : 'none',
-          gridTemplateRows: '75% 25%',
+          gridTemplateRows: '70% 30%',
           gap: '0.75rem',
           width: '100%',
           height: '100%',
         }}>
           <div style={{ minWidth: 0, minHeight: 0 }}>
             <h3 style={{ textAlign: 'center', marginTop: '0.75em', marginBottom: '-0.75em' }}>Electric Field Components</h3>
-            <Canvas camera={{ position: [4, 2, 4], fov: 32 }} style={{ width: '100%', height: '100%' }}>
+            <Canvas camera={{ position: INITIAL_CAMERA_POSITION, fov: 32 }} style={{ width: '100%', height: '100%' }}>
               <Axes />
               {animDisplayBools.obsPlane && <ObservationPlane />}
               <PolarizationEllipse theta={theta} phi={phi} visible={animDisplayBools.obsPlane && animDisplayBools.obsPlaneEllipse} />
@@ -449,11 +470,11 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
               <FieldCurtain vectorFn={(x, t) => ({ y: Evert(x, t, theta, phi), z: 0 })} color="#00ccff" opacity={0.2} paused={paused} visible={animDisplayBools.compFields} />
               <FieldCurtain vectorFn={(x, t) => ({ y: Evert(x, t, theta, phi), z: Ehoriz(x, t, theta) })} color="green" opacity={0.15} paused={paused} visible={animDisplayBools.totalField} />
               <FieldVectors theta={theta} phi={phi} paused={paused} displayBools={animDisplayBools} />
-              <OrbitControls target={[-1.5, -0.3, 0]} />
+              <OrbitControls ref={controlsRef} target={INITIAL_CAMERA_TARGET} />
             </Canvas>
           </div>
           <div style={{ minWidth: 0, minHeight: 0 }}>
-            <AnimControls paused={paused} setPaused={setPaused} animDisplayBools={animDisplayBools} setAnimDisplayBools={setAnimDisplayBools} />
+            <AnimControls paused={paused} setPaused={setPaused} onHomeView={0} animDisplayBools={animDisplayBools} setAnimDisplayBools={setAnimDisplayBools} />
           </div>
         </div>
       </div>
