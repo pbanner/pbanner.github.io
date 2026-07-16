@@ -45,7 +45,7 @@ export default function App() {
   });
   const [polState, setPolState] = useState({
     theta: Math.atan(1),           // splits the amplitude between the two field components
-    phi: 90 * (Math.PI / 180),     // relative phase between them (V minus H)
+    phi: 0 * (Math.PI / 180),     // relative phase between them (V minus H)
   });
   const [panel2displayBools, setPanel2displayBools] = useState({
     animation: true,
