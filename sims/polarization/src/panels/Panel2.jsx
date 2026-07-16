@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useMemo, useRef } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
 import ThickArrowHelper from './ThickArrowHelper.jsx';
@@ -35,8 +35,10 @@ const placeholderStyle = {
   width: '100%',
   height: '100%',
   display: 'flex',
+  flexDirection: 'column',
   alignItems: 'center',
   justifyContent: 'center',
+  gap: '12px',
   border: '1px dashed #999',
   borderRadius: '4px',
   color: '#666',
@@ -122,7 +124,7 @@ function ObservationPlane() {
 
 // One field component's traveling sinusoid: an outline curve plus a translucent "curtain"
 // down to the propagation axis. axis is 'Y' or 'Z' depending on which component this is.
-function FieldCurtain({ fieldFn, axis, color, opacity }) {
+function FieldCurtain({ fieldFn, axis, color, opacity, paused }) {
   const lineGeometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N_SAMPLES * 3), 3));
@@ -141,8 +143,11 @@ function FieldCurtain({ fieldFn, axis, color, opacity }) {
     return geo;
   }, []);
 
-  useFrame(({ clock }) => {
-    const t = clock.getElapsedTime();
+  const simTime = useRef(0);
+
+  useFrame((state, delta) => {
+    if (!paused) simTime.current += delta;
+    const t = simTime.current;
     const linePos = lineGeometry.attributes.position.array;
     const ribbonPos = ribbonGeometry.attributes.position.array;
 
@@ -191,13 +196,15 @@ function updateArrow(arrow, vec) {
 }
 
 // Red/blue component arrows and the green total-field arrow, all evaluated at x = 0
-function FieldVectors({ theta, phi }) {
+function FieldVectors({ theta, phi, paused }) {
   const redArrow = useRef();
   const blueArrow = useRef();
   const greenArrow = useRef();
+  const simTime = useRef(0);
 
-  useFrame(({ clock }) => {
-    const t = clock.getElapsedTime();
+  useFrame((state, delta) => {
+    if (!paused) simTime.current += delta;
+    const t = simTime.current;
     const eh = Ehoriz(0, t, theta);
     const ev = Evert(0, t, theta, phi);
 
@@ -236,10 +243,14 @@ function PolarizationEllipse({ theta, phi }) {
   return <Line points={points} color="green" lineWidth={2} />;
 }
 
-function ControlsPlaceholder() {
+function ControlsPlaceholder({ paused, setPaused }) {
   return (
     <div style={placeholderStyle}>
-      <span>Basis controls — coming soon</span>
+      <button className="control-button" onClick={() => setPaused((p) => !p)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+        <span aria-hidden="true">{paused ? '▶' : '⏸'}</span>
+        {paused ? 'Start' : 'Pause'}
+      </button>
+      <p>Basis controls — coming soon</p>
     </div>
   );
 }
@@ -323,6 +334,7 @@ function PoincareSpherePlaceholder() {
 export default function Panel2({ polState, setPolState, panel2displayBools }) {
   const { theta, phi } = polState;
   const { animation: showAnimation, ellipse: showEllipse, sphere: showSphere } = panel2displayBools;
+  const [paused, setPaused] = useState(false);
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '60% 40%', gap: '0.75rem', width: '100%', height: '100%', boxSizing: 'border-box' }}>
@@ -334,15 +346,15 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
               <Axes />
               <ObservationPlane />
               <PolarizationEllipse theta={theta} phi={phi} />
-              <FieldCurtain fieldFn={(x, t) => Ehoriz(x, t, theta)} axis="Z" color="red" opacity={0.25} />
-              <FieldCurtain fieldFn={(x, t) => Evert(x, t, theta, phi)} axis="Y" color="#00ccff" opacity={0.15} />
-              <FieldVectors theta={theta} phi={phi} />
+              <FieldCurtain fieldFn={(x, t) => Ehoriz(x, t, theta)} axis="Z" color="red" opacity={0.25} paused={paused} />
+              <FieldCurtain fieldFn={(x, t) => Evert(x, t, theta, phi)} axis="Y" color="#00ccff" opacity={0.15} paused={paused} />
+              <FieldVectors theta={theta} phi={phi} paused={paused} />
               <OrbitControls target={[-1.5, -0.3, 0]} />
             </Canvas>
           </div>
         </div>
         <div style={{ display: showAnimation ? 'block' : 'none', width: '100%', height: '100%' }}>
-          <ControlsPlaceholder polState={polState} setPolState={setPolState} />
+          <ControlsPlaceholder polState={polState} setPolState={setPolState} paused={paused} setPaused={setPaused} />
         </div>
       </div>
 
