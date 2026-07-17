@@ -101,11 +101,11 @@ export default function App() {
               <label><input type="radio" name="DCmode" value="one" />One particle</label>
               <label><input type="radio" name="DCmode" value="stream" />Particle stream</label>
             </div>
-            <button className="control-button" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', margin: 0, fontSize: '0.9rem' }}>
+            <button className="control-bar-button" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px'}}>
               <PlayIcon /> {/* <PauseIcon />} */}
               Start
             </button>
-            <button className="control-button" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', margin: 0, fontSize: '0.9rem' }}>
+            <button className="control-bar-button">
               Reset Data Collection
             </button>
           </div>

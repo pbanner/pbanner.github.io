@@ -83,21 +83,21 @@
 }
 
 .control-bar-button {
-  padding: 10px 10px;
+  padding: 6px 6px;
   margin: 2px 0px;
-  border: 1px solid #ddd;
-  background: #fff;
+  border: 1px solid #999;
+  background: #eee;
   cursor: pointer;
   border-radius: 4px;
   font-size: 13px;
   font-weight: 500;
-  color: #666;
+  color: #111;
   text-align: center;
   transition: all 0.2s;
 }
 
 .control-bar-button:hover {
-  background: #f0f0f0;
+  background: #ddd;
   border-color: #bbb;
 }
 
