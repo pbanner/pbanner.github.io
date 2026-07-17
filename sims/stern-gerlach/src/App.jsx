@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import './App.css';
 import LabPanel from './LabPanel';
+import sgImage from './assets/SG.png';
+import pcImage from './assets/PC.png';
 
 export default function App() {  
   // Panel 1 state
@@ -18,7 +20,28 @@ export default function App() {
       {/* Right Sidebar */}
       <aside className="control-bar">
         <div className="control-bar-content">
-          <p>Just some text for now</p>
+          {/* Build Experiment Controls */}
+          <div className="control-bar-group">
+            <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Build Experiment</h3>
+            <div style={{ display: 'flex', flexDirection: 'row', gap: '8px' }}>
+              <div style={{display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <button type="button" className="control-button icon-button" aria-label="Add Stern-Gerlach apparatus">
+                  <img src={sgImage} alt="" className="icon-button-image" />
+                  <span>Add Stern-Gerlach</span>
+                </button>
+                <button type="button" className="control-button icon-button" aria-label="Add particle counter">
+                  <img src={pcImage} alt="" className="icon-button-image" />
+                  <span>Add Particle Counter</span>
+                </button>
+              </div>
+              <div style={{display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <button type="button" className="control-button icon-button" aria-label="Add Stern-Gerlach apparatus">
+                  <img src={sgImage} alt="" className="icon-button-image" />
+                  <span>Add Beam Block</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </aside>
     </div>

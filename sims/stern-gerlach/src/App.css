@@ -39,9 +39,14 @@
 /* Panel Controls */
 .control-bar-group {
   flex-direction: column;
-  min-width: 180px;
-  border-right: 1px solid #ddd;
-  padding-right: 20px;
+  flex: 1;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 1.0rem;
+  line-height: 1.2;
+  box-sizing: border-box;
 }
 
 .control-bar-group h3 {
@@ -118,6 +123,25 @@
   .control-bar {
     height: 200px;
   }
+}
+
+/*
+Icon buttons
+*/
+.icon-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px;
+  font-size: 0.60rem;
+}
+
+.icon-button-image {
+  height: 32px;
+  margin-bottom: 6px;
+  object-fit: contain;   /* scales the image to fit the box, preserving aspect ratio */
 }
 
 /*
