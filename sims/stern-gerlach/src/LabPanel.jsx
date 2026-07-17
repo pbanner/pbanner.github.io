@@ -1,10 +1,20 @@
 import React, { useRef, useEffect, useState } from 'react';
 import sgImage from './assets/SG.png';
+import pcImage from './assets/PC.png';
 
+// SG image dimensions and specs for use throughout
 const SG_WIDTH = 160;
 const SG_HEIGHT = 90;
 const SG_SPACING = 300;   // horizontal gap between apparatus centers
 const SG_START_X = 150;   // x-position of the first apparatus
+// From the image itself, to be used for path drawing
+const SG_INPUT_Y = 111;
+const SG_OUTPUT_UP = 66*(SG_HEIGHT/225);
+const SG_OUTPUT_DOWN = 158*(SG_HEIGHT/225);
+// PC image dimensions and specs for use throughout
+const PC_HEIGHT = 50;
+const PC_WIDTH = 100;
+const PC_INPUT = PC_HEIGHT/2;
 
 const SUB_LABELS = "₁₂₃₄₅₆₇₈₉";
 function getSGLabel(angles, id) {
@@ -20,30 +30,47 @@ function getSGLabel(angles, id) {
   return 'n\u0302'+SUB_LABELS[id];
 }
 
-export default function LabPanel({ experiment, setExperiment, displayBools }) {
+function useImage(src) {
+  const imgRef = useRef(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoaded(false);
+    imgRef.current = null;
+
+    const img = new Image();
+    img.src = src;
+    img.onload = () => {
+      if (cancelled) return;
+      imgRef.current = img;
+      setLoaded(true);
+    };
+
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+
+  return [imgRef, loaded];
+}
+
+export default function LabPanel({ experiment, setExperiment, expMode, setExpMode, displayBools }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
   const [offset, setOffset] = useState({ x: 0, y: 0 }); // Used for mouse dragging events
   const [axis, setAxis] = useState(300); // y-coordinate of halfway down the canvas; determines position of all user-created devices
   // This ref holds the SG image for all time
-  const sgImageRef = useRef(null);
-  const [sgImageLoaded, setSgImageLoaded] = useState(false);
+  const [sgImageRef, sgImageLoaded] = useImage(sgImage);
+  // And this holds the particle counter image for all time
+  const [pcImageRef, pcImageLoaded] = useImage(pcImage);
 
   // Resize canvas to fill container
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
-
-    // Load the SG image once. This never touches the DOM — it's just an
-    // in-memory Image object we hand to ctx.drawImage as many times as we want.
-    const img = new Image();
-    img.src = sgImage;
-    img.onload = () => {
-      sgImageRef.current = img;
-      setSgImageLoaded(true);   // triggers a redraw now that it's actually ready
-    };
 
     const resizeCanvas = () => {
       const newWidth = container.clientWidth;
@@ -92,15 +119,62 @@ export default function LabPanel({ experiment, setExperiment, displayBools }) {
     if (sgImageRef.current && sgImageRef.current.complete) {
       experiment.forEach((sg, i) => {
         const x0 = SG_START_X + i * SG_SPACING;
+
+        // Draw the SGs
         ctx.drawImage(sgImageRef.current, x0, axis - SG_HEIGHT / 2, SG_WIDTH, SG_HEIGHT);
+
+        // Draw the basis label
         ctx.fillStyle = '#303030';
         ctx.font = '32px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(getSGLabel(sg.basis, i), x0+62, axis);
+
+        // Draw the path arcs (temporary)
+        const pathArcRadius = 150;
+        const pathArcAngle = 0.7; // rad
+
+        // ctx.strokeStyle = '#303030';
+        // ctx.setLineDash([10, 8]);
+        // ctx.lineWidth = 1.5;
+
+        // ctx.beginPath();
+        // ctx.arc(
+        //   x0 + SG_WIDTH, 
+        //   axis - (SG_HEIGHT/2) + SG_OUTPUT_UP - pathArcRadius, 
+        //   pathArcRadius, Math.PI/2, Math.PI/2 - pathArcAngle, true);
+        // ctx.stroke();
+
+        // ctx.beginPath();
+        // ctx.arc(
+        //   x0 + SG_WIDTH, 
+        //   axis - (SG_HEIGHT/2) + SG_OUTPUT_DOWN + pathArcRadius, 
+        //   pathArcRadius, -Math.PI/2, -Math.PI/2 + pathArcAngle, false);
+        // ctx.stroke();
+
+        // ctx.setLineDash([]); // Reset to solid lines
+
+        if (expMode.build === 'pc-place') {
+          const pcX0 = x0 + SG_WIDTH + pathArcRadius*Math.sin(pathArcAngle);
+          ctx.globalAlpha = 0.5;
+
+          ctx.save();
+          ctx.translate(pcX0, axis - SG_HEIGHT/2 + SG_OUTPUT_UP - pathArcRadius*(1-Math.cos(pathArcAngle)));
+          ctx.rotate(-pathArcAngle);
+          ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT/2, PC_WIDTH, PC_HEIGHT);
+          ctx.restore();
+
+          ctx.save();
+          ctx.translate(pcX0, axis - SG_HEIGHT/2 + SG_OUTPUT_DOWN + pathArcRadius*(1-Math.cos(pathArcAngle)));
+          ctx.rotate(pathArcAngle);
+          ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT/2, PC_WIDTH, PC_HEIGHT);
+          ctx.restore();
+
+          ctx.globalAlpha = 1.0;
+        }
       });
     }
-  }, [experiment, sgImageLoaded, axis, canvasDims, displayBools]);
+  }, [experiment, expMode, sgImageLoaded, pcImageLoaded, axis, canvasDims, displayBools]);
 
   // Mouse handlers
   // const handleMouseDown = (e) => {

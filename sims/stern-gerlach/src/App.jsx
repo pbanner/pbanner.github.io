@@ -66,6 +66,10 @@ export default function App() {
   const [displayBools, setDisplayBools] = useState({
     gridOn: true,             // Displaying the grid
   });
+  // build = 'normal', 'place-pc' for placing a particle counter, 'place-bb' for 
+  // placing a beam block, or 'running' when there's a particle propagating
+  // dc (for data collection) may be 'single' or 'stream'
+  const [expMode, setExpMode] = useState({ build: 'normal', dc: 'single' })
   // The experimental setup is coded as a list of present SG setups; each
   // setup has a measurement basis plus a statement about where its up and down
   // outputs are going
@@ -83,7 +87,7 @@ export default function App() {
     <div className="app-layout">
       {/* Main Canvas Area */}
       <div className="canvas-area">
-        <LabPanel experiment={experiment} setExperiment={setExperiment} displayBools={displayBools} />
+        <LabPanel experiment={experiment} setExperiment={setExperiment} expMode={expMode} setExpMode={setExpMode} displayBools={displayBools} />
       </div>
 
       {/* Right Sidebar */}
@@ -98,7 +102,7 @@ export default function App() {
                   <img src={sgImage} alt="" className="icon-button-image" />
                   <span>Add Stern-Gerlach</span>
                 </button>
-                <button type="button" className="control-bar-button icon-button" aria-label="Add particle counter">
+                <button type="button" className={`control-bar-button icon-button ${expMode.build === 'pc-place' ? 'active' : ''}`} aria-label="Add particle counter" onClick={() => setExpMode({ ...expMode, build: expMode.build === 'pc-place' ? 'normal' : 'pc-place' })}>
                   <img src={pcImage} alt="" className="icon-button-image" />
                   <span>Add Particle Counter</span>
                 </button>
@@ -115,15 +119,15 @@ export default function App() {
           <div className="control-bar-group">
             <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Set Measurement Bases</h3>
             {experiment.map((sg, i) => (
-              <AxisStepper index={i} sg={sg} setExperiment={setExperiment} />
+            <AxisStepper key={i} index={i} sg={sg} setExperiment={setExperiment} />
             ))}
           </div>
           {/* Data Collection Controls */}
           <div className="control-bar-group">
             <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Data Collection Controls</h3>
             <div style = {{ padding: '4px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label><input type="radio" name="DCmode" value="one" />One particle</label>
-              <label><input type="radio" name="DCmode" value="stream" />Particle stream</label>
+              <label><input type="radio" name="DCmode" value="single" checked={expMode.dc === 'single'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} />One particle</label>
+              <label><input type="radio" name="DCmode" value="stream" checked={expMode.dc === 'stream'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} />Particle stream</label>
             </div>
             <button className="control-bar-button" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px'}}>
               <PlayIcon /> {/* <PauseIcon />} */}
