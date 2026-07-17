@@ -4,6 +4,28 @@ import LabPanel from './LabPanel';
 import sgImage from './assets/SG.png';
 import pcImage from './assets/PC.png';
 
+// Unicode glyphs (▶ ⏸ ⌂) bake their own, font-dependent vertical padding
+// into the glyph box, so flexbox centering lines up the boxes but not the
+// visible ink — hence the icon-vs-text misalignment. Drawing the icons
+// ourselves as SVG paths sidesteps that: there's no hidden glyph metrics,
+// so `alignItems: 'center'` centers exactly what's visible.
+function PlayIcon({ size = '0.9em' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style={{ display: 'block' }}>
+      <path d="M4 2l10 6-10 6z" />
+    </svg>
+  );
+}
+
+function PauseIcon({ size = '0.9em' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style={{ display: 'block' }}>
+      <rect x="3" y="2" width="4" height="12" />
+      <rect x="9" y="2" width="4" height="12" />
+    </svg>
+  );
+}
+
 function AxisStepper() {
   const options = ['X', 'Y', 'Z'];
   const [index, setIndex] = useState(2); // start on 'Z'
@@ -71,6 +93,21 @@ export default function App() {
             <AxisStepper />
             <AxisStepper />
             <AxisStepper />
+          </div>
+          {/* Data Collection Controls */}
+          <div className="control-bar-group">
+            <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Data Collection Controls</h3>
+            <div style = {{ padding: '4px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label><input type="radio" name="DCmode" value="one" />One particle</label>
+              <label><input type="radio" name="DCmode" value="stream" />Particle stream</label>
+            </div>
+            <button className="control-button" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', margin: 0, fontSize: '0.9rem' }}>
+              <PlayIcon /> {/* <PauseIcon />} */}
+              Start
+            </button>
+            <button className="control-button" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', margin: 0, fontSize: '0.9rem' }}>
+              Reset Data Collection
+            </button>
           </div>
         </div>
       </aside>
