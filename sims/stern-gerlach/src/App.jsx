@@ -70,17 +70,17 @@ export default function App() {
             <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Build Experiment</h3>
             <div style={{ display: 'flex', flexDirection: 'row', gap: '8px' }}>
               <div style={{display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <button type="button" className="control-button icon-button" aria-label="Add Stern-Gerlach apparatus">
+                <button type="button" className="control-bar-button icon-button" aria-label="Add Stern-Gerlach apparatus">
                   <img src={sgImage} alt="" className="icon-button-image" />
                   <span>Add Stern-Gerlach</span>
                 </button>
-                <button type="button" className="control-button icon-button" aria-label="Add particle counter">
+                <button type="button" className="control-bar-button icon-button" aria-label="Add particle counter">
                   <img src={pcImage} alt="" className="icon-button-image" />
                   <span>Add Particle Counter</span>
                 </button>
               </div>
               <div style={{display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <button type="button" className="control-button icon-button" aria-label="Add Stern-Gerlach apparatus">
+                <button type="button" className="control-bar-button icon-button" aria-label="Add Stern-Gerlach apparatus">
                   <img src={sgImage} alt="" className="icon-button-image" />
                   <span>Add Beam Block</span>
                 </button>
@@ -101,7 +101,7 @@ export default function App() {
               <label><input type="radio" name="DCmode" value="one" />One particle</label>
               <label><input type="radio" name="DCmode" value="stream" />Particle stream</label>
             </div>
-            <button className="control-bar-button" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px'}}>
+            <button className="control-bar-button" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px'}}>
               <PlayIcon /> {/* <PauseIcon />} */}
               Start
             </button>

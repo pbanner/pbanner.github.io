@@ -39,7 +39,8 @@
 /* Panel Controls */
 .control-bar-group {
   flex-direction: column;
-  flex: 1;
+  flex: 1 1 150px;
+  min-width: 150px;
   border: 1px solid #ccc;
   border-radius: 6px;
   padding: 8px 10px;
@@ -136,6 +137,7 @@ Icon buttons
   gap: 4px;
   padding: 8px;
   font-size: 0.60rem;
+  min-width: 120px;
 }
 
 .icon-button-image {
