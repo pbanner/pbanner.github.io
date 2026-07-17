@@ -18,20 +18,17 @@ export default function LabPanel({ displayBools }) {
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    // Rezise the canvas
     const resizeCanvas = () => {
       const newWidth = container.clientWidth;
       const newHeight = container.clientHeight;
       canvas.width = newWidth;
       canvas.height = newHeight;
       setCanvasDims({ width: newWidth, height: newHeight });
-    };
-    resizeCanvas();
 
-    // Set the axis to be halfway down the canvas
-    const halfwayY = canvasDims.height / 2;
-    setAxis(halfwayY);
-    setCircle({ ...circle, y: halfwayY });
+      const halfwayY = newHeight / 2;
+      setAxis(halfwayY);
+      setCircle((prev) => ({ ...prev, y: halfwayY }));
+    };
 
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
