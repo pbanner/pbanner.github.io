@@ -3,11 +3,14 @@ import React, { useRef, useEffect, useState } from 'react';
 export default function LabPanel({ displayBools }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
+  const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
+  const [axis, setAxis] = useState(300); // y-coordinate of halfway down the canvas; determines position of all user-created devices
+
+  // All old and temporary
   const [circle, setCircle] = useState({ x: 300, y: 200, radius: 8 });
   const [draggingCircle, setDraggingCircle] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [circleColor, setCircleColor] = useState(false);
-  const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
 
   // Resize canvas to fill container
   useEffect(() => {
@@ -15,13 +18,20 @@ export default function LabPanel({ displayBools }) {
     const container = containerRef.current;
     if (!canvas || !container) return;
 
+    // Rezise the canvas
     const resizeCanvas = () => {
       const newWidth = container.clientWidth;
       const newHeight = container.clientHeight;
       canvas.width = newWidth;
       canvas.height = newHeight;
-      setCanvasDims({ width: newWidth, height: newHeight }); // Trigger redraw
+      setCanvasDims({ width: newWidth, height: newHeight });
     };
+    resizeCanvas();
+
+    // Set the axis to be halfway down the canvas
+    const halfwayY = canvasDims.height / 2;
+    setAxis(halfwayY);
+    setCircle({ ...circle, y: halfwayY });
 
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
