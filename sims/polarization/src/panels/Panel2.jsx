@@ -518,7 +518,7 @@ function PoincareSphere({ theta, phi }) {
     // the canvas rather than becoming a sibling flex item, so it can't
     // affect the heading/canvas alignment above it.
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <Canvas camera={{ position: SPHERE_INITIAL_CAMERA_POSITION, fov: 30 }} style={{ width: '100%', height: '100%' }}>
+      <Canvas camera={{ position: SPHERE_INITIAL_CAMERA_POSITION, fov: 35 }} style={{ width: '100%', height: '100%' }}>
         <mesh>
           <sphereGeometry args={[1, 32, 32]} />
           <meshBasicMaterial color="gray" transparent opacity={0.25} side={THREE.DoubleSide} depthWrite={false} />
@@ -775,7 +775,7 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
           <div style={{ flex: 7, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <h3 style={{ textAlign: 'center', margin: '0 0 0.25em 0', flexShrink: 0 }}>Electric Field Components</h3>
             <div style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
-              <Canvas camera={{ position: INITIAL_CAMERA_POSITION, fov: 32 }} style={{ width: '100%', height: '100%' }}>
+              <Canvas camera={{ position: INITIAL_CAMERA_POSITION, fov: 35 }} style={{ width: '100%', height: '100%' }}>
                 <Axes />
                 {animDisplayBools.obsPlane && <ObservationPlane />}
                 <PolarizationEllipse theta={theta} phi={phi} visible={animDisplayBools.obsPlane && animDisplayBools.obsPlaneEllipse} />
