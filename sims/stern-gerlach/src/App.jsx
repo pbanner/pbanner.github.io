@@ -16,8 +16,8 @@ export default function App() {
       </div>
 
       {/* Right Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-content">
+      <aside className="control-bar">
+        <div className="control-bar-content">
           <p>Just some text for now</p>
         </div>
       </aside>
