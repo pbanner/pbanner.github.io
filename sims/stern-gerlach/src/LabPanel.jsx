@@ -194,20 +194,17 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
   //   }
   // };
 
-  // const handleMouseMove = (e) => {
-  //   if (!draggingCircle) return;
+  const handleMouseMove = (e) => {
+    if (expMode.build === 'normal' || expMode.build === 'running') return;
 
-  //   const canvas = canvasRef.current;
-  //   const rect = canvas.getBoundingClientRect();
-  //   const mouseX = e.clientX - rect.left;
-  //   const mouseY = e.clientY - rect.top;
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
 
-  //   setCircle({
-  //     ...circle,
-  //     x: Math.max(circle.radius, Math.min(canvas.width - circle.radius, mouseX - offset.x)),
-  //     y: Math.max(circle.radius, Math.min(canvas.height - circle.radius, mouseY - offset.y)),
-  //   });
-  // };
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(pcImageRef.current, mouseX, mouseY, PC_WIDTH, PC_HEIGHT);
+  };
 
   // const handleMouseUp = () => {
   //   setDraggingCircle(false);
@@ -218,7 +215,7 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
       <canvas
         ref={canvasRef}
         //onMouseDown={handleMouseDown}
-        //onMouseMove={handleMouseMove}
+        onMouseMove={handleMouseMove}
         //onMouseUp={handleMouseUp}
         //onMouseLeave={handleMouseUp}
         style={{
