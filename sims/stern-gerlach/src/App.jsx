@@ -109,6 +109,13 @@ export default function App() {
               Reset Data Collection
             </button>
           </div>
+          {/* Histogram canvas area */}
+          <div className="histogram-panel">
+            <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Histogram</h3>
+            <div className="histogram-canvas-wrap">
+              <canvas />
+            </div>
+          </div>
         </div>
       </aside>
     </div>
