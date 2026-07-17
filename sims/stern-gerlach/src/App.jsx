@@ -14,6 +14,13 @@ export default function App() {
       <div className="canvas-area">
         <LabPanel displayBools={displayBools} />
       </div>
+
+      {/* Right Sidebar */}
+      <aside className="sidebar">
+        <div className="sidebar-content">
+          <p>Just some text for now</p>
+        </div>
+      </aside>
     </div>
   );
 }
