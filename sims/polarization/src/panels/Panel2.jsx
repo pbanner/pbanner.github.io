@@ -86,14 +86,86 @@ const checkboxColumnStyle = {
   whiteSpace: 'nowrap',
 };
 
+// -- Complex-number helpers, used only for the component-basis decomposition below.
+function cMul(a, b) {
+  return { re: a.re * b.re - a.im * b.im, im: a.re * b.im + a.im * b.re };
+}
+function cAdd(a, b) {
+  return { re: a.re + b.re, im: a.im + b.im };
+}
+function cConj(a) {
+  return { re: a.re, im: -a.im };
+}
+
+// Projects the physical field's Jones vector (in the fixed H/V basis) onto a
+// rotated, generally elliptical component basis {e_u, e_v} -- parametrized
+// the same way the physical state itself is: basisTheta splits amplitude
+// between the two basis vectors, basisPhi is the relative phase between
+// each basis vector's own H and V parts. At (basisTheta, basisPhi) = (0, 0)
+// this is exactly H/V.
+//
+// Returns, for each basis component, the complex phasor of its H and V
+// contribution to the field -- everything needed to reconstruct that
+// component's real, time-varying (H, V) vector at any point x along the
+// propagation axis via projectPhasor() below. These phasors don't depend on
+// x or t themselves -- decomposing a polarization state into a different
+// polarization basis is a property of the ellipse's shape, not of where
+// along the propagation direction you happen to be looking.
+function decomposeFieldIntoBasis(theta, phi, basisTheta, basisPhi) {
+  // Physical field's phasor amplitudes in the fixed H/V basis.
+  const Ah = { re: Math.cos(theta), im: 0 };
+  const Av = { re: -Math.sin(theta) * Math.cos(phi), im: -Math.sin(theta) * Math.sin(phi) };
+
+  // The two basis vectors, each a Jones vector in the same H/V basis.
+  const euH = { re: Math.cos(basisTheta), im: 0 };
+  const euV = { re: -Math.sin(basisTheta) * Math.cos(basisPhi), im: -Math.sin(basisTheta) * Math.sin(basisPhi) };
+  const evH = { re: Math.sin(basisTheta), im: 0 };
+  const evV = { re: Math.cos(basisTheta) * Math.cos(basisPhi), im: Math.cos(basisTheta) * Math.sin(basisPhi) };
+
+  // Hermitian projection coefficients: c = <e, J> = conj(e_H)*A_h + conj(e_V)*A_v
+  const cu = cAdd(cMul(cConj(euH), Ah), cMul(cConj(euV), Av));
+  const cv = cAdd(cMul(cConj(evH), Ah), cMul(cConj(evV), Av));
+
+  return {
+    uH: cMul(cu, euH), uV: cMul(cu, euV),
+    vH: cMul(cv, evH), vV: cMul(cv, evV),
+  };
+}
+
+// Re[ z * exp(i*(K*x - OMEGA*t)) ], i.e. the real, physical value at position
+// x and time t contributed by a phasor z from decomposeFieldIntoBasis(). This
+// is the same phase convention Ehoriz/Evert use: projectPhasor of the plain
+// (undecomposed) H/V phasors reproduces them exactly at every x, not just x=0.
+function projectPhasor(z, x, t) {
+  const phase = K * x - OMEGA * t;
+  return z.re * Math.cos(phase) - z.im * Math.sin(phase);
+}
+
 // One row of a slider + a synced number box, matching AngleControl in
-// App.jsx in spirit — inert for now, not wired to any state yet.
-function DummyAngleRow({ label, defaultValue, min, max }) {
+// App.jsx in spirit.
+function AngleSliderRow({ label, valueDeg, onChangeDeg, min, max }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
       <span style={{ minWidth: '14px' }}>{label}</span>
-      <input type="range" defaultValue={defaultValue} min={min} max={max} style={{ flex: 1 }} />
-      <input type="number" defaultValue={defaultValue} min={min} max={max} style={{ width: '48px', padding: '2px' }} />
+      <input
+        type="range"
+        value={valueDeg}
+        min={min}
+        max={max}
+        onChange={(e) => onChangeDeg(parseFloat(e.target.value))}
+        style={{ flex: 1 }}
+      />
+      <input
+        type="number"
+        value={valueDeg}
+        min={min}
+        max={max}
+        onChange={(e) => {
+          const v = parseFloat(e.target.value);
+          if (!Number.isNaN(v)) onChangeDeg(v);
+        }}
+        style={{ width: '48px', padding: '2px' }}
+      />
     </div>
   );
 }
@@ -244,8 +316,14 @@ function updateArrow(arrow, vec) {
   arrow.setLength(length, headLength, headLength * 0.5);
 }
 
-// Red/blue component arrows and the green total-field arrow, all evaluated at x = 0
-function FieldVectors({ theta, phi, paused, displayBools }) {
+// Red/blue component arrows and the green total-field arrow, all evaluated at x = 0.
+// The red/blue arrows are drawn in the user-selected (basisTheta, basisPhi) component
+// basis rather than fixed H/V; since that basis can be elliptical (nonzero basisPhi),
+// each component's own (H, V) direction can rotate over time, not just its length --
+// hence recomputing a full vector each frame rather than just scaling a fixed axis.
+// The green total-field arrow is basis-independent by construction (it's just the
+// physical field vector), so it's computed directly from Ehoriz/Evert as before.
+function FieldVectors({ theta, phi, paused, displayBools, coeffs }) {
   const redArrow = useRef();
   const blueArrow = useRef();
   const greenArrow = useRef();
@@ -260,8 +338,8 @@ function FieldVectors({ theta, phi, paused, displayBools }) {
     const eh = Ehoriz(0, t, theta);
     const ev = Evert(0, t, theta, phi);
 
-    updateArrow(redArrow.current, new THREE.Vector3(0, 0, eh));
-    updateArrow(blueArrow.current, new THREE.Vector3(0, ev, 0));
+    updateArrow(redArrow.current, new THREE.Vector3(0, projectPhasor(coeffs.uV, 0, t), projectPhasor(coeffs.uH, 0, t)));
+    updateArrow(blueArrow.current, new THREE.Vector3(0, projectPhasor(coeffs.vV, 0, t), projectPhasor(coeffs.vH, 0, t)));
     updateArrow(greenArrow.current, new THREE.Vector3(0, ev, eh));
   });
 
@@ -293,6 +371,24 @@ function PolarizationEllipse({ theta, phi, visible }) {
     [theta, phi]
   );
   return <Line points={points} color="green" lineWidth={2} visible={visible} />;
+}
+
+// Same idea as computeEllipsePoints/PolarizationEllipse, but traces one
+// component-basis vector's own (H, V) path via projectPhasor instead of the
+// physical Ehoriz/Evert -- this is what lets it show as a proper ellipse
+// (not just a line) when the component basis is elliptical, exactly
+// mirroring how the red/blue arrows and curtains were generalized.
+function ComponentEllipse({ phasorH, phasorV, color, visible }) {
+  const points = useMemo(() => {
+    const period = (2 * Math.PI) / OMEGA;
+    const pts = [];
+    for (let i = 0; i <= 200; i++) {
+      const t = (i / 200) * period;
+      pts.push(new THREE.Vector3(0, projectPhasor(phasorV, 0, t), projectPhasor(phasorH, 0, t)));
+    }
+    return pts;
+  }, [phasorH, phasorV]);
+  return <Line points={points} color={color} lineWidth={2} visible={visible} />;
 }
 
 // Stokes-parameter coordinates for the current polarization state, using the
@@ -501,7 +597,7 @@ function HomeIcon({ size = '1em' }) {
   );
 }
 
-function AnimControls({ paused, setPaused, onHomeView, animDisplayBools, setAnimDisplayBools }) {
+function AnimControls({ paused, setPaused, onHomeView, animDisplayBools, setAnimDisplayBools, basisAngleDeg, setBasisAngleDeg, basisPhaseDeg, setBasisPhaseDeg }) {
   return (
     <div style={animControlsWrapperStyle}>
       {/* Row 1: play/pause and Home View, centered */}
@@ -528,6 +624,7 @@ function AnimControls({ paused, setPaused, onHomeView, animDisplayBools, setAnim
             <div style={checkboxColumnStyle}>
               <label><input type="checkbox" checked={animDisplayBools.obsPlane} onChange={(e) => setAnimDisplayBools({ ...animDisplayBools, obsPlane: e.target.checked })} /> Observation plane</label>
               <label><input type="checkbox" disabled={!animDisplayBools.obsPlane} checked={animDisplayBools.obsPlaneEllipse} onChange={(e) => setAnimDisplayBools({ ...animDisplayBools, obsPlaneEllipse: e.target.checked })} /> Polarization ellipse</label>
+              <label><input type="checkbox" disabled={!animDisplayBools.obsPlane} checked={animDisplayBools.compEllipses} onChange={(e) => setAnimDisplayBools({ ...animDisplayBools, compEllipses: e.target.checked })} /> Component ellipses</label>
               <label><input type="checkbox" disabled={!animDisplayBools.obsPlane} checked={animDisplayBools.compArrows} onChange={(e) => setAnimDisplayBools({ ...animDisplayBools, compArrows: e.target.checked })} /> Component field vectors</label>
               <label><input type="checkbox" disabled={!animDisplayBools.obsPlane} checked={animDisplayBools.totalArrow} onChange={(e) => setAnimDisplayBools({ ...animDisplayBools, totalArrow: e.target.checked })} /> Total field vector</label>
             </div>
@@ -536,10 +633,12 @@ function AnimControls({ paused, setPaused, onHomeView, animDisplayBools, setAnim
 
         <div style={controlBoxStyle}>
           <p style={{ margin: '0 0 10px 0', fontWeight: 'bold' }}>Component basis</p>
-          <DummyAngleRow label="θ" defaultValue={45} min={0} max={90} />
-          <DummyAngleRow label="φ" defaultValue={0} min={-180} max={180} />
+          <AngleSliderRow label="θ" valueDeg={basisAngleDeg} onChangeDeg={setBasisAngleDeg} min={0} max={90} />
+          <AngleSliderRow label="φ" valueDeg={basisPhaseDeg} onChangeDeg={setBasisPhaseDeg} min={-180} max={180} />
           <div style={{ textAlign: 'center', marginTop: '8px' }}>
-            <button className="control-button">Reset to H/V</button>
+            <button className="control-button" onClick={() => { setBasisAngleDeg(0); setBasisPhaseDeg(0); }}>
+              Reset to H/V
+            </button>
           </div>
         </div>
       </div>
@@ -615,7 +714,20 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
   const { theta, phi } = polState;
   const { animation: showAnimation, ellipse: showEllipse, sphere: showSphere } = panel2displayBools;
   const [paused, setPaused] = useState(false);
-  const [animDisplayBools, setAnimDisplayBools] = useState({ compFields: false, totalField: true, obsPlane: true, obsPlaneEllipse: false, compArrows: false, totalArrow: true });
+  const [animDisplayBools, setAnimDisplayBools] = useState({ compFields: false, totalField: true, obsPlane: true, obsPlaneEllipse: false, compEllipses: false, compArrows: false, totalArrow: true });
+  // Component basis the red/blue field vectors and curtains are decomposed
+  // into: an amplitude-split angle and a relative phase, same parametrization
+  // as the physical polarization state itself. (0, 0) = H/V, matching
+  // "Reset to H/V". Computed once here (not separately per consumer) since
+  // it depends only on these angles and the physical state, not on x or t.
+  const [basisAngleDeg, setBasisAngleDeg] = useState(0);
+  const [basisPhaseDeg, setBasisPhaseDeg] = useState(0);
+  const basisTheta = basisAngleDeg * (Math.PI / 180);
+  const basisPhi = basisPhaseDeg * (Math.PI / 180);
+  const basisCoeffs = useMemo(
+    () => decomposeFieldIntoBasis(theta, phi, basisTheta, basisPhi),
+    [theta, phi, basisTheta, basisPhi]
+  );
 
   // Switching tabs such that this sim is no longer visible should pause the animation.
   // Create a ref so that the paused state survives re-render (paused must remain state
@@ -667,16 +779,23 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
                 <Axes />
                 {animDisplayBools.obsPlane && <ObservationPlane />}
                 <PolarizationEllipse theta={theta} phi={phi} visible={animDisplayBools.obsPlane && animDisplayBools.obsPlaneEllipse} />
-                <FieldCurtain vectorFn={(x, t) => ({ y: 0, z: Ehoriz(x, t, theta) })} color="red" opacity={0.25} paused={paused} visible={animDisplayBools.compFields} />
-                <FieldCurtain vectorFn={(x, t) => ({ y: Evert(x, t, theta, phi), z: 0 })} color="#00ccff" opacity={0.2} paused={paused} visible={animDisplayBools.compFields} />
+                <ComponentEllipse phasorH={basisCoeffs.uH} phasorV={basisCoeffs.uV} color="red" visible={animDisplayBools.obsPlane && animDisplayBools.compEllipses} />
+                <ComponentEllipse phasorH={basisCoeffs.vH} phasorV={basisCoeffs.vV} color="#00ccff" visible={animDisplayBools.obsPlane && animDisplayBools.compEllipses} />
+                <FieldCurtain vectorFn={(x, t) => ({ y: projectPhasor(basisCoeffs.uV, x, t), z: projectPhasor(basisCoeffs.uH, x, t) })} color="red" opacity={0.25} paused={paused} visible={animDisplayBools.compFields} />
+                <FieldCurtain vectorFn={(x, t) => ({ y: projectPhasor(basisCoeffs.vV, x, t), z: projectPhasor(basisCoeffs.vH, x, t) })} color="#00ccff" opacity={0.2} paused={paused} visible={animDisplayBools.compFields} />
                 <FieldCurtain vectorFn={(x, t) => ({ y: Evert(x, t, theta, phi), z: Ehoriz(x, t, theta) })} color="green" opacity={0.15} paused={paused} visible={animDisplayBools.totalField} />
-                <FieldVectors theta={theta} phi={phi} paused={paused} displayBools={animDisplayBools} />
+                <FieldVectors theta={theta} phi={phi} paused={paused} displayBools={animDisplayBools} coeffs={basisCoeffs} />
                 <OrbitControls ref={controlsRef} target={INITIAL_CAMERA_TARGET} />
               </Canvas>
             </div>
           </div>
           <div style={{ flex: 3, minWidth: 0, minHeight: 0 }}>
-            <AnimControls paused={paused} setPaused={setPaused} onHomeView={resetView} animDisplayBools={animDisplayBools} setAnimDisplayBools={setAnimDisplayBools} />
+            <AnimControls
+              paused={paused} setPaused={setPaused} onHomeView={resetView}
+              animDisplayBools={animDisplayBools} setAnimDisplayBools={setAnimDisplayBools}
+              basisAngleDeg={basisAngleDeg} setBasisAngleDeg={setBasisAngleDeg}
+              basisPhaseDeg={basisPhaseDeg} setBasisPhaseDeg={setBasisPhaseDeg}
+            />
           </div>
         </div>
       </div>
