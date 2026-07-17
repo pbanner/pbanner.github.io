@@ -1,22 +1,35 @@
 import React, { useRef, useEffect, useState } from 'react';
+import sgImage from './assets/SG.png';
 
-export default function LabPanel({ displayBools }) {
+const SG_WIDTH = 160;
+const SG_HEIGHT = 90;
+const SG_SPACING = 300;   // horizontal gap between apparatus centers
+const SG_START_X = 150;   // x-position of the first apparatus
+
+export default function LabPanel({ experiment, setExperiment, displayBools }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
+  const [offset, setOffset] = useState({ x: 0, y: 0 }); // Used for mouse dragging events
   const [axis, setAxis] = useState(300); // y-coordinate of halfway down the canvas; determines position of all user-created devices
-
-  // All old and temporary
-  const [circle, setCircle] = useState({ x: 300, y: 200, radius: 8 });
-  const [draggingCircle, setDraggingCircle] = useState(false);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [circleColor, setCircleColor] = useState(false);
+  // This ref holds the SG image for all time
+  const sgImageRef = useRef(null);
+  const [sgImageLoaded, setSgImageLoaded] = useState(false);
 
   // Resize canvas to fill container
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
+
+    // Load the SG image once. This never touches the DOM — it's just an
+    // in-memory Image object we hand to ctx.drawImage as many times as we want.
+    const img = new Image();
+    img.src = sgImage;
+    img.onload = () => {
+      sgImageRef.current = img;
+      setSgImageLoaded(true);   // triggers a redraw now that it's actually ready
+    };
 
     const resizeCanvas = () => {
       const newWidth = container.clientWidth;
@@ -27,7 +40,6 @@ export default function LabPanel({ displayBools }) {
 
       const halfwayY = newHeight / 2;
       setAxis(halfwayY);
-      setCircle((prev) => ({ ...prev, y: halfwayY }));
     };
 
     resizeCanvas();
@@ -62,65 +74,67 @@ export default function LabPanel({ displayBools }) {
       ctx.stroke();
     }
 
-    // Draw circle
-    ctx.fillStyle = circleColor ? '#e74c3c' : '#39db34';
-    ctx.beginPath();
-    ctx.arc(circle.x, circle.y, circle.radius, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Draw circle outline
-    ctx.strokeStyle = circleColor ? '#c0392b' : '#2bb929';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  }, [circle, circleColor, canvasDims, displayBools]);
-
-  // Mouse handlers
-  const handleMouseDown = (e) => {
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const dist = Math.sqrt((mouseX - circle.x) ** 2 + (mouseY - circle.y) ** 2);
-
-    if (dist < circle.radius + 5) {
-      setDraggingCircle(true);
-      setOffset({
-        x: mouseX - circle.x,
-        y: mouseY - circle.y,
+    // Draw the SGs, one copy of the ref image each, plus the basis labels
+    if (sgImageRef.current && sgImageRef.current.complete) {
+      experiment.forEach((sg, i) => {
+        const x0 = SG_START_X + i * SG_SPACING;
+        ctx.drawImage(sgImageRef.current, x0, axis - SG_HEIGHT / 2, SG_WIDTH, SG_HEIGHT);
+        ctx.fillStyle = '#303030';
+        ctx.font = '32px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`X`, x0+62, axis);
       });
     }
-  };
+  }, [experiment, sgImageLoaded, axis, canvasDims, displayBools]);
 
-  const handleMouseMove = (e) => {
-    if (!draggingCircle) return;
+  // Mouse handlers
+  // const handleMouseDown = (e) => {
+  //   const canvas = canvasRef.current;
+  //   const rect = canvas.getBoundingClientRect();
+  //   const mouseX = e.clientX - rect.left;
+  //   const mouseY = e.clientY - rect.top;
 
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+  //   const dist = Math.sqrt((mouseX - circle.x) ** 2 + (mouseY - circle.y) ** 2);
 
-    setCircle({
-      ...circle,
-      x: Math.max(circle.radius, Math.min(canvas.width - circle.radius, mouseX - offset.x)),
-      y: Math.max(circle.radius, Math.min(canvas.height - circle.radius, mouseY - offset.y)),
-    });
-  };
+  //   if (dist < circle.radius + 5) {
+  //     setDraggingCircle(true);
+  //     setOffset({
+  //       x: mouseX - circle.x,
+  //       y: mouseY - circle.y,
+  //     });
+  //   }
+  // };
 
-  const handleMouseUp = () => {
-    setDraggingCircle(false);
-  };
+  // const handleMouseMove = (e) => {
+  //   if (!draggingCircle) return;
+
+  //   const canvas = canvasRef.current;
+  //   const rect = canvas.getBoundingClientRect();
+  //   const mouseX = e.clientX - rect.left;
+  //   const mouseY = e.clientY - rect.top;
+
+  //   setCircle({
+  //     ...circle,
+  //     x: Math.max(circle.radius, Math.min(canvas.width - circle.radius, mouseX - offset.x)),
+  //     y: Math.max(circle.radius, Math.min(canvas.height - circle.radius, mouseY - offset.y)),
+  //   });
+  // };
+
+  // const handleMouseUp = () => {
+  //   setDraggingCircle(false);
+  // };
 
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%' }}>
       <canvas
         ref={canvasRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+        //onMouseDown={handleMouseDown}
+        //onMouseMove={handleMouseMove}
+        //onMouseUp={handleMouseUp}
+        //onMouseLeave={handleMouseUp}
         style={{
-          cursor: draggingCircle ? 'grabbing' : 'grab',
+          //cursor: draggingCircle ? 'grabbing' : 'grab',
           display: 'block',
           touchAction: 'none',
         }}

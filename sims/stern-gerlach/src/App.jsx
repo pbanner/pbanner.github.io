@@ -54,12 +54,24 @@ export default function App() {
   const [displayBools, setDisplayBools] = useState({
     gridOn: true,             // Displaying the grid
   });
+  // The experimental setup is coded as a list of present SG setups; each
+  // setup has a measurement basis plus a statement about where its up and down
+  // outputs are going
+  // Start with one apparatus already in place
+  const [experiment, setExperiment] = useState([{ basis: [0, 0], up: null, down: null }]);
+
+  const addSternGerlach = () => {
+    setExperiment((prev) => [
+      ...prev,
+      { basis: [0, 0], up: null, down: null },
+    ]);
+  };
 
   return (
     <div className="app-layout">
       {/* Main Canvas Area */}
       <div className="canvas-area">
-        <LabPanel displayBools={displayBools} />
+        <LabPanel experiment={experiment} setExperiment={setExperiment} displayBools={displayBools} />
       </div>
 
       {/* Right Sidebar */}
@@ -70,7 +82,7 @@ export default function App() {
             <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Build Experiment</h3>
             <div style={{ display: 'flex', flexDirection: 'row', gap: '8px' }}>
               <div style={{display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <button type="button" className="control-bar-button icon-button" aria-label="Add Stern-Gerlach apparatus">
+                <button type="button" className="control-bar-button icon-button" aria-label="Add Stern-Gerlach apparatus" onClick={addSternGerlach}>
                   <img src={sgImage} alt="" className="icon-button-image" />
                   <span>Add Stern-Gerlach</span>
                 </button>
