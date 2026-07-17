@@ -26,20 +26,23 @@ function PauseIcon({ size = '0.9em' }) {
   );
 }
 
-function AxisStepper() {
-  const options = ['X', 'Y', 'Z'];
+const SG_OPTION_LABELS = ['X', 'Y', 'Z'];
+const SG_OPTION_BASES = [[Math.PI/2, 0], [Math.PI/2, Math.PI/2], [0,0]];
+function AxisStepper(numid, experiment, setExperiment) {
   const [index, setIndex] = useState(2); // start on 'Z'
 
   const step = (delta) => {
-    setIndex((i) => (i + delta + options.length) % options.length);
+    const newIndex = (i + delta + SG_OPTION_LABELS.length) % SG_OPTION_LABELS.length;
+    setIndex((i) => newIndex);
+    // setExperiment call here
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'row', gap: '10px', padding: '6px' }}>
       <input type="checkbox" />
-      <label>SG1</label>
+      <label>{'SG' + numid}</label>
       <div className="axis-stepper">
-        <span className="axis-stepper-value">{options[index]}</span>
+        <span className="axis-stepper-value">{SG_OPTION_LABELS[index]}</span>
         <div className="axis-stepper-arrows">
           <button type="button" className="axis-stepper-arrow" onClick={() => step(1)} aria-label="Next axis">▲</button>
           <button type="button" className="axis-stepper-arrow" onClick={() => step(-1)} aria-label="Previous axis">▼</button>
@@ -102,9 +105,7 @@ export default function App() {
           {/* Set Measurement Basis Controls */}
           <div className="control-bar-group">
             <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Set Measurement Bases</h3>
-            <AxisStepper />
-            <AxisStepper />
-            <AxisStepper />
+            <AxisStepper numid={1} />
           </div>
           {/* Data Collection Controls */}
           <div className="control-bar-group">

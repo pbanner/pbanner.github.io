@@ -6,6 +6,20 @@ const SG_HEIGHT = 90;
 const SG_SPACING = 300;   // horizontal gap between apparatus centers
 const SG_START_X = 150;   // x-position of the first apparatus
 
+const SUB_LABELS = "₁₂₃₄₅₆₇₈₉";
+function getSGLabel(angles, id) {
+  if (angles[0] == 0) {
+    return 'Z';
+  } else if (angles[0] == Math.pi/2) {
+    if (angles[1] == 0) {
+      return 'X';
+    } else if (angles[1] == Math.pi/2) {
+      return 'Y';
+    }
+  }
+  return 'n\u0302'+SUB_LABELS[id];
+}
+
 export default function LabPanel({ experiment, setExperiment, displayBools }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
@@ -83,7 +97,7 @@ export default function LabPanel({ experiment, setExperiment, displayBools }) {
         ctx.font = '32px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(`X`, x0+62, axis);
+        ctx.fillText(getSGLabel(sg.basis, i), x0+62, axis);
       });
     }
   }, [experiment, sgImageLoaded, axis, canvasDims, displayBools]);
