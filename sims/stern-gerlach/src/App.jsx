@@ -27,21 +27,31 @@ function PauseIcon({ size = '0.9em' }) {
 }
 
 const SG_OPTION_LABELS = ['X', 'Y', 'Z'];
-const SG_OPTION_BASES = [[Math.PI/2, 0], [Math.PI/2, Math.PI/2], [0,0]];
-function AxisStepper(numid, experiment, setExperiment) {
-  const [index, setIndex] = useState(2); // start on 'Z'
+const SG_OPTION_BASES = [[Math.PI/2, 0], [Math.PI/2, Math.PI/2], [0, 0]];
+
+function AxisStepper({ index, sg, setExperiment }) {
+  const currentIndex = SG_OPTION_BASES.findIndex(
+    ([theta, phi]) => theta === sg.basis[0] && phi === sg.basis[1]
+  );
 
   const step = (delta) => {
-    setIndex((i) => (i + delta + SG_OPTION_LABELS.length) % SG_OPTION_LABELS.length);
-    // setExperiment call here
+    setExperiment((prev) => {
+      const base = currentIndex === -1 ? 0 : currentIndex;
+      const nextIndex = (base + delta + SG_OPTION_LABELS.length) % SG_OPTION_LABELS.length;
+      const next = [...prev];                                  // copy the array
+      next[index] = { ...next[index], basis: SG_OPTION_BASES[nextIndex] };  // copy+replace just this entry
+      return next;
+    });
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'row', gap: '10px', padding: '6px' }}>
       <input type="checkbox" />
-      <label>{'SG' + numid}</label>
+      <label>{'SG' + (index + 1)}</label>
       <div className="axis-stepper">
-        <span className="axis-stepper-value">{SG_OPTION_LABELS[index]}</span>
+        <span className="axis-stepper-value">
+          {currentIndex === -1 ? '?' : SG_OPTION_LABELS[currentIndex]}
+        </span>
         <div className="axis-stepper-arrows">
           <button type="button" className="axis-stepper-arrow" onClick={() => step(1)} aria-label="Next axis">▲</button>
           <button type="button" className="axis-stepper-arrow" onClick={() => step(-1)} aria-label="Previous axis">▼</button>
@@ -104,7 +114,9 @@ export default function App() {
           {/* Set Measurement Basis Controls */}
           <div className="control-bar-group">
             <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Set Measurement Bases</h3>
-            <AxisStepper numid={1} />
+            {experiment.map((sg, i) => (
+              <AxisStepper index={i} sg={sg} setExperiment={setExperiment} />
+            ))}
           </div>
           {/* Data Collection Controls */}
           <div className="control-bar-group">

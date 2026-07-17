@@ -10,10 +10,10 @@ const SUB_LABELS = "₁₂₃₄₅₆₇₈₉";
 function getSGLabel(angles, id) {
   if (angles[0] == 0) {
     return 'Z';
-  } else if (angles[0] == Math.pi/2) {
+  } else if (angles[0] == Math.PI/2) {
     if (angles[1] == 0) {
       return 'X';
-    } else if (angles[1] == Math.pi/2) {
+    } else if (angles[1] == Math.PI/2) {
       return 'Y';
     }
   }
