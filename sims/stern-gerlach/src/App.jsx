@@ -32,8 +32,7 @@ function AxisStepper(numid, experiment, setExperiment) {
   const [index, setIndex] = useState(2); // start on 'Z'
 
   const step = (delta) => {
-    const newIndex = (i + delta + SG_OPTION_LABELS.length) % SG_OPTION_LABELS.length;
-    setIndex((i) => newIndex);
+    setIndex((i) => (i + delta + SG_OPTION_LABELS.length) % SG_OPTION_LABELS.length);
     // setExperiment call here
   };
 
