@@ -14,6 +14,8 @@ const TARGET_TICK_COUNT = 5; // aim for roughly this many ticks; niceTicks may l
 const BAR_GAP_RATIO = 0.3;   // fraction of each bar's horizontal slot left empty as a gap
 const BAR_GROUP_MARGIN = 24; // extra empty space to each side of the whole set of bars, beyond the axis padding
 const MAX_BAR_WIDTH = 60;    // a bar never grows wider than this, however few detectors there are
+const ERROR_BAR_WIDTH_RATIO = 0.4;
+const ERROR_BAR_WIDTH_MIN = 20;
 
 // Every PC currently placed in the experiment, in a stable left-to-right
 // order (by SG index, then up before down) -- this is what turns into one
@@ -142,12 +144,28 @@ export default function Histogram({ experiment, displayBools }) {
         ctx.fillStyle = PC_COLORS[d.colorId] ?? '#999999';
         ctx.fillRect(barX, barY, barWidth, barHeight);
 
+        const drawErrorBars = (d.count > 2 && displayBools.showErrorBars);
+        const errOffset = Math.sqrt(d.count)*(barHeight/d.count);
+        if (drawErrorBars) {
+          const halfErrorBarWidth = Math.min(barWidth*ERROR_BAR_WIDTH_RATIO, ERROR_BAR_WIDTH_MIN)/2;
+          ctx.strokeStyle = AXIS_COLOR;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(slotCenter - halfErrorBarWidth, barY - errOffset);
+          ctx.lineTo(slotCenter + halfErrorBarWidth, barY - errOffset);
+          ctx.moveTo(slotCenter, barY - errOffset);
+          ctx.lineTo(slotCenter, barY + errOffset);
+          ctx.moveTo(slotCenter - halfErrorBarWidth, barY + errOffset);
+          ctx.lineTo(slotCenter + halfErrorBarWidth, barY + errOffset);
+          ctx.stroke();
+        }
+
         ctx.fillStyle = PC_COLORS[d.colorId];
         ctx.font = '11px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
         const barLabel = (displayBools.showPercentages === 1 ? "" : String(d.count)) + ((displayBools.showPercentages !== 1 && dataTotal !== 0) ? " (" + (d.count/dataTotal*100).toFixed(1) + "%)" : "");
-        ctx.fillText(barLabel, barX + barWidth / 2, barY - 2);
+        ctx.fillText(barLabel, barX + barWidth / 2, barY - 4 - (drawErrorBars ? errOffset : 0));
       });
     }
   }, [experiment, displayBools, canvasDims]);
