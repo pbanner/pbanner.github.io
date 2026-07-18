@@ -63,6 +63,37 @@ function AxisStepper({ index, sg, setExperiment, disabled, resetDataCollection }
   );
 }
 
+function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step }) {
+  return (
+    <div className="control-group">
+      <label style={{ margin: '-0.25em 0em' }}>{label}</label> {/*: {valueNum.toFixed(1)}*/}
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={valueNum}
+          onChange={(e) => onChangeNum(parseFloat(e.target.value))}
+          style={{ flex: 1 }}
+        />
+        <input
+          type="number"
+          min={min}
+          max={max}
+          step={step}
+          value={valueNum}
+          onChange={(e) => {
+            const v = parseFloat(e.target.value);
+            if (!Number.isNaN(v)) onChangeNum(v);
+          }}
+          style={{ width: '70px', padding: '2px' }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function App() {  
   // Panel 1 state
   const [displayBools, setDisplayBools] = useState({
@@ -72,8 +103,9 @@ export default function App() {
   // build = 0 for normal operation, 1 for placing a particle counter, 2 for placing
   // a beam block, -1 for deleting stuff
   // running = true or false
+  // rate = number of particles per second
   // dc (for data collection) may be 'single' or 'stream'
-  const [expMode, setExpMode] = useState({ build: 0, dc: 'single', running: false })
+  const [expMode, setExpMode] = useState({ build: 0, dc: 'single', running: false, rate: 20 })
   // The experimental setup is coded as a list of present SG setups; each
   // setup has a measurement basis plus a statement about where its up and down
   // outputs are going
@@ -86,7 +118,6 @@ export default function App() {
   const [particleCount, setParticleCount] = useState(0);
   const [resetToken, setResetToken] = useState(0);
   const streamTimerRef = useRef(null);
-  const STREAM_SPAWN_INTERVAL_MS = 50;
 
   const controlsLocked = particleCount > 0;
 
@@ -172,10 +203,10 @@ export default function App() {
     if (expMode.dc === 'stream' && expMode.running) {
       streamTimerRef.current = setInterval(() => {
         labPanelRef.current?.spawnParticle();
-      }, STREAM_SPAWN_INTERVAL_MS);
+      }, 1/expMode.rate*1000);
       return () => clearInterval(streamTimerRef.current);
     }
-  }, [expMode.dc, expMode.running]);
+  }, [expMode.dc, expMode.running, expMode.rate]);
 
   return (
     <div className="app-layout">
@@ -241,6 +272,16 @@ export default function App() {
               <input type="checkbox" checked={displayBools.previewPaths} onChange={(e) => setDisplayBools({ ...displayBools, previewPaths: e.target.checked })} />
               Preview possible paths
             </label>
+            <div className="control-group" style={{ marginTop: '0.5em' }}>
+              <SliderPlusTextboxControl
+                label="Particle Number"
+                valueNum={expMode.rate}
+                onChangeNum={(val) => {setExpMode({ ...expMode, rate: val });}}
+                min={0.0}
+                max={100}
+                step={0.1}
+              />
+            </div>
             <button className="control-bar-button" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px'}} onClick={handleStartPause}>
               {expMode.dc === 'single'
                 ? (<><PlayIcon /> Make One Particle</>)
