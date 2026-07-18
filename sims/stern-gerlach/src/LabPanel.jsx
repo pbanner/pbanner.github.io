@@ -9,7 +9,7 @@ const SG_HEIGHT = 90;
 const SG_SPACING = 300;   // horizontal gap between apparatus centers
 const SG_START_X = 150;   // x-position of the first apparatus
 // From the image itself, to be used for path drawing
-const SG_INPUT_Y = 111;
+const SG_INPUT_Y = 111*(SG_HEIGHT/225);
 const SG_OUTPUT_UP = 66*(SG_HEIGHT/225);
 const SG_OUTPUT_DOWN = 158*(SG_HEIGHT/225);
 // PC image dimensions and specs for use throughout
@@ -19,10 +19,14 @@ const PC_INPUT = PC_HEIGHT/2;
 const BB_HEIGHT = 50;
 const BB_WIDTH = 9;
 const BB_INPUT = BB_HEIGHT/2;
-
 // Path specs for particles
+// In path constrained by SG spacing and geometry
+const IN_PATH_ARC_ANGLE = Math.atan(Math.abs(SG_INPUT_Y - SG_OUTPUT_UP)/Math.abs(SG_SPACING - SG_WIDTH));
+const IN_PATH_ARC_RADIUS = Math.abs(SG_SPACING - SG_WIDTH)/Math.sin(IN_PATH_ARC_ANGLE);
+// Out path not constrained, radius and angle chosen for aesthetics
 const OUT_PATH_ARC_RADIUS = 150;
 const OUT_PATH_ARC_ANGLE = 0.7; // rad
+// Snap radius for UI
 const SNAP_RADIUS = 50;  // px — how close the cursor must be to snap
 
 const SUB_LABELS = "₁₂₃₄₅₆₇₈₉";
@@ -202,7 +206,7 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
         ctx.textBaseline = 'middle';
         ctx.fillText(getSGLabel(sg.basis, i), x0+62, axis);
 
-        // Draw the path arcs (temporary)
+        // Draw the out path arcs (temporary)
         // ctx.strokeStyle = '#303030';
         // ctx.setLineDash([10, 8]);
         // ctx.lineWidth = 1.5;
@@ -219,6 +223,27 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
         //   x0 + SG_WIDTH, 
         //   axis - (SG_HEIGHT/2) + SG_OUTPUT_DOWN + OUT_PATH_ARC_RADIUS, 
         //   OUT_PATH_ARC_RADIUS, -Math.PI/2, -Math.PI/2 + OUT_PATH_ARC_ANGLE, false);
+        // ctx.stroke();
+
+        // ctx.setLineDash([]); // Reset to solid lines
+
+        // Draw the in path arcs (temporary)
+        // ctx.strokeStyle = '#303030';
+        // ctx.setLineDash([10, 8]);
+        // ctx.lineWidth = 1.5;
+
+        // ctx.beginPath();
+        // ctx.arc(
+        //   x0 + SG_WIDTH, 
+        //   axis - (SG_HEIGHT/2) + SG_OUTPUT_UP + IN_PATH_ARC_RADIUS, 
+        //   IN_PATH_ARC_RADIUS, -Math.PI/2, -Math.PI/2 + IN_PATH_ARC_ANGLE, false);
+        // ctx.stroke();
+
+        // ctx.beginPath();
+        // ctx.arc(
+        //   x0 + SG_WIDTH, 
+        //   axis - (SG_HEIGHT/2) + SG_OUTPUT_DOWN - IN_PATH_ARC_RADIUS, 
+        //   IN_PATH_ARC_RADIUS, Math.PI/2, Math.PI/2 - IN_PATH_ARC_ANGLE, true);
         // ctx.stroke();
 
         // ctx.setLineDash([]); // Reset to solid lines
