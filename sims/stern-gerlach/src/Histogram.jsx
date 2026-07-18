@@ -146,11 +146,8 @@ export default function Histogram({ experiment, displayBools }) {
         ctx.font = '11px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
-        if (dataTotal === 0 || !displayBools.showPercentages) {
-            ctx.fillText(String(d.count), barX + barWidth / 2, barY - 2);
-        } else {
-            ctx.fillText(String(d.count) + " (" + (d.count/dataTotal*100).toFixed(1) + "%)", barX + barWidth / 2, barY - 2);
-        }
+        const barLabel = (displayBools.showPercentages === 1 ? "" : String(d.count)) + ((displayBools.showPercentages !== 1 && dataTotal !== 0) ? " (" + (d.count/dataTotal*100).toFixed(1) + "%)" : "");
+        ctx.fillText(barLabel, barX + barWidth / 2, barY - 2);
       });
     }
   }, [experiment, displayBools, canvasDims]);

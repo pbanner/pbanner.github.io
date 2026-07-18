@@ -102,7 +102,11 @@ export default function App() {
     previewPaths: false       // For previewing particle paths
   });
   const [histDisplayBools, setHistDisplayBools] = useState({
-    showPercentages: true
+    showPercentages: 2,    // 0 = counts only, 1 = percentages only, 2 = both
+    showTheory: false,
+    showLegend: true,
+    showTotal: true,
+    showErrorBars: false
   });
   // build = 0 for normal operation, 1 for placing a particle counter, 2 for placing
   // a beam block, -1 for deleting stuff
@@ -300,10 +304,27 @@ export default function App() {
           {/* Histogram canvas area */}
           <div className="control-bar-group" style={{ flexDirection: 'row', flex: '1 1 auto', gap: '10px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <h3 style={{ padding: '6px 0px' }}>Chart Options</h3>
+              <h3 style={{ padding: '6px 0px 4px 0px' }}>Chart Options</h3>
+              <div style = {{ padding: '2px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label><input type="radio" name="barLabelMode" value={0} checked={histDisplayBools.showPercentages === 0} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: event.target.value });}} />Counts</label>
+                <label><input type="radio" name="barLabelMode" value={1} checked={histDisplayBools.showPercentages === 1} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: event.target.value });}} />Percentages</label>
+                <label><input type="radio" name="barLabelMode" value={2} checked={histDisplayBools.showPercentages === 2} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: event.target.value });}} />Both</label>
+              </div>
               <label style={{ padding: '0px 0 0 0' }}>
-                <input type="checkbox" checked={histDisplayBools.showPercentages} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showPercentages: e.target.checked })} />
-                Show percentages
+                <input type="checkbox" checked={histDisplayBools.showErrorBars} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showErrorBars: e.target.checked })} />
+                Show error bars
+              </label>
+              <label style={{ padding: '0px 0 0 0' }}>
+                <input type="checkbox" checked={histDisplayBools.showLegend} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showLegend: e.target.checked })} />
+                Show legend
+              </label>
+              <label style={{ padding: '0px 0 0 0' }}>
+                <input type="checkbox" checked={histDisplayBools.showTotal} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showTotal: e.target.checked })} />
+                Show running total
+              </label>
+              <label style={{ padding: '0px 0 0 0' }}>
+                <input type="checkbox" checked={histDisplayBools.showTheory} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showTheory: e.target.checked })} />
+                Theoretical probabilities
               </label>
             </div>
             <div className="histogram-panel">
