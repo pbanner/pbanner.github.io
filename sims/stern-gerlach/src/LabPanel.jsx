@@ -68,6 +68,27 @@ function useImage(src) {
   return [imgRef, loaded];
 }
 
+// For adding and removing PCs with appropriate color IDs
+const PC_COLORS = ['#3498db', '#e74c3c', '#28b563', '#937708', '#9b59b6', '#db6f11', '#0dc493', '#34495e'];
+
+function getUsedColorIds(experiment) {
+  const used = new Set();
+  experiment.forEach((sg) => {
+    ['up', 'down'].forEach((arm) => {
+      if (sg[arm]?.type === 'pc') used.add(sg[arm].colorId);
+    });
+  });
+  return used;
+}
+
+function getNextColorId(experiment) {
+  const used = getUsedColorIds(experiment);
+  for (let i = 0; i < PC_COLORS.length; i++) {
+    if (!used.has(i)) return i;
+  }
+  return null; // more PCs placed at once than the palette has colors
+}
+
 // Mouse behavior handlers for placing new components
 // The anchor point (input edge, matching where drawImage's local origin sits)
 // and rotation angle for a given SG's up/down output site.
@@ -154,8 +175,8 @@ function findNearestDeletable(mouseX, mouseY, experiment, axis) {
     ['up', 'down'].forEach((arm) => {
       if (sg[arm] === null) return;
 
-      const width = sg[arm] === 'pc' ? PC_WIDTH : BB_WIDTH;
-      const height = sg[arm] === 'pc' ? PC_HEIGHT : BB_HEIGHT;
+      const width = sg[arm].type === 'pc' ? PC_WIDTH : BB_WIDTH;
+      const height = sg[arm].type === 'pc' ? PC_HEIGHT : BB_HEIGHT;
       const site = getPlacementSite(sgIndex, arm, axis);
       const center = getPlacementSiteCenter(site, width);
       const radius = (Math.max(width, height) / 2) * DELETE_MARGIN;
@@ -171,7 +192,7 @@ function findNearestDeletable(mouseX, mouseY, experiment, axis) {
   return closest;
 }
 
-export default function LabPanel({ experiment, setExperiment, expMode, setExpMode, counts, setCounts, displayBools }) {
+export default function LabPanel({ experiment, setExperiment, expMode, setExpMode, displayBools }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
@@ -300,7 +321,20 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
           ctx.translate(site.x, site.y);
           ctx.rotate(site.angle);
           if (sg[arm] !== null) {
-            sg[arm] === 'pc' ? ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
+            if (sg[arm].type === 'pc') {
+              ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT);
+              if (sg[arm].colorId !== null) {
+                ctx.beginPath();
+                ctx.arc(PC_WIDTH / 2, 0, 8, 0, Math.PI * 2);
+                ctx.fillStyle = PC_COLORS[sg[arm].colorId];
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+              }
+            } else {
+              ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
+            }
           } else {
             // If we've reached this point, we're previewing sites
             ctx.globalAlpha = 0.5;
@@ -352,8 +386,8 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
           const sg = experiment[target.sgIndex];
           ['up', 'down'].forEach((arm) => {
             if (sg[arm] === null) return;
-            const width = sg[arm] === 'pc' ? PC_WIDTH : BB_WIDTH;
-            const height = sg[arm] === 'pc' ? PC_HEIGHT : BB_HEIGHT;
+            const width = sg[arm].type === 'pc' ? PC_WIDTH : BB_WIDTH;
+            const height = sg[arm].type === 'pc' ? PC_HEIGHT : BB_HEIGHT;
             const site = getPlacementSite(target.sgIndex, arm, axis);
             const armCenter = getPlacementSiteCenter(site, width);
             ctx.beginPath();
@@ -383,7 +417,12 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
       } else {
         setExperiment((prev) => {
           const next = [...prev];
-          next[target.sgIndex] = { ...next[target.sgIndex], [target.arm]: null };
+          if (expMode.build === 1) {
+            const colorId = getNextColorId(prev);
+            next[sgIndex] = { ...next[sgIndex], [arm]: { type: 'pc', data: 0, colorId } };
+          } else {
+            next[sgIndex] = { ...next[sgIndex], [arm]: 'bb' };
+          }
           return next;
         });
       }
@@ -399,9 +438,6 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
       next[sgIndex] = { ...next[sgIndex], [arm]: expMode.build === 1 ? 'pc' : 'bb' };
       return next;
     });
-    if (expMode.build === 1) {
-      setCounts([ ...counts, { sg: sgIndex, arm: arm, data: 0, colorId: 0 } ]);
-    }
   };
 
   const handleMouseMove = (e) => {

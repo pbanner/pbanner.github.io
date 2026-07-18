@@ -76,10 +76,9 @@ export default function App() {
   // The experimental setup is coded as a list of present SG setups; each
   // setup has a measurement basis plus a statement about where its up and down
   // outputs are going
+  // up and down may be null, `bb`, or { type: 'pc', data: [integer], colorId: string }
   // Start with one apparatus already in place
   const [experiment, setExperiment] = useState([{ basis: [0, 0], up: null, down: null }]);
-  // counts entries have the format { sg, arm, data, colorId }
-  const [counts, setCounts] = useState([]);
 
   const addSternGerlach = () => {
     setExperiment((prev) => [
@@ -92,7 +91,7 @@ export default function App() {
     <div className="app-layout">
       {/* Main Canvas Area */}
       <div className="canvas-area">
-        <LabPanel experiment={experiment} setExperiment={setExperiment} expMode={expMode} setExpMode={setExpMode} counts={counts} setCounts={setCounts} displayBools={displayBools} />
+        <LabPanel experiment={experiment} setExperiment={setExperiment} expMode={expMode} setExpMode={setExpMode} displayBools={displayBools} />
       </div>
 
       {/* Right Sidebar */}
