@@ -67,7 +67,7 @@ export default function App() {
   const [displayBools, setDisplayBools] = useState({
     gridOn: true,             // Displaying the grid
   });
-  // build = 'normal', 'place-pc' for placing a particle counter, 'place-bb' for 
+  // build = 'normal', 'pc-place' for placing a particle counter, 'bb-place' for 
   // placing a beam block
   // running = true or false
   // dc (for data collection) may be 'single' or 'stream'

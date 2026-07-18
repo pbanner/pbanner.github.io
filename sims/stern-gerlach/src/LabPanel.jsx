@@ -87,26 +87,26 @@ function getPlacementSite(sgIndex, arm, axis) {
 
 // The site's anchor is the image's left-center edge, pre-rotation — not
 // where a user would aim visually. Rotate the image's true local center
-// (PC_WIDTH/2, 0) by the site's angle to get the point to snap-test against.
-function getPlacementSiteCenter(site) {
+// (width/2, 0) by the site's angle to get the point to snap-test against.
+function getPlacementSiteCenter(site, width) {
   return {
-    x: site.x + (PC_WIDTH / 2) * Math.cos(site.angle),
-    y: site.y + (PC_WIDTH / 2) * Math.sin(site.angle),
+    x: site.x + (width / 2) * Math.cos(site.angle),
+    y: site.y + (width / 2) * Math.sin(site.angle),
   };
 }
 
 // Pure function: given a mouse position, find the nearest unoccupied
 // placement site within snapping distance, or null if none qualify.
-function findNearestSite(mouseX, mouseY, experiment, axis) {
+function findNearestSite(mouseX, mouseY, experiment, axis, width) {
   let closest = null;
   let closestDist = NEW_DEVICE_SNAP_RADIUS;
 
   experiment.forEach((sg, sgIndex) => {
     ['up', 'down'].forEach((arm) => {
-      if (sg[arm] === 'pc') return; // already occupied, not a candidate
+      if (sg[arm] !== null) return; // already occupied, not a candidate
 
       const site = getPlacementSite(sgIndex, arm, axis);
-      const center = getPlacementSiteCenter(site);
+      const center = getPlacementSiteCenter(site, width);
       const dist = Math.hypot(mouseX - center.x, mouseY - center.y);
 
       if (dist < closestDist) {
@@ -231,7 +231,7 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
           } else {
             // If we've reached this point, we're previewing sites
             ctx.globalAlpha = 0.5;
-            expMode.build === 'place-pc' ? ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
+            expMode.build === 'pc-place' ? ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
             ctx.globalAlpha = 1.0;
           }
           ctx.restore();
@@ -241,9 +241,19 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
 
     // Draw any dragging preview stuff
     if (expMode.build !== 'normal' && previewPos && pcImageRef.current && pcImageRef.current.complete) {
-      const snapped = findNearestSite(previewPos.x, previewPos.y, experiment, axis);
+      const snapped = findNearestSite(previewPos.x, previewPos.y, experiment, axis, expMode.build === 'pc-place' ? PC_WIDTH : BB_WIDTH);
 
       if (snapped) {
+        const center = getPlacementSiteCenter(snapped.site, expMode.build === 'pc-place' ? PC_WIDTH : BB_WIDTH);
+        ctx.beginPath();
+        ctx.arc(
+          center.x, center.y, 
+          expMode.build === 'pc-place' ? Math.max(PC_WIDTH, PC_HEIGHT) / 2 * 1.3 : Math.max(BB_WIDTH, BB_HEIGHT) / 2 * 1.3, 
+          0, Math.PI * 2);
+        ctx.strokeStyle = '#2ecc71';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
         ctx.save();
         ctx.translate(snapped.site.x, snapped.site.y);
         ctx.rotate(snapped.site.angle);
@@ -264,7 +274,7 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    const snapped = findNearestSite(mouseX, mouseY, experiment, axis);
+    const snapped = findNearestSite(mouseX, mouseY, experiment, axis, expMode.build === 'pc-place' ? PC_WIDTH : BB_WIDTH);
     if (!snapped) return; // clicked somewhere that isn't near a site — no-op
 
     const { sgIndex, arm } = snapped;
