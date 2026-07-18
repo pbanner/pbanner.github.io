@@ -358,7 +358,7 @@ function findNearestDeletable(mouseX, mouseY, experiment, axis) {
 }
 
 const LabPanel = forwardRef(function LabPanel(
-  { experiment, setExperiment, expMode, setExpMode, displayBools, setParticleCount, resetToken },
+  { experiment, setExperiment, expMode, setExpMode, displayBools, setParticleCount, resetToken, resetDataCollection },
   ref
 ) {
   const canvasRef = useRef(null);
@@ -646,10 +646,16 @@ const LabPanel = forwardRef(function LabPanel(
     };
   }, []);
 
-  const spawnParticle = () => {
-    if (experiment.length === 0) return; // nothing to simulate
-    const sampled = samplePath(experiment);
-    const path = buildAnimationPath(experiment, axis, sampled);
+  // `experimentOverride` lets a caller that just synchronously updated
+  // `experiment` (e.g. auto-inserting a beam block right before starting)
+  // spawn against the fresh value immediately, since setExperiment is
+  // async and this component's own `experiment` prop won't reflect it
+  // until the next render.
+  const spawnParticle = (experimentOverride) => {
+    const exp = experimentOverride ?? experiment;
+    if (exp.length === 0) return; // nothing to simulate
+    const sampled = samplePath(exp);
+    const path = buildAnimationPath(exp, axis, sampled);
     particlesRef.current = [...particlesRef.current, { ...path, segmentIndex: 0, segmentElapsed: 0 }];
     setParticleCount(particlesRef.current.length);
     // The loop only advances itself while already running (see tickRef
@@ -702,6 +708,7 @@ const LabPanel = forwardRef(function LabPanel(
           return next;
         });
       }
+      resetDataCollection(); // deleting a component is a setup change
       return;
     }
 
@@ -719,6 +726,7 @@ const LabPanel = forwardRef(function LabPanel(
       }
       return next;
     });
+    resetDataCollection(); // placing a component is a setup change
   };
 
   const handleMouseMove = (e) => {

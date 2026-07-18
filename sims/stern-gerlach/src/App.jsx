@@ -19,11 +19,10 @@ function PlayIcon({ size = '0.9em' }) {
   );
 }
 
-function PauseIcon({ size = '0.9em' }) {
+function StopIcon({ size = '0.9em' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style={{ display: 'block' }}>
-      <rect x="3" y="2" width="4" height="12" />
-      <rect x="9" y="2" width="4" height="12" />
+      <rect x="3" y="3" width="10" height="10" />
     </svg>
   );
 }
@@ -31,7 +30,7 @@ function PauseIcon({ size = '0.9em' }) {
 const SG_OPTION_LABELS = ['X', 'Y', 'Z'];
 const SG_OPTION_BASES = [[Math.PI/2, 0], [Math.PI/2, Math.PI/2], [0, 0]];
 
-function AxisStepper({ index, sg, setExperiment, disabled }) {
+function AxisStepper({ index, sg, setExperiment, disabled, resetDataCollection }) {
   const currentIndex = SG_OPTION_BASES.findIndex(
     ([theta, phi]) => theta === sg.basis[0] && phi === sg.basis[1]
   );
@@ -44,6 +43,7 @@ function AxisStepper({ index, sg, setExperiment, disabled }) {
       next[index] = { ...next[index], basis: SG_OPTION_BASES[nextIndex] };  // copy+replace just this entry
       return next;
     });
+    resetDataCollection(); // a basis change is a setup change -- old counts no longer apply
   };
 
   return (
@@ -81,13 +81,6 @@ export default function App() {
   // Start with one apparatus already in place
   const [experiment, setExperiment] = useState([{ basis: [0, 0], up: null, down: null }]);
 
-  const addSternGerlach = () => {
-    setExperiment((prev) => [
-      ...prev,
-      { basis: [0, 0], up: null, down: null },
-    ]);
-  };
-
   // Particle propagation
   const labPanelRef = useRef(null);
   const [particleCount, setParticleCount] = useState(0);
@@ -97,14 +90,81 @@ export default function App() {
 
   const controlsLocked = particleCount > 0;
 
+  // Any setup change (add/remove an SG, place/remove a PC or BB, change a
+  // basis) invalidates whatever's been collected so far -- called
+  // explicitly at every site that mutates the experiment's structure,
+  // rather than watched via an effect on `experiment` itself, since PC hit
+  // counts also live inside `experiment` and a structure-watching effect
+  // would zero itself out the instant a particle actually landed.
+  const resetDataCollection = () => {
+    setResetToken((t) => t + 1);
+    setExpMode((prev) => ({ ...prev, running: false }));
+    setExperiment((prev) => prev.map((sg) => ({
+      ...sg,
+      up: sg.up?.type === 'pc' ? { ...sg.up, data: 0 } : sg.up,
+      down: sg.down?.type === 'pc' ? { ...sg.down, data: 0 } : sg.down,
+    })));
+  };
+
+  const addSternGerlach = () => {
+    setExperiment((prev) => [
+      ...prev,
+      { basis: [0, 0], up: null, down: null },
+    ]);
+    resetDataCollection();
+  };
+
+  // Checks the last SG's arms before data collection starts; if either is
+  // still open (would let particles fly off unmeasured), confirms with the
+  // user, then either plugs the gap with beam blocks or backs out. Returns
+  // the up-to-date experiment to spawn against, or null if the user
+  // cancelled -- setExperiment is async, so a caller that needs to spawn
+  // immediately after this can't just re-read the `experiment` closure.
+  const ensureTerminatedThenGetExperiment = () => {
+    if (experiment.length === 0) return experiment;
+
+    const lastIndex = experiment.length - 1;
+    const lastSG = experiment[lastIndex];
+    const openArms = [];
+    if (lastSG.up === null) openArms.push('up');
+    if (lastSG.down === null) openArms.push('down');
+    if (openArms.length === 0) return experiment;
+
+    const plural = openArms.length > 1;
+    const message =
+      `The ${openArms.join(' and ')} ${plural ? 'paths are' : 'path is'} unterminated on the last ` +
+      `Stern-Gerlach apparatus -- particles could fly off without ever being measured.\n\n` +
+      `Click OK to place a beam block there and start data collection, or Cancel to go back and ` +
+      `place something yourself first.`;
+    if (!window.confirm(message)) return null;
+
+    const nextExperiment = experiment.map((sg, i) => (i !== lastIndex ? sg : {
+      ...sg,
+      up: sg.up === null ? 'bb' : sg.up,
+      down: sg.down === null ? 'bb' : sg.down,
+    }));
+    setExperiment(nextExperiment);
+    resetDataCollection();
+    return nextExperiment;
+  };
+
   const handleStartPause = () => {
+    const startingNow = expMode.dc === 'single' || !expMode.running;
+    let experimentToSpawnFrom = experiment;
+
+    if (startingNow) {
+      const result = ensureTerminatedThenGetExperiment();
+      if (result === null) return; // cancelled -- don't start anything
+      experimentToSpawnFrom = result;
+    }
+
     setExpMode((prev) => ({
       ...prev,
       build: 0, // leave any build/delete mode the moment particles start propagating
       running: prev.dc === 'single' ? prev.running : !prev.running,
     }));
     if (expMode.dc === 'single') {
-      labPanelRef.current?.spawnParticle();
+      labPanelRef.current?.spawnParticle(experimentToSpawnFrom);
     }
   };
 
@@ -116,16 +176,6 @@ export default function App() {
       return () => clearInterval(streamTimerRef.current);
     }
   }, [expMode.dc, expMode.running]);
-
-  const handleReset = () => {
-    setResetToken((t) => t + 1);
-    setExpMode((prev) => ({ ...prev, running: false }));
-    setExperiment((prev) => prev.map((sg) => ({
-      ...sg,
-      up: sg.up?.type === 'pc' ? { ...sg.up, data: 0 } : sg.up,
-      down: sg.down?.type === 'pc' ? { ...sg.down, data: 0 } : sg.down,
-    })));
-  };
 
   return (
     <div className="app-layout">
@@ -140,6 +190,7 @@ export default function App() {
           displayBools={displayBools}
           setParticleCount={setParticleCount}
           resetToken={resetToken}
+          resetDataCollection={resetDataCollection}
         />
       </div>
 
@@ -176,7 +227,7 @@ export default function App() {
           <div className="control-bar-group">
             <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Set Measurement Bases</h3>
             {experiment.map((sg, i) => (
-            <AxisStepper key={i} index={i} sg={sg} setExperiment={setExperiment} disabled={controlsLocked} />
+            <AxisStepper key={i} index={i} sg={sg} setExperiment={setExperiment} disabled={controlsLocked} resetDataCollection={resetDataCollection} />
             ))}
           </div>
           {/* Data Collection Controls */}
@@ -194,10 +245,10 @@ export default function App() {
               {expMode.dc === 'single'
                 ? (<><PlayIcon /> Make One Particle</>)
                 : expMode.running
-                  ? (<><PauseIcon /> Pause</>)
+                  ? (<><StopIcon /> Stop</>)
                   : (<><PlayIcon /> Start</>)}
             </button>
-            <button className="control-bar-button" style={{ margin: '6px 0 0 0' }} onClick={handleReset}>
+            <button className="control-bar-button" style={{ margin: '6px 0 0 0' }} onClick={resetDataCollection}>
               Reset Data Collection
             </button>
           </div>
