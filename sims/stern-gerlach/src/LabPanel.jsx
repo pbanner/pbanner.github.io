@@ -16,6 +16,9 @@ const SG_OUTPUT_DOWN = 158*(SG_HEIGHT/225);
 const PC_HEIGHT = 50;
 const PC_WIDTH = 100;
 const PC_INPUT = PC_HEIGHT/2;
+const PC_COLOR_DOT_X = 340*(PC_WIDTH/400);
+const PC_COLOR_DOT_R = 40*(PC_WIDTH/400);
+const PC_TEXT_CENTER_X = 190*(PC_WIDTH/400);
 const BB_HEIGHT = 50;
 const BB_WIDTH = 9;
 const BB_INPUT = BB_HEIGHT/2;
@@ -325,12 +328,19 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
               ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT);
               if (sg[arm].colorId !== null) {
                 ctx.beginPath();
-                ctx.arc(PC_WIDTH / 2, 0, 8, 0, Math.PI * 2);
+                ctx.arc(PC_COLOR_DOT_X, 0, PC_COLOR_DOT_R, 0, Math.PI * 2);
                 ctx.fillStyle = PC_COLORS[sg[arm].colorId];
                 ctx.fill();
                 ctx.strokeStyle = '#ffffff';
                 ctx.lineWidth = 1.5;
                 ctx.stroke();
+              }
+              if (sg[arm].data !== null) {
+                ctx.fillStyle = '#303030';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(sg[arm].data, PC_TEXT_CENTER_X, 0);
               }
             } else {
               ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
@@ -417,12 +427,7 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
       } else {
         setExperiment((prev) => {
           const next = [...prev];
-          if (expMode.build === 1) {
-            const colorId = getNextColorId(prev);
-            next[sgIndex] = { ...next[sgIndex], [arm]: { type: 'pc', data: 0, colorId } };
-          } else {
-            next[sgIndex] = { ...next[sgIndex], [arm]: 'bb' };
-          }
+          next[target.sgIndex] = { ...next[target.sgIndex], [target.arm]: null };
           return next;
         });
       }
@@ -435,7 +440,12 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
     const { sgIndex, arm } = snapped;
     setExperiment((prev) => {
       const next = [...prev];
-      next[sgIndex] = { ...next[sgIndex], [arm]: expMode.build === 1 ? 'pc' : 'bb' };
+      if (expMode.build === 1) {
+        const colorId = getNextColorId(prev);
+        next[sgIndex] = { ...next[sgIndex], [arm]: { type: 'pc', data: 0, colorId } };
+      } else {
+        next[sgIndex] = { ...next[sgIndex], [arm]: 'bb' };
+      }
       return next;
     });
   };
