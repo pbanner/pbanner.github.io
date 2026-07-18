@@ -64,7 +64,7 @@ function AxisStepper({ index, sg, setExperiment, disabled, resetDataCollection }
   );
 }
 
-function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step }) {
+function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step, disabled = false }) {
   return (
     <div className="control-group">
       <label style={{ margin: '-0.25em 0em' }}>{label}</label> {/*: {valueNum.toFixed(1)}*/}
@@ -77,6 +77,7 @@ function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step
           value={valueNum}
           onChange={(e) => onChangeNum(parseFloat(e.target.value))}
           style={{ flex: 1 }}
+          disabled={disabled}
         />
         <input
           type="number"
@@ -89,6 +90,7 @@ function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step
             if (!Number.isNaN(v)) onChangeNum(v);
           }}
           style={{ width: '70px', padding: '2px' }}
+          disabled={disabled}
         />
       </div>
     </div>
@@ -281,18 +283,18 @@ export default function App() {
             <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Set Measurement Bases</h3>
             <p style={{ width: '180px' }}>Check the checkbox next to an SG label to set its basis by angles (θ, ϕ).</p>
             {experiment.map((sg, i) => (
-            <AxisStepper key={i} index={i} sg={sg} setExperiment={setExperiment} disabled={controlsLocked} resetDataCollection={resetDataCollection} />
+            <AxisStepper key={i} index={i} sg={sg} setExperiment={setExperiment} disabled={controlsLocked || (expMode.build !== 0)} resetDataCollection={resetDataCollection} />
             ))}
           </div>
           {/* Data Collection Controls */}
           <div className="control-bar-group">
             <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Data Collection Controls</h3>
             <div style = {{ padding: '2px', display: 'flex', flexDirection: 'row', gap: '20px' }}>
-              <label><input type="radio" name="DCmode" value="single" checked={expMode.dc === 'single'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} />One at a time</label>
-              <label><input type="radio" name="DCmode" value="stream" checked={expMode.dc === 'stream'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} />Continuous</label>
+              <label><input type="radio" name="DCmode" value="single" checked={expMode.dc === 'single'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} disabled={expMode.build !== 0} />One at a time</label>
+              <label><input type="radio" name="DCmode" value="stream" checked={expMode.dc === 'stream'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} disabled={expMode.build !== 0} />Continuous</label>
             </div>
             <label style={{ margin: '4px 0 0 0' }}>
-              <input type="checkbox" checked={displayBools.previewPaths} onChange={(e) => setDisplayBools({ ...displayBools, previewPaths: e.target.checked })} />
+              <input type="checkbox" disabled={expMode.build !== 0} checked={displayBools.previewPaths} onChange={(e) => setDisplayBools({ ...displayBools, previewPaths: e.target.checked })} />
               Preview possible paths
             </label>
             <div className="control-group" style={{ marginTop: '0.5em' }}>
@@ -303,16 +305,17 @@ export default function App() {
                 min={0.0}
                 max={100}
                 step={0.1}
+                disabled={expMode.build !== 0}
               />
             </div>
-            <button className="control-bar-button" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px'}} onClick={handleStartPause}>
+            <button className="control-bar-button" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px'}} onClick={handleStartPause} disabled={expMode.build !== 0}>
               {expMode.dc === 'single'
                 ? (<><PlayIcon /> Make One Particle</>)
                 : expMode.running
                   ? (<><StopIcon /> Stop</>)
                   : (<><PlayIcon /> Start</>)}
             </button>
-            <button className="control-bar-button" onClick={resetDataCollection}>
+            <button className="control-bar-button" onClick={resetDataCollection} disabled={expMode.build !== 0}>
               Reset Data Collection
             </button>
           </div>
@@ -321,24 +324,24 @@ export default function App() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <h3 style={{ padding: '6px 0px 4px 0px' }}>Chart Options</h3>
               <div style = {{ padding: '2px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label><input type="radio" name="barLabelMode" value={0} checked={histDisplayBools.showPercentages === 0} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) });}} />Counts</label>
-                <label><input type="radio" name="barLabelMode" value={1} checked={histDisplayBools.showPercentages === 1} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) });}} />Percentages</label>
-                <label><input type="radio" name="barLabelMode" value={2} checked={histDisplayBools.showPercentages === 2} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) });}} />Both</label>
+                <label><input type="radio" name="barLabelMode" value={0} disabled={expMode.build !== 0} checked={histDisplayBools.showPercentages === 0} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) });}} />Counts</label>
+                <label><input type="radio" name="barLabelMode" value={1} disabled={expMode.build !== 0} checked={histDisplayBools.showPercentages === 1} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) });}} />Percentages</label>
+                <label><input type="radio" name="barLabelMode" value={2} disabled={expMode.build !== 0} checked={histDisplayBools.showPercentages === 2} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) });}} />Both</label>
               </div>
               <label style={{ padding: '0px 0 0 0' }}>
-                <input type="checkbox" checked={histDisplayBools.showErrorBars} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showErrorBars: e.target.checked })} />
+                <input type="checkbox" disabled={expMode.build !== 0} checked={histDisplayBools.showErrorBars} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showErrorBars: e.target.checked })} />
                 Show error bars
               </label>
               <label style={{ padding: '0px 0 0 0' }}>
-                <input type="checkbox" checked={histDisplayBools.showLegend} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showLegend: e.target.checked })} />
+                <input type="checkbox" disabled={expMode.build !== 0} checked={histDisplayBools.showLegend} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showLegend: e.target.checked })} />
                 Show legend
               </label>
               <label style={{ padding: '0px 0 0 0' }}>
-                <input type="checkbox" checked={histDisplayBools.showTotal} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showTotal: e.target.checked })} />
+                <input type="checkbox" disabled={expMode.build !== 0} checked={histDisplayBools.showTotal} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showTotal: e.target.checked })} />
                 Show running total
               </label>
               <label style={{ padding: '0px 0 0 0' }}>
-                <input type="checkbox" checked={histDisplayBools.showTheory} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showTheory: e.target.checked })} />
+                <input type="checkbox" disabled={expMode.build !== 0} checked={histDisplayBools.showTheory} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showTheory: e.target.checked })} />
                 Theoretical probabilities
               </label>
             </div>
