@@ -46,7 +46,7 @@ const SNAP_RADIUS = 50;  // px — how close the cursor must be to snap
 // Particle animation specs -- all tunable
 const PARTICLE_START_X = OVEN_X0 + OVEN_WIDTH;     // x-value where particles first appear
 const PARTICLE_SPEED = 300;        // px/sec while visibly moving
-const SG_PROCESSING_MS = 180;      // fixed pause while "inside" an SG
+const SG_PROCESSING_MS = 200;      // fixed pause while "inside" an SG
 const BEAM_TRANSVERSE_WIDTH = 14;  // px, full spread of the (uniform) beam jitter
 const PARTICLE_RADIUS = 4;
 const PARTICLE_COLOR = '#3498db';  // same blue as .control-bar-button etc.
@@ -137,10 +137,12 @@ function sampleOvenState() {
   return upEigenstate(theta, phi);
 }
 
+// This is the fundemantal function of the first part of the animation pipeline!!!
 // Walk the SG chain for one particle. A real measurement (and thus
 // collapse) occurs only at an SG where at least one arm terminates (PC or
 // BB) -- an SG with both arms open is transparent, and the state passes
 // through unchanged, preserving coherence for later interference.
+// Returns a set of hops (up or down) using the available physics.
 function samplePath(experiment) {
   const hops = [];
   let state = sampleOvenState();
@@ -614,12 +616,14 @@ const LabPanel = forwardRef(function LabPanel(
     });
   }, []);
 
-  // tickRef always points at a fresh closure over the current
+  // tickRef's job is to hold THE single source of truth for what the next
+  // frame should look like. If you tried running this as a regular variable,
+  // you might end up scheduling re-renders on top of each other, which is 
+  // hard to fix. tickRef always points at a fresh closure over the current
   // experiment/setExperiment/drawScene/etc. -- refreshed after every render
   // (cheap: just a closure allocation, no timers or DOM work) -- so the
   // recursive rAF loop below is never stuck reading stale props no matter
-  // how long it's been running, without needing to cancel/restart itself
-  // whenever a dependency changes.
+  // how long it's been running.
   const tickRef = useRef(null);
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -668,6 +672,8 @@ const LabPanel = forwardRef(function LabPanel(
       drawScene(ctx);
       drawParticles(ctx);
 
+      // Make sure to call this function again after you execute it!
+      // This is what keeps the loop going
       if (particlesRef.current.length > 0) {
         rafRef.current = requestAnimationFrame((n) => tickRef.current(n));
       } else {
