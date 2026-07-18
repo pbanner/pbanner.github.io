@@ -61,10 +61,11 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
   const [offset, setOffset] = useState({ x: 0, y: 0 }); // Used for mouse dragging events
   const [axis, setAxis] = useState(300); // y-coordinate of halfway down the canvas; determines position of all user-created devices
-  // This ref holds the SG image for all time
+  // These refs hold the SG and PC images for all time, using the loading hook
   const [sgImageRef, sgImageLoaded] = useImage(sgImage);
-  // And this holds the particle counter image for all time
   const [pcImageRef, pcImageLoaded] = useImage(pcImage);
+  // This holds positions for a preview image as needed
+  const [pcPreviewPos, setPcPreviewPos] = useState(null); // null = no preview to show right now
 
   // Resize canvas to fill container
   useEffect(() => {
@@ -174,7 +175,18 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
         }
       });
     }
-  }, [experiment, expMode, sgImageLoaded, pcImageLoaded, axis, canvasDims, displayBools]);
+
+    // Draw any dragging preview stuff
+    if (pcPreviewPos && pcImageRef.current && pcImageRef.current.complete) {
+      ctx.drawImage(
+        pcImageRef.current,
+        pcPreviewPos.x - PC_WIDTH / 2,
+        pcPreviewPos.y - PC_HEIGHT / 2,
+        PC_WIDTH,
+        PC_HEIGHT
+      );
+    }
+  }, [experiment, expMode, sgImageLoaded, pcImageLoaded, pcPreviewPos, axis, canvasDims, displayBools]);
 
   // Mouse handlers
   // const handleMouseDown = (e) => {
@@ -195,16 +207,24 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
   // };
 
   const handleMouseMove = (e) => {
-    if (expMode.build === 'normal' || expMode.build === 'running') return;
+    if (expMode.build === 'normal' || expMode.build === 'running') {
+      setPcPreviewPos(null);
+      return;
+    }
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(pcImageRef.current, mouseX, mouseY, PC_WIDTH, PC_HEIGHT);
+    if (expMode.build === 'pc-place') {
+      setPcPreviewPos({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      });
+    }
   };
+
+  const handleMouseLeave = () => {
+    setPcPreviewPos(null)
+  }
 
   // const handleMouseUp = () => {
   //   setDraggingCircle(false);
@@ -217,7 +237,7 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
         //onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         //onMouseUp={handleMouseUp}
-        //onMouseLeave={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
         style={{
           //cursor: draggingCircle ? 'grabbing' : 'grab',
           display: 'block',
