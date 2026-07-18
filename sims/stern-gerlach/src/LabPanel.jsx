@@ -16,6 +16,9 @@ const SG_OUTPUT_DOWN = 158*(SG_HEIGHT/225);
 const PC_HEIGHT = 50;
 const PC_WIDTH = 100;
 const PC_INPUT = PC_HEIGHT/2;
+const BB_HEIGHT = 50;
+const BB_WIDTH = 9;
+const BB_INPUT = BB_HEIGHT/2;
 
 // Path specs for particles
 const OUT_PATH_ARC_RADIUS = 150;
@@ -125,8 +128,9 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
   // These refs hold the SG and PC images for all time, using the loading hook
   const [sgImageRef, sgImageLoaded] = useImage(sgImage);
   const [pcImageRef, pcImageLoaded] = useImage(pcImage);
+  const [bbImageRef, bbImageLoaded] = useImage(bbImage);
   // This holds positions for a preview image as needed
-  const [pcPreviewPos, setPcPreviewPos] = useState(null); // null = no preview to show right now
+  const [previewPos, setPreviewPos] = useState(null); // null = no preview to show right now
 
   // Resize canvas to fill container
   useEffect(() => {
@@ -223,13 +227,11 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
           ctx.translate(site.x, site.y);
           ctx.rotate(site.angle);
           if (sg[arm] !== null) {
-            // Draw only PC for now; when we add BBs, make a switch between pcImageRef and bbImageRef
-            ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT);
+            sg[arm] === 'pc' ? ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
           } else {
             // If we've reached this point, we're previewing sites
             ctx.globalAlpha = 0.5;
-            // Again, draw only PCs for now; when we add BBs, make a expMode.build switch between 'place-pc' and 'place-bb'
-            ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT);
+            expMode.build === 'place-pc' ? ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
             ctx.globalAlpha = 1.0;
           }
           ctx.restore();
@@ -238,30 +240,24 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
     }
 
     // Draw any dragging preview stuff
-    if (expMode.build === 'pc-place' && pcPreviewPos && pcImageRef.current && pcImageRef.current.complete) {
-      const snapped = findNearestSite(pcPreviewPos.x, pcPreviewPos.y, experiment, axis);
+    if (expMode.build !== 'normal' && previewPos && pcImageRef.current && pcImageRef.current.complete) {
+      const snapped = findNearestSite(previewPos.x, previewPos.y, experiment, axis);
 
       if (snapped) {
         ctx.save();
         ctx.translate(snapped.site.x, snapped.site.y);
         ctx.rotate(snapped.site.angle);
-        ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT);
+        expMode.build === 'pc-place' ? ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
         ctx.restore();
       } else {
-        ctx.drawImage(
-          pcImageRef.current,
-          pcPreviewPos.x - PC_WIDTH / 2,
-          pcPreviewPos.y - PC_HEIGHT / 2,
-          PC_WIDTH,
-          PC_HEIGHT
-        );
+        expMode.build === 'pc-place' ? ctx.drawImage(pcImageRef.current, previewPos.x - PC_WIDTH / 2, previewPos.y - PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, previewPos.x - BB_WIDTH / 2, previewPos.y - BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
       }
     }
-  }, [experiment, expMode, sgImageLoaded, pcImageLoaded, pcPreviewPos, axis, canvasDims, displayBools]);
+  }, [experiment, expMode, sgImageLoaded, pcImageLoaded, previewPos, axis, canvasDims, displayBools]);
 
   // Mouse handlers
   const handleClick = (e) => {
-    if (expMode.build !== 'pc-place') return;
+    if (expMode.build === 'normal') return;
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -274,29 +270,27 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
     const { sgIndex, arm } = snapped;
     setExperiment((prev) => {
       const next = [...prev];
-      next[sgIndex] = { ...next[sgIndex], [arm]: 'pc' };
+      next[sgIndex] = { ...next[sgIndex], [arm]: expMode.build === 'pc-place' ? 'pc' : 'bb' };
       return next;
     });
   };
 
   const handleMouseMove = (e) => {
     if (expMode.build === 'normal' || expMode.build === 'running') {
-      setPcPreviewPos(null);
+      setPreviewPos(null);
       return;
     }
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    if (expMode.build === 'pc-place') {
-      setPcPreviewPos({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      });
-    }
+    setPreviewPos({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    });
   };
 
   const handleMouseLeave = () => {
-    setPcPreviewPos(null)
+    setPreviewPos(null)
   }
 
   // const handleMouseUp = () => {

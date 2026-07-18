@@ -3,6 +3,7 @@ import './App.css';
 import LabPanel from './LabPanel';
 import sgImage from './assets/SG.png';
 import pcImage from './assets/PC.png';
+import bbImage from './assets/BB.png';
 
 // Unicode glyphs (▶ ⏸ ⌂) bake their own, font-dependent vertical padding
 // into the glyph box, so flexbox centering lines up the boxes but not the
@@ -109,8 +110,8 @@ export default function App() {
                 </button>
               </div>
               <div style={{display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <button type="button" className="control-bar-button icon-button" aria-label="Add Stern-Gerlach apparatus">
-                  <img src={sgImage} alt="" className="icon-button-image" />
+                <button type="button" className={`control-bar-button icon-button ${expMode.build === 'bb-place' ? 'active' : ''}`} aria-label="Add beam block" onClick={() => setExpMode({ ...expMode, build: expMode.build === 'bb-place' ? 'normal' : 'bb-place' })}>
+                  <img src={bbImage} alt="" className="icon-button-image" />
                   <span>Add Beam Block</span>
                 </button>
               </div>
