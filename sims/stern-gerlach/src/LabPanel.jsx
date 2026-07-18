@@ -3,6 +3,7 @@ import sgImage from './assets/SG.png';
 import pcImage from './assets/PC.png';
 import bbImage from './assets/BB.png';
 import ovenImage from './assets/oven.png';
+import ovenOffImage from './assets/ovenOff.png';
 
 // Oven dimensions for rescaling here
 const OVEN_HEIGHT = 100;
@@ -373,6 +374,7 @@ const LabPanel = forwardRef(function LabPanel(
   const [axis, setAxis] = useState(300); // y-coordinate of halfway down the canvas; determines position of all user-created devices
   // These refs hold the SG and PC images for all time, using the loading hook
   const [ovenImageRef, ovenImageLoaded] = useImage(ovenImage);
+  const [ovenOffImageRef, ovenOffImageLoaded] = useImage(ovenOffImage);
   const [sgImageRef, sgImageLoaded] = useImage(sgImage);
   const [pcImageRef, pcImageLoaded] = useImage(pcImage);
   const [bbImageRef, bbImageLoaded] = useImage(bbImage);
@@ -457,8 +459,10 @@ const LabPanel = forwardRef(function LabPanel(
       ctx.stroke();
     }
 
-    if (ovenImageRef.current && ovenImageRef.current.complete) {
+    if ((expMode.running || particlesRef.current.length > 0) && ovenImageRef.current && ovenImageRef.current.complete) {
       ctx.drawImage(ovenImageRef.current, OVEN_X0, axis - OVEN_HEIGHT / 2, OVEN_WIDTH, OVEN_HEIGHT);
+    } else if (!expMode.running && ovenOffImageRef.current && ovenOffImageRef.current.complete) {
+      ctx.drawImage(ovenOffImageRef.current, OVEN_X0, axis - OVEN_HEIGHT / 2, OVEN_WIDTH, OVEN_HEIGHT);
     }
 
     // Draw the SGs, one copy of the ref image each, plus the basis labels
@@ -714,7 +718,7 @@ const LabPanel = forwardRef(function LabPanel(
     const canvas = canvasRef.current;
     if (!canvas) return;
     drawScene(canvas.getContext('2d'));
-  }, [experiment, expMode, ovenImageLoaded, sgImageLoaded, pcImageLoaded, mousePos, axis, canvasDims, displayBools, drawScene]);
+  }, [experiment, expMode, ovenImageLoaded, ovenOffImageLoaded, sgImageLoaded, pcImageLoaded, mousePos, axis, canvasDims, displayBools, drawScene]);
 
   // Mouse handlers
   const handleClick = (e) => {
