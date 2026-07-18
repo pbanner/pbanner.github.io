@@ -316,48 +316,6 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
           ctx.setLineDash([]);
         }
 
-        // Draw the out path arcs (temporary)
-        // ctx.strokeStyle = '#303030';
-        // ctx.setLineDash([10, 8]);
-        // ctx.lineWidth = 1.5;
-
-        // ctx.beginPath();
-        // ctx.arc(
-        //   x0 + SG_WIDTH, 
-        //   axis - (SG_HEIGHT/2) + SG_OUTPUT_UP - OUT_PATH_ARC_RADIUS, 
-        //   OUT_PATH_ARC_RADIUS, Math.PI/2, Math.PI/2 - OUT_PATH_ARC_ANGLE, true);
-        // ctx.stroke();
-
-        // ctx.beginPath();
-        // ctx.arc(
-        //   x0 + SG_WIDTH, 
-        //   axis - (SG_HEIGHT/2) + SG_OUTPUT_DOWN + OUT_PATH_ARC_RADIUS, 
-        //   OUT_PATH_ARC_RADIUS, -Math.PI/2, -Math.PI/2 + OUT_PATH_ARC_ANGLE, false);
-        // ctx.stroke();
-
-        // ctx.setLineDash([]); // Reset to solid lines
-
-        // Draw the in path arcs (temporary)
-        // ctx.strokeStyle = '#303030';
-        // ctx.setLineDash([10, 8]);
-        // ctx.lineWidth = 1.5;
-
-        // ctx.beginPath();
-        // ctx.arc(
-        //   x0 + SG_WIDTH, 
-        //   axis - (SG_HEIGHT/2) + SG_OUTPUT_UP + IN_PATH_ARC_RADIUS, 
-        //   IN_PATH_ARC_RADIUS, -Math.PI/2, -Math.PI/2 + IN_PATH_ARC_ANGLE, false);
-        // ctx.stroke();
-
-        // ctx.beginPath();
-        // ctx.arc(
-        //   x0 + SG_WIDTH, 
-        //   axis - (SG_HEIGHT/2) + SG_OUTPUT_DOWN - IN_PATH_ARC_RADIUS, 
-        //   IN_PATH_ARC_RADIUS, Math.PI/2, Math.PI/2 - IN_PATH_ARC_ANGLE, true);
-        // ctx.stroke();
-
-        // ctx.setLineDash([]); // Reset to solid lines
-
         // Draw SGs and BBs as needed
         ['up', 'down'].forEach((arm) => {
           // If we're not in a preview mode and there's no component here, don't draw anything
