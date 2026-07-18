@@ -265,6 +265,7 @@ export default function App() {
           {/* Set Measurement Basis Controls */}
           <div className="control-bar-group">
             <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Set Measurement Bases</h3>
+            <p style={{ width: '180px' }}>Check the checkbox next to an SG label to set its basis by angles (θ, ϕ).</p>
             {experiment.map((sg, i) => (
             <AxisStepper key={i} index={i} sg={sg} setExperiment={setExperiment} disabled={controlsLocked} resetDataCollection={resetDataCollection} />
             ))}

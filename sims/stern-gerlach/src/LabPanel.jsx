@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { upEigenstate, downEigenstate, applyT, sampleOvenState, cAbs2 } from './physics';
 import { PC_COLORS } from './colors';
 import sgImage from './assets/SG.png';
 import pcImage from './assets/PC.png';
@@ -90,52 +91,6 @@ function useImage(src) {
   }, [src]);
 
   return [imgRef, loaded];
-}
-
-// --- Spin-1/2 physics ----------------------------------------------------
-// Complex arithmetic on plain { re, im } objects -- no library needed for
-// just add/multiply/scale/modulus/conjugate.
-function cAdd(z1, z2) { return { re: z1.re + z2.re, im: z1.im + z2.im }; }
-function cMul(z1, z2) { return { re: z1.re * z2.re - z1.im * z2.im, im: z1.re * z2.im + z1.im * z2.re }; }
-function cScale(z, s) { return { re: z.re * s, im: z.im * s }; }
-function cExp(theta) { return { re: Math.cos(theta), im: Math.sin(theta) }; } // e^{i*theta}
-function cAbs2(z) { return z.re * z.re + z.im * z.im; }
-function cConj(z) { return { re: z.re, im: -z.im }; }
-
-// <u|v> for two 2-component states
-function innerProduct(u, v) {
-  return cAdd(cMul(cConj(u.a), v.a), cMul(cConj(u.b), v.b));
-}
-
-function upEigenstate(theta, phi) {
-  return { a: { re: Math.cos(theta / 2), im: 0 }, b: cScale(cExp(phi), Math.sin(theta / 2)) };
-}
-function downEigenstate(theta, phi) {
-  return { a: cScale(cExp(-phi), -Math.sin(theta / 2)), b: { re: Math.cos(theta / 2), im: 0 } };
-}
-
-// Measurement amplitudes for basis [theta, phi]: the projection of `state`
-// onto T's (= n_hat . sigma's) +1/-1 eigenvectors, i.e. <+n_hat|state> and
-// <-n_hat|state> -- NOT T applied to state. T*v is a different, generally
-// non-diagonal operation; it only coincides with the eigen-decomposition
-// when T is already diagonal in the Z basis, which is true for Z itself
-// but false for X/Y -- using T*v directly gave correct single-SG stats
-// (fooled by the marginal) but wrong conditional probabilities the moment
-// a second SG measured along a different axis than the first.
-function applyT(theta, phi, state) {
-  const up = innerProduct(upEigenstate(theta, phi), state);
-  const down = innerProduct(downEigenstate(theta, phi), state);
-  return { up, down };
-}
-
-// Maximally-mixed oven state (ρ = I/2), unraveled as one uniformly random
-// pure state per particle -- averaged over many particles this reproduces
-// I/2's measurement statistics exactly (50/50 along any axis), without
-// needing to propagate a density matrix through the whole chain.
-function sampleOvenState() {
-  const phi = Math.random() * 2 * Math.PI;
-  const theta = Math.acos(2 * Math.random() - 1); // uniform on the sphere, not uniform in theta
-  return upEigenstate(theta, phi);
 }
 
 // This is the fundemantal function of the first part of the animation pipeline!!!

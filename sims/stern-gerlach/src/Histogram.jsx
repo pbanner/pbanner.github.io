@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { theoreticalProbabilities } from './physics';
 import { PC_COLORS } from './colors';
 
 // Plot layout -- all tunable
@@ -16,12 +17,16 @@ const BAR_GROUP_MARGIN = 24; // extra empty space to each side of the whole set 
 const MAX_BAR_WIDTH = 60;    // a bar never grows wider than this, however few detectors there are
 const ERROR_BAR_WIDTH_RATIO = 0.4;
 const ERROR_BAR_WIDTH_MIN = 20;
-const LEGEND_WIDTH = 120;
+const LEGEND_WIDTH = 100;
 const LEGEND_GAP = 14;
 const LEGEND_PADDING = 8;
 const LEGEND_SWATCH_SIZE = 12;
 const LEGEND_ROW_HEIGHT = 18;
 const TOTAL_COLOR = '#303030';
+const THEORY_LINE_COLOR = '#707070';
+const THEORY_LINE_WIDTH = 2;
+//const THEORY_LINE_DASH = [4, 3];
+const THEORY_LINE_OVERHANG = 6; // extra px each side beyond the bar's own width, so the line reads as "wider than the bar" rather than flush with its edges
 
 // Every PC currently placed in the experiment, in a stable left-to-right
 // order (by SG index, then up before down) -- this is what turns into one
@@ -97,9 +102,30 @@ export default function Histogram({ experiment, displayBools }) {
     const { width, height } = canvasDims;
     ctx.clearRect(0, 0, width, height);
 
-    const detectors = getDetectors(experiment);
-    const dataTotal = detectors.reduce((sum, d) => sum + d.count, 0);
-    const dataMax = detectors.reduce((m, d) => Math.max(m, d.count), 0);
+    const rawDetectors = getDetectors(experiment);
+    const dataTotal = rawDetectors.reduce((sum, d) => sum + d.count, 0);
+
+    // Theoretical probabilities are computed exactly (see physics.js), not
+    // sampled -- converted to an expected *count* by scaling against the
+    // same dataTotal the observed bars are drawn against, so the reference
+    // line is a fair comparison against however much data has actually
+    // been collected so far.
+    const theoryOn = displayBools.showTheory;
+    const theoryMap = theoryOn
+      ? new Map(theoreticalProbabilities(experiment).map((t) => [`${t.sgIndex}-${t.arm}`, t.prob]))
+      : null;
+    const detectors = rawDetectors.map((d) => ({
+      ...d,
+      theoryProb: theoryMap ? (theoryMap.get(`${d.sgIndex}-${d.arm}`) ?? 0) : 0,
+    }));
+
+    // The axis has to be tall enough for the theory lines too, not just the
+    // observed bars, or a line for an under-sampled detector could get
+    // clipped off the top of the plot.
+    const dataMax = detectors.reduce((m, d) => {
+      const expected = theoryOn && dataTotal > 0 ? d.theoryProb * dataTotal : 0;
+      return Math.max(m, d.count, expected);
+    }, 0);
     const requiredMax = Math.max(MIN_AXIS_MAX, dataMax * AXIS_HEADROOM);
     const ticks = niceTicks(requiredMax, TARGET_TICK_COUNT);
     const axisMax = ticks[ticks.length - 1];
@@ -107,7 +133,8 @@ export default function Histogram({ experiment, displayBools }) {
     const legendOn = displayBools.showLegend;
     const legendX1 = width - PADDING_RIGHT;
     const legendX0 = legendX1 - LEGEND_WIDTH;
-    const legendBoxHeight = LEGEND_PADDING * 2 + Math.max(detectors.length, 1) * LEGEND_ROW_HEIGHT;
+    const legendRowCount = detectors.length === 0 ? 1 : detectors.length + (theoryOn ? 1 : 0);
+    const legendBoxHeight = LEGEND_PADDING * 2 + legendRowCount * LEGEND_ROW_HEIGHT;
 
     const plotX0 = PADDING_LEFT;
     const plotX1 = legendOn ? legendX0 - LEGEND_GAP : width - PADDING_RIGHT;
@@ -155,6 +182,7 @@ export default function Histogram({ experiment, displayBools }) {
         ctx.fillStyle = PC_COLORS[d.colorId] ?? '#999999';
         ctx.fillRect(barX, barY, barWidth, barHeight);
 
+        // Draw the error bars
         const drawErrorBars = (d.count > 2 && displayBools.showErrorBars);
         const errOffset = Math.sqrt(d.count)*(barHeight/d.count);
         if (drawErrorBars) {
@@ -171,6 +199,22 @@ export default function Histogram({ experiment, displayBools }) {
           ctx.stroke();
         }
 
+        // Draw the theory reference lines
+        if (theoryOn && dataTotal > 0) {
+          const expectedCount = d.theoryProb * dataTotal;
+          const lineY = plotY1 - (expectedCount / axisMax) * (plotY1 - plotY0);
+          const lineHalfWidth = barWidth / 2 + THEORY_LINE_OVERHANG;
+          ctx.strokeStyle = THEORY_LINE_COLOR;
+          ctx.lineWidth = THEORY_LINE_WIDTH;
+          //ctx.setLineDash(THEORY_LINE_DASH);
+          ctx.beginPath();
+          ctx.moveTo(slotCenter - lineHalfWidth, lineY);
+          ctx.lineTo(slotCenter + lineHalfWidth, lineY);
+          ctx.stroke();
+          //ctx.setLineDash([]);
+        }
+
+        // Write the labels on all the bars
         const showBothActual = (displayBools.showPercentages === 2 && dataTotal > 0);
         ctx.fillStyle = PC_COLORS[d.colorId];
         ctx.font = '11px Arial';
@@ -203,6 +247,20 @@ export default function Histogram({ experiment, displayBools }) {
           ctx.fillStyle = AXIS_COLOR;
           ctx.fillText(`SG${d.sgIndex + 1} ${d.arm}`, legendX0 + LEGEND_PADDING + LEGEND_SWATCH_SIZE + 6, rowY);
         });
+        // Add the theory line at the end
+        if (theoryOn) {
+          const rowY = legendY0 + LEGEND_PADDING + detectors.length * LEGEND_ROW_HEIGHT + LEGEND_ROW_HEIGHT / 2;
+          ctx.strokeStyle = THEORY_LINE_COLOR;
+          ctx.lineWidth = THEORY_LINE_WIDTH;
+          //ctx.setLineDash(THEORY_LINE_DASH);
+          ctx.beginPath();
+          ctx.moveTo(legendX0 + LEGEND_PADDING, rowY);
+          ctx.lineTo(legendX0 + LEGEND_PADDING + LEGEND_SWATCH_SIZE, rowY);
+          ctx.stroke();
+          //ctx.setLineDash([]);
+          ctx.fillStyle = AXIS_COLOR;
+          ctx.fillText('Theoretical', legendX0 + LEGEND_PADDING + LEGEND_SWATCH_SIZE + 6, rowY);
+        }
       }
     }
 
