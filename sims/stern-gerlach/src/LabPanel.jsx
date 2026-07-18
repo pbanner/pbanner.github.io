@@ -171,7 +171,7 @@ function findNearestDeletable(mouseX, mouseY, experiment, axis) {
   return closest;
 }
 
-export default function LabPanel({ experiment, setExperiment, expMode, setExpMode, displayBools }) {
+export default function LabPanel({ experiment, setExperiment, expMode, setExpMode, counts, setCounts, displayBools }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
@@ -399,6 +399,9 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
       next[sgIndex] = { ...next[sgIndex], [arm]: expMode.build === 1 ? 'pc' : 'bb' };
       return next;
     });
+    if (expMode.build === 1) {
+      setCounts([ ...counts, { sg: sgIndex, arm: arm, data: 0, colorId: 0 } ]);
+    }
   };
 
   const handleMouseMove = (e) => {

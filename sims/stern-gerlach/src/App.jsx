@@ -78,6 +78,8 @@ export default function App() {
   // outputs are going
   // Start with one apparatus already in place
   const [experiment, setExperiment] = useState([{ basis: [0, 0], up: null, down: null }]);
+  // counts entries have the format { sg, arm, data, colorId }
+  const [counts, setCounts] = useState([]);
 
   const addSternGerlach = () => {
     setExperiment((prev) => [
@@ -90,7 +92,7 @@ export default function App() {
     <div className="app-layout">
       {/* Main Canvas Area */}
       <div className="canvas-area">
-        <LabPanel experiment={experiment} setExperiment={setExperiment} expMode={expMode} setExpMode={setExpMode} displayBools={displayBools} />
+        <LabPanel experiment={experiment} setExperiment={setExperiment} expMode={expMode} setExpMode={setExpMode} counts={counts} setCounts={setCounts} displayBools={displayBools} />
       </div>
 
       {/* Right Sidebar */}
