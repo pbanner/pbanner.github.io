@@ -222,6 +222,18 @@ export default function App() {
     }
   };
 
+  // Escape backs out of build/delete mode -- registered once since setExpMode
+  // already reads the latest build value itself. Does nothing when already in
+  // normal mode.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      setExpMode((prev) => (prev.build === 0 ? prev : { ...prev, build: 0 }));
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   useEffect(() => {
     if (expMode.dc === 'stream' && expMode.running && tabVisible) {
       streamTimerRef.current = setInterval(() => {
