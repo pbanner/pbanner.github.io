@@ -93,7 +93,7 @@ export default function App() {
   const [particleCount, setParticleCount] = useState(0);
   const [resetToken, setResetToken] = useState(0);
   const streamTimerRef = useRef(null);
-  const STREAM_SPAWN_INTERVAL_MS = 250; // ~4/sec; tune freely
+  const STREAM_SPAWN_INTERVAL_MS = 50;
 
   const controlsLocked = particleCount > 0;
 
