@@ -473,8 +473,8 @@ const LabPanel = forwardRef(function LabPanel(
         ctx.setLineDash([10, 8]);
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.moveTo(axis, OVEN_X0 + OVEN_WIDTH);
-        ctx.lineTo(axis, SG_START_X);
+        ctx.moveTo(OVEN_X0 + OVEN_WIDTH, axis);
+        ctx.lineTo(SG_START_X, axis);
         ctx.stroke();
         ctx.setLineDash([]);
       }
