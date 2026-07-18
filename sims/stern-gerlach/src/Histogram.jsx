@@ -45,7 +45,7 @@ function niceTicks(maxValue, targetCount) {
   return ticks;
 }
 
-export default function Histogram({ experiment }) {
+export default function Histogram({ experiment, displayBools }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [canvasDims, setCanvasDims] = useState({ width: 300, height: 200 });
@@ -91,6 +91,7 @@ export default function Histogram({ experiment }) {
     const plotY1 = height - PADDING_BOTTOM;
 
     const detectors = getDetectors(experiment);
+    const dataTotal = detectors.reduce((sum, d) => sum + d.count, 0);
     const dataMax = detectors.reduce((m, d) => Math.max(m, d.count), 0);
     const flooredMax = Math.max(MIN_AXIS_MAX, dataMax);
     const ticks = niceTicks(flooredMax, TARGET_TICK_COUNT);
@@ -127,23 +128,25 @@ export default function Histogram({ experiment }) {
       const barWidth = slotWidth * (1 - BAR_GAP_RATIO);
 
       detectors.forEach((d, i) => {
-        const barHeight = (d.count / axisMax) * (plotY1 - plotY0);
+        const barHeight = Math.max(1.5,(d.count / axisMax) * (plotY1 - plotY0));
         const barX = plotX0 + i * slotWidth + (slotWidth - barWidth) / 2;
         const barY = plotY1 - barHeight;
 
         ctx.fillStyle = PC_COLORS[d.colorId] ?? '#999999';
         ctx.fillRect(barX, barY, barWidth, barHeight);
 
-        if (d.count > 0) {
-          ctx.fillStyle = AXIS_COLOR;
-          ctx.font = '11px Arial';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'bottom';
-          ctx.fillText(String(d.count), barX + barWidth / 2, barY - 2);
+        ctx.fillStyle = PC_COLORS[d.colorId];
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        if (dataTotal === 0 || !displayBools.showPercentages) {
+            ctx.fillText(String(d.count), barX + barWidth / 2, barY - 2);
+        } else {
+            ctx.fillText(String(d.count) + " (" + (d.count/dataTotal*100).toFixed(1) + "%)", barX + barWidth / 2, barY - 2);
         }
       });
     }
-  }, [experiment, canvasDims]);
+  }, [experiment, displayBools, canvasDims]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

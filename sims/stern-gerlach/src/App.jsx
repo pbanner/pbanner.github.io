@@ -101,6 +101,9 @@ export default function App() {
     gridOn: true,             // Displaying the grid
     previewPaths: false       // For previewing particle paths
   });
+  const [histDisplayBools, setHistDisplayBools] = useState({
+    showPercentages: true
+  });
   // build = 0 for normal operation, 1 for placing a particle counter, 2 for placing
   // a beam block, -1 for deleting stuff
   // running = true or false
@@ -293,18 +296,18 @@ export default function App() {
           </div>
           {/* Histogram canvas area */}
           <div className="control-bar-group" style={{ flexDirection: 'row', flex: '1 1 auto', gap: '10px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <button className="control-bar-button" onClick={resetDataCollection} style={{ width: '100px' }}>
                 Reset Data Collection
               </button>
-              <label style={{ margin: '6px 0 0 0' }}>
-                <input type="checkbox" />
-                Normalize
+              <label style={{ margin: '0px 0 0 0' }}>
+                <input type="checkbox" checked={histDisplayBools.showPercentages} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showPercentages: e.target.checked })} />
+                Show percentages
               </label>
             </div>
             <div className="histogram-panel">
               <div className="histogram-canvas-wrap">
-                <Histogram experiment={experiment} />
+                <Histogram experiment={experiment} displayBools={histDisplayBools} />
               </div>
             </div>
           </div>
