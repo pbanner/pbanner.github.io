@@ -52,7 +52,7 @@ function AxisStepper({ index, sg, setExperiment, disabled, resetDataCollection }
       <input type="checkbox" disabled={disabled} />
       <label>{'SG' + (index + 1)}</label>
       <div className="axis-stepper">
-        <span className="axis-stepper-value">
+        <span className={`axis-stepper-value ${disabled ? 'disabled' : ''}`}>
           {currentIndex === -1 ? '?' : SG_OPTION_LABELS[currentIndex]}
         </span>
         <div className="axis-stepper-arrows">
