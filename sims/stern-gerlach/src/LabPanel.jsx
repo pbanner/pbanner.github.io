@@ -23,7 +23,7 @@ const BB_INPUT = BB_HEIGHT/2;
 // Path specs for particles
 const OUT_PATH_ARC_RADIUS = 150;
 const OUT_PATH_ARC_ANGLE = 0.7; // rad
-const NEW_DEVICE_SNAP_RADIUS = 50;  // px — how close the cursor must be to snap
+const SNAP_RADIUS = 50;  // px — how close the cursor must be to snap
 
 const SUB_LABELS = "₁₂₃₄₅₆₇₈₉";
 function getSGLabel(angles, id) {
@@ -99,7 +99,7 @@ function getPlacementSiteCenter(site, width) {
 // placement site within snapping distance, or null if none qualify.
 function findNearestSite(mouseX, mouseY, experiment, axis, width) {
   let closest = null;
-  let closestDist = NEW_DEVICE_SNAP_RADIUS;
+  let closestDist = SNAP_RADIUS;
 
   experiment.forEach((sg, sgIndex) => {
     ['up', 'down'].forEach((arm) => {
@@ -129,8 +129,8 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
   const [sgImageRef, sgImageLoaded] = useImage(sgImage);
   const [pcImageRef, pcImageLoaded] = useImage(pcImage);
   const [bbImageRef, bbImageLoaded] = useImage(bbImage);
-  // This holds positions for a preview image as needed
-  const [previewPos, setPreviewPos] = useState(null); // null = no preview to show right now
+  // This holds positions for a preview image or for checking component deletion ranges, as needed
+  const [mousePos, setMousePos] = useState(null); // null = no preview to show right now and not in deletion mode
 
   // Resize canvas to fill container
   useEffect(() => {
@@ -217,10 +217,10 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
 
         // ctx.setLineDash([]); // Reset to solid lines
 
-        //if (expMode.build === 'pc-place' || expMode.build === 'normal') {
         // Draw SGs and BBs as needed
         ['up', 'down'].forEach((arm) => {
-          if (expMode.build === 'normal' && sg[arm] === null) return;
+          // If we're not in a preview mode and there's no component here, don't draw anything
+          if (expMode.build < 1 && sg[arm] === null) return;
           // We're drawing SOMETHING
           const site = getPlacementSite(i, arm, axis);
           ctx.save();
@@ -231,7 +231,7 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
           } else {
             // If we've reached this point, we're previewing sites
             ctx.globalAlpha = 0.5;
-            expMode.build === 'pc-place' ? ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
+            expMode.build === 1 ? ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
             ctx.globalAlpha = 1.0;
           }
           ctx.restore();
@@ -239,16 +239,16 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
       });
     }
 
-    // Draw any dragging preview stuff
-    if (expMode.build !== 'normal' && previewPos && pcImageRef.current && pcImageRef.current.complete) {
-      const snapped = findNearestSite(previewPos.x, previewPos.y, experiment, axis, expMode.build === 'pc-place' ? PC_WIDTH : BB_WIDTH);
+    // If we're in a placement mode, draw an image of the thing being placed to drag along the cursor
+    if (expMode.build > 0 && mousePos && pcImageRef.current && pcImageRef.current.complete) {
+      const snapped = findNearestSite(mousePos.x, mousePos.y, experiment, axis, expMode.build === 1 ? PC_WIDTH : BB_WIDTH);
 
       if (snapped) {
-        const center = getPlacementSiteCenter(snapped.site, expMode.build === 'pc-place' ? PC_WIDTH : BB_WIDTH);
+        const center = getPlacementSiteCenter(snapped.site, expMode.build === 1 ? PC_WIDTH : BB_WIDTH);
         ctx.beginPath();
         ctx.arc(
           center.x, center.y, 
-          expMode.build === 'pc-place' ? Math.max(PC_WIDTH, PC_HEIGHT) / 2 * 1.3 : Math.max(BB_WIDTH, BB_HEIGHT) / 2 * 1.3, 
+          expMode.build === 1 ? Math.max(PC_WIDTH, PC_HEIGHT) / 2 * 1.3 : Math.max(BB_WIDTH, BB_HEIGHT) / 2 * 1.3, 
           0, Math.PI * 2);
         ctx.strokeStyle = '#2ecc71';
         ctx.lineWidth = 3;
@@ -257,50 +257,50 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
         ctx.save();
         ctx.translate(snapped.site.x, snapped.site.y);
         ctx.rotate(snapped.site.angle);
-        expMode.build === 'pc-place' ? ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
+        expMode.build === 1 ? ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
         ctx.restore();
       } else {
-        expMode.build === 'pc-place' ? ctx.drawImage(pcImageRef.current, previewPos.x - PC_WIDTH / 2, previewPos.y - PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, previewPos.x - BB_WIDTH / 2, previewPos.y - BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
+        expMode.build === 1 ? ctx.drawImage(pcImageRef.current, mousePos.x - PC_WIDTH / 2, mousePos.y - PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, mousePos.x - BB_WIDTH / 2, mousePos.y - BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
       }
     }
-  }, [experiment, expMode, sgImageLoaded, pcImageLoaded, previewPos, axis, canvasDims, displayBools]);
+  }, [experiment, expMode, sgImageLoaded, pcImageLoaded, mousePos, axis, canvasDims, displayBools]);
 
   // Mouse handlers
   const handleClick = (e) => {
-    if (expMode.build === 'normal') return;
+    if (expMode.build === 0) return;
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    const snapped = findNearestSite(mouseX, mouseY, experiment, axis, expMode.build === 'pc-place' ? PC_WIDTH : BB_WIDTH);
+    const snapped = findNearestSite(mouseX, mouseY, experiment, axis, expMode.build === 2 ? BB_WIDTH : PC_WIDTH);
     if (!snapped) return; // clicked somewhere that isn't near a site — no-op
 
     const { sgIndex, arm } = snapped;
     setExperiment((prev) => {
       const next = [...prev];
-      next[sgIndex] = { ...next[sgIndex], [arm]: expMode.build === 'pc-place' ? 'pc' : 'bb' };
+      next[sgIndex] = { ...next[sgIndex], [arm]: expMode.build === -1 ? null : (expMode.build === 1 ? 'pc' : 'bb') };
       return next;
     });
   };
 
   const handleMouseMove = (e) => {
-    if (expMode.build === 'normal' || expMode.build === 'running') {
-      setPreviewPos(null);
+    if (expMode.build === 0 || expMode.running === true) {
+      setMousePos(null);
       return;
     }
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    setPreviewPos({
+    setMousePos({
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
     });
   };
 
   const handleMouseLeave = () => {
-    setPreviewPos(null)
+    setMousePos(null)
   }
 
   // const handleMouseUp = () => {

@@ -4,6 +4,7 @@ import LabPanel from './LabPanel';
 import sgImage from './assets/SG.png';
 import pcImage from './assets/PC.png';
 import bbImage from './assets/BB.png';
+import xImage from './assets/delete.png';
 
 // Unicode glyphs (▶ ⏸ ⌂) bake their own, font-dependent vertical padding
 // into the glyph box, so flexbox centering lines up the boxes but not the
@@ -67,11 +68,11 @@ export default function App() {
   const [displayBools, setDisplayBools] = useState({
     gridOn: true,             // Displaying the grid
   });
-  // build = 'normal', 'pc-place' for placing a particle counter, 'bb-place' for 
-  // placing a beam block
+  // build = 0 for normal operation, 1 for placing a particle counter, 2 for placing
+  // a beam block, -1 for deleting stuff
   // running = true or false
   // dc (for data collection) may be 'single' or 'stream'
-  const [expMode, setExpMode] = useState({ build: 'normal', dc: 'single', running: false })
+  const [expMode, setExpMode] = useState({ build: 0, dc: 'single', running: false })
   // The experimental setup is coded as a list of present SG setups; each
   // setup has a measurement basis plus a statement about where its up and down
   // outputs are going
@@ -104,15 +105,19 @@ export default function App() {
                   <img src={sgImage} alt="" className="icon-button-image" />
                   <span>Add Stern-Gerlach</span>
                 </button>
-                <button type="button" className={`control-bar-button icon-button ${expMode.build === 'pc-place' ? 'active' : ''}`} aria-label="Add particle counter" onClick={() => setExpMode({ ...expMode, build: expMode.build === 'pc-place' ? 'normal' : 'pc-place' })}>
+                <button type="button" className={`control-bar-button icon-button ${expMode.build === 1 ? 'active' : ''}`} aria-label="Add particle counter" onClick={() => setExpMode({ ...expMode, build: expMode.build === 1 ? 0 : 1 })}>
                   <img src={pcImage} alt="" className="icon-button-image" />
                   <span>Add Particle Counter</span>
                 </button>
               </div>
               <div style={{display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <button type="button" className={`control-bar-button icon-button ${expMode.build === 'bb-place' ? 'active' : ''}`} aria-label="Add beam block" onClick={() => setExpMode({ ...expMode, build: expMode.build === 'bb-place' ? 'normal' : 'bb-place' })}>
+                <button type="button" className={`control-bar-button icon-button ${expMode.build === 2 ? 'active' : ''}`} aria-label="Add beam block" onClick={() => setExpMode({ ...expMode, build: expMode.build === 2 ? 0 : 2 })}>
                   <img src={bbImage} alt="" className="icon-button-image" />
                   <span>Add Beam Block</span>
+                </button>
+                <button type="button" className={`control-bar-button icon-button ${expMode.build === -1 ? 'active' : ''}`} aria-label="Remove components" onClick={() => setExpMode({ ...expMode, build: expMode.build === -1 ? 0 : -1 })}>
+                  <img src={xImage} alt="" className="icon-button-image" />
+                  <span>Remove Components</span>
                 </button>
               </div>
             </div>
