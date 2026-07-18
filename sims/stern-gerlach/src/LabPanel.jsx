@@ -5,14 +5,14 @@ import bbImage from './assets/BB.png';
 import ovenImage from './assets/oven.png';
 
 // Oven dimensions for rescaling here
-const OVEN_HEIGHT = 75;
+const OVEN_HEIGHT = 100;
 const OVEN_WIDTH = Math.round(OVEN_HEIGHT*(992/654));
 const OVEN_X0 = 50;
 // SG image dimensions and specs for use throughout
 const SG_WIDTH = 160;
 const SG_HEIGHT = 90;
 const SG_SPACING = 300;   // horizontal gap between apparatus centers
-const SG_START_X = 250;   // x-position of the first apparatus
+const SG_START_X = 300;   // x-position of the first apparatus
 // From the image itself, to be used for path drawing
 const SG_INPUT_Y = 111*(SG_HEIGHT/225);
 const SG_OUTPUT_UP = 66*(SG_HEIGHT/225);
@@ -693,7 +693,7 @@ const LabPanel = forwardRef(function LabPanel(
     const canvas = canvasRef.current;
     if (!canvas) return;
     drawScene(canvas.getContext('2d'));
-  }, [experiment, expMode, sgImageLoaded, pcImageLoaded, mousePos, axis, canvasDims, displayBools, drawScene]);
+  }, [experiment, expMode, ovenImageLoaded, sgImageLoaded, pcImageLoaded, mousePos, axis, canvasDims, displayBools, drawScene]);
 
   // Mouse handlers
   const handleClick = (e) => {
