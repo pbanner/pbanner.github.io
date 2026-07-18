@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
 import LabPanel from './LabPanel';
 import sgImage from './assets/SG.png';
@@ -31,7 +31,7 @@ function PauseIcon({ size = '0.9em' }) {
 const SG_OPTION_LABELS = ['X', 'Y', 'Z'];
 const SG_OPTION_BASES = [[Math.PI/2, 0], [Math.PI/2, Math.PI/2], [0, 0]];
 
-function AxisStepper({ index, sg, setExperiment }) {
+function AxisStepper({ index, sg, setExperiment, disabled }) {
   const currentIndex = SG_OPTION_BASES.findIndex(
     ([theta, phi]) => theta === sg.basis[0] && phi === sg.basis[1]
   );
@@ -48,15 +48,15 @@ function AxisStepper({ index, sg, setExperiment }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'row', gap: '10px', padding: '6px' }}>
-      <input type="checkbox" />
+      <input type="checkbox" disabled={disabled} />
       <label>{'SG' + (index + 1)}</label>
       <div className="axis-stepper">
         <span className="axis-stepper-value">
           {currentIndex === -1 ? '?' : SG_OPTION_LABELS[currentIndex]}
         </span>
         <div className="axis-stepper-arrows">
-          <button type="button" className="axis-stepper-arrow" onClick={() => step(1)} aria-label="Next axis">▲</button>
-          <button type="button" className="axis-stepper-arrow" onClick={() => step(-1)} aria-label="Previous axis">▼</button>
+          <button type="button" className="axis-stepper-arrow" onClick={() => step(1)} aria-label="Next axis" disabled={disabled}>▲</button>
+          <button type="button" className="axis-stepper-arrow" onClick={() => step(-1)} aria-label="Previous axis" disabled={disabled}>▼</button>
         </div>
       </div>
     </div>
@@ -88,11 +88,59 @@ export default function App() {
     ]);
   };
 
+  // Particle propagation
+  const labPanelRef = useRef(null);
+  const [particleCount, setParticleCount] = useState(0);
+  const [resetToken, setResetToken] = useState(0);
+  const streamTimerRef = useRef(null);
+  const STREAM_SPAWN_INTERVAL_MS = 250; // ~4/sec; tune freely
+
+  const controlsLocked = particleCount > 0;
+
+  const handleStartPause = () => {
+    setExpMode((prev) => ({
+      ...prev,
+      build: 0, // leave any build/delete mode the moment particles start propagating
+      running: prev.dc === 'single' ? prev.running : !prev.running,
+    }));
+    if (expMode.dc === 'single') {
+      labPanelRef.current?.spawnParticle();
+    }
+  };
+
+  useEffect(() => {
+    if (expMode.dc === 'stream' && expMode.running) {
+      streamTimerRef.current = setInterval(() => {
+        labPanelRef.current?.spawnParticle();
+      }, STREAM_SPAWN_INTERVAL_MS);
+      return () => clearInterval(streamTimerRef.current);
+    }
+  }, [expMode.dc, expMode.running]);
+
+  const handleReset = () => {
+    setResetToken((t) => t + 1);
+    setExpMode((prev) => ({ ...prev, running: false }));
+    setExperiment((prev) => prev.map((sg) => ({
+      ...sg,
+      up: sg.up?.type === 'pc' ? { ...sg.up, data: 0 } : sg.up,
+      down: sg.down?.type === 'pc' ? { ...sg.down, data: 0 } : sg.down,
+    })));
+  };
+
   return (
     <div className="app-layout">
       {/* Main Canvas Area */}
       <div className="canvas-area">
-        <LabPanel experiment={experiment} setExperiment={setExperiment} expMode={expMode} setExpMode={setExpMode} displayBools={displayBools} />
+        <LabPanel
+          ref={labPanelRef}
+          experiment={experiment}
+          setExperiment={setExperiment}
+          expMode={expMode}
+          setExpMode={setExpMode}
+          displayBools={displayBools}
+          setParticleCount={setParticleCount}
+          resetToken={resetToken}
+        />
       </div>
 
       {/* Right Sidebar */}
@@ -103,21 +151,21 @@ export default function App() {
             <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Build Experiment</h3>
             <div style={{ display: 'flex', flexDirection: 'row', gap: '8px' }}>
               <div style={{display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <button type="button" className="control-bar-button icon-button" aria-label="Add Stern-Gerlach apparatus" onClick={addSternGerlach}>
+                <button type="button" className="control-bar-button icon-button" aria-label="Add Stern-Gerlach apparatus" onClick={addSternGerlach} disabled={controlsLocked}>
                   <img src={sgImage} alt="" className="icon-button-image" />
                   <span>Add Stern-Gerlach</span>
                 </button>
-                <button type="button" className={`control-bar-button icon-button ${expMode.build === 1 ? 'active' : ''}`} aria-label="Add particle counter" onClick={() => setExpMode({ ...expMode, build: expMode.build === 1 ? 0 : 1 })}>
+                <button type="button" className={`control-bar-button icon-button ${expMode.build === 1 ? 'active' : ''}`} aria-label="Add particle counter" onClick={() => setExpMode({ ...expMode, build: expMode.build === 1 ? 0 : 1 })} disabled={controlsLocked}>
                   <img src={pcImage} alt="" className="icon-button-image" />
                   <span>Add Particle Counter</span>
                 </button>
               </div>
               <div style={{display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <button type="button" className={`control-bar-button icon-button ${expMode.build === 2 ? 'active' : ''}`} aria-label="Add beam block" onClick={() => setExpMode({ ...expMode, build: expMode.build === 2 ? 0 : 2 })}>
+                <button type="button" className={`control-bar-button icon-button ${expMode.build === 2 ? 'active' : ''}`} aria-label="Add beam block" onClick={() => setExpMode({ ...expMode, build: expMode.build === 2 ? 0 : 2 })} disabled={controlsLocked}>
                   <img src={bbImage} alt="" className="icon-button-image" />
                   <span>Add Beam Block</span>
                 </button>
-                <button type="button" className={`control-bar-button icon-button ${expMode.build === -1 ? 'active' : ''}`} aria-label="Remove components" onClick={() => setExpMode({ ...expMode, build: expMode.build === -1 ? 0 : -1 })}>
+                <button type="button" className={`control-bar-button icon-button ${expMode.build === -1 ? 'active' : ''}`} aria-label="Remove components" onClick={() => setExpMode({ ...expMode, build: expMode.build === -1 ? 0 : -1 })} disabled={controlsLocked}>
                   <img src={xImage} alt="" className="icon-button-image" />
                   <span>Remove Components</span>
                 </button>
@@ -128,7 +176,7 @@ export default function App() {
           <div className="control-bar-group">
             <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Set Measurement Bases</h3>
             {experiment.map((sg, i) => (
-            <AxisStepper key={i} index={i} sg={sg} setExperiment={setExperiment} />
+            <AxisStepper key={i} index={i} sg={sg} setExperiment={setExperiment} disabled={controlsLocked} />
             ))}
           </div>
           {/* Data Collection Controls */}
@@ -142,11 +190,14 @@ export default function App() {
               <input type="checkbox" checked={displayBools.previewPaths} onChange={(e) => setDisplayBools({ ...displayBools, previewPaths: e.target.checked })} />
               Preview possible paths
             </label>
-            <button className="control-bar-button" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px'}}>
-              <PlayIcon /> {/* <PauseIcon />} */}
-              Start
+            <button className="control-bar-button" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px'}} onClick={handleStartPause}>
+              {expMode.dc === 'single'
+                ? (<><PlayIcon /> Make One Particle</>)
+                : expMode.running
+                  ? (<><PauseIcon /> Pause</>)
+                  : (<><PlayIcon /> Start</>)}
             </button>
-            <button className="control-bar-button" style={{ margin: '6px 0 0 0' }}>
+            <button className="control-bar-button" style={{ margin: '6px 0 0 0' }} onClick={handleReset}>
               Reset Data Collection
             </button>
           </div>

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import sgImage from './assets/SG.png';
 import pcImage from './assets/PC.png';
 import bbImage from './assets/BB.png';
@@ -32,6 +32,15 @@ const OUT_PATH_ARC_ANGLE = 0.7; // rad
 // Snap radius for UI
 const SNAP_RADIUS = 50;  // px — how close the cursor must be to snap
 
+// Particle animation specs -- all tunable
+const OVEN_X = 100;                // x-value where particles first appear
+const PARTICLE_SPEED = 240;        // px/sec while visibly moving
+const SG_PROCESSING_MS = 180;      // fixed pause while "inside" an SG
+const BEAM_TRANSVERSE_WIDTH = 14;  // px, full spread of the (uniform) beam jitter
+const PARTICLE_RADIUS = 4;
+const PARTICLE_COLOR = '#3498db';  // same blue as .control-bar-button etc.
+const ESCAPE_RUN_LENGTH = 1200;    // px of straight travel for a particle that exits the chain unmeasured
+
 const SUB_LABELS = "₁₂₃₄₅₆₇₈₉";
 function getSGLabel(angles, id) {
   if (angles[0] == 0) {
@@ -43,7 +52,7 @@ function getSGLabel(angles, id) {
       return 'Y';
     }
   }
-  return 'n\u0302'+SUB_LABELS[id];
+  return 'n̂'+SUB_LABELS[id];
 }
 
 function useImage(src) {
@@ -69,6 +78,75 @@ function useImage(src) {
   }, [src]);
 
   return [imgRef, loaded];
+}
+
+// --- Spin-1/2 physics ----------------------------------------------------
+// Complex arithmetic on plain { re, im } objects -- no library needed for
+// just add/multiply/scale/modulus.
+function cAdd(z1, z2) { return { re: z1.re + z2.re, im: z1.im + z2.im }; }
+function cMul(z1, z2) { return { re: z1.re * z2.re - z1.im * z2.im, im: z1.re * z2.im + z1.im * z2.re }; }
+function cScale(z, s) { return { re: z.re * s, im: z.im * s }; }
+function cExp(theta) { return { re: Math.cos(theta), im: Math.sin(theta) }; } // e^{i*theta}
+function cAbs2(z) { return z.re * z.re + z.im * z.im; }
+
+// T = n_hat . sigma for basis [theta, phi]; returns the amplitudes of the
+// incoming state in T's +1 ("up") / -1 ("down") eigenbasis.
+function applyT(theta, phi, state) {
+  const cosT = Math.cos(theta), sinT = Math.sin(theta);
+  const up = cAdd(cScale(state.a, cosT), cMul(cExp(-phi), cScale(state.b, sinT)));
+  const down = cAdd(cMul(cExp(phi), cScale(state.a, sinT)), cScale(state.b, -cosT));
+  return { up, down };
+}
+
+function upEigenstate(theta, phi) {
+  return { a: { re: Math.cos(theta / 2), im: 0 }, b: cScale(cExp(phi), Math.sin(theta / 2)) };
+}
+function downEigenstate(theta, phi) {
+  return { a: cScale(cExp(-phi), -Math.sin(theta / 2)), b: { re: Math.cos(theta / 2), im: 0 } };
+}
+
+// Maximally-mixed oven state (ρ = I/2), unraveled as one uniformly random
+// pure state per particle -- averaged over many particles this reproduces
+// I/2's measurement statistics exactly (50/50 along any axis), without
+// needing to propagate a density matrix through the whole chain.
+function sampleOvenState() {
+  const phi = Math.random() * 2 * Math.PI;
+  const theta = Math.acos(2 * Math.random() - 1); // uniform on the sphere, not uniform in theta
+  return upEigenstate(theta, phi);
+}
+
+// Walk the SG chain for one particle. A real measurement (and thus
+// collapse) occurs only at an SG where at least one arm terminates (PC or
+// BB) -- an SG with both arms open is transparent, and the state passes
+// through unchanged, preserving coherence for later interference.
+function samplePath(experiment) {
+  const hops = [];
+  let state = sampleOvenState();
+
+  for (let sgIndex = 0; sgIndex < experiment.length; sgIndex++) {
+    const sg = experiment[sgIndex];
+    const [theta, phi] = sg.basis;
+
+    if (sg.up === null && sg.down === null) {
+      const { up } = applyT(theta, phi, state);
+      const arm = Math.random() < cAbs2(up) ? 'up' : 'down'; // visual only -- state untouched
+      hops.push({ sgIndex, arm });
+      continue;
+    }
+
+    const { up } = applyT(theta, phi, state);
+    const arm = Math.random() < cAbs2(up) ? 'up' : 'down';
+    hops.push({ sgIndex, arm });
+
+    const dest = sg[arm];
+    if (dest === null) {
+      state = arm === 'up' ? upEigenstate(theta, phi) : downEigenstate(theta, phi);
+      continue;
+    }
+    return { hops, terminal: { sgIndex, arm, dest } };
+  }
+
+  return { hops, terminal: null }; // ran off the end of the chain, unmeasured
 }
 
 // For adding and removing PCs with appropriate color IDs
@@ -134,6 +212,74 @@ function getSGCenter(sgIndex, axis) {
   return { x: getSGX0(sgIndex) + SG_WIDTH / 2, y: axis };
 }
 
+// --- Particle path geometry ------------------------------------------------
+// The single source of truth for both the "preview possible paths" dashed
+// overlay and actual particle animation -- both an "out" arc (to a PC/BB)
+// and an "in" arc (back to the next SG's input) for a given arm.
+function getArmArc(sgIndex, arm, axis, kind /* 'in' | 'out' */) {
+  const cx = getSGX0(sgIndex) + SG_WIDTH;
+  const outputY = axis - SG_HEIGHT / 2 + (arm === 'up' ? SG_OUTPUT_UP : SG_OUTPUT_DOWN);
+
+  if (kind === 'out') {
+    return arm === 'up'
+      ? { cx, cy: outputY - OUT_PATH_ARC_RADIUS, r: OUT_PATH_ARC_RADIUS, startAngle: Math.PI / 2, endAngle: Math.PI / 2 - OUT_PATH_ARC_ANGLE, ccw: true }
+      : { cx, cy: outputY + OUT_PATH_ARC_RADIUS, r: OUT_PATH_ARC_RADIUS, startAngle: -Math.PI / 2, endAngle: -Math.PI / 2 + OUT_PATH_ARC_ANGLE, ccw: false };
+  }
+  return arm === 'up'
+    ? { cx, cy: outputY + IN_PATH_ARC_RADIUS, r: IN_PATH_ARC_RADIUS, startAngle: -Math.PI / 2, endAngle: -Math.PI / 2 + IN_PATH_ARC_ANGLE, ccw: false }
+    : { cx, cy: outputY - IN_PATH_ARC_RADIUS, r: IN_PATH_ARC_RADIUS, startAngle: Math.PI / 2, endAngle: Math.PI / 2 - IN_PATH_ARC_ANGLE, ccw: true };
+}
+
+function segmentLength(seg) {
+  if (seg.type === 'line') return Math.hypot(seg.x1 - seg.x0, seg.y1 - seg.y0);
+  if (seg.type === 'arc') return seg.r * Math.abs(seg.endAngle - seg.startAngle);
+  return 0; // 'wait' segments are timed, not distance-based
+}
+
+function pointOnSegment(seg, t) {
+  if (seg.type === 'wait') return { x: seg.x, y: seg.y };
+  if (seg.type === 'line') return { x: seg.x0 + (seg.x1 - seg.x0) * t, y: seg.y0 + (seg.y1 - seg.y0) * t };
+  const angle = seg.startAngle + (seg.endAngle - seg.startAngle) * t;
+  return { x: seg.cx + seg.r * Math.cos(angle), y: seg.cy + seg.r * Math.sin(angle) };
+}
+
+// Builds the full list of animation segments for one sampled particle.
+// The transverse offset is applied as a per-segment radius/y delta with a
+// single consistent sign; for the "small-ish" widths this is meant for,
+// any sub-pixel kink at segment joins should be imperceptible -- if visible
+// kinks show up once this is running, that's the spot to revisit.
+function buildAnimationPath(experiment, axis, sampled) {
+  const { hops, terminal } = sampled;
+  const offset = (Math.random() - 0.5) * BEAM_TRANSVERSE_WIDTH;
+  const segments = [];
+
+  const sg0InputY = axis - SG_HEIGHT / 2 + SG_INPUT_Y;
+  segments.push({ type: 'line', x0: OVEN_X, y0: sg0InputY + offset, x1: getSGX0(0), y1: sg0InputY + offset });
+
+  hops.forEach(({ sgIndex, arm }) => {
+    const inputY = axis - SG_HEIGHT / 2 + SG_INPUT_Y;
+    segments.push({ type: 'wait', x: getSGX0(sgIndex), y: inputY + offset, ms: SG_PROCESSING_MS });
+
+    const isTerminalHop = terminal && terminal.sgIndex === sgIndex && terminal.arm === arm;
+    const arc = getArmArc(sgIndex, arm, axis, isTerminalHop ? 'out' : 'in');
+    segments.push({ ...arc, r: arc.r + offset, type: 'arc' });
+  });
+
+  if (!terminal) {
+    const last = segments[segments.length - 1];
+    const p1 = pointOnSegment(last, 0.98);
+    const p2 = pointOnSegment(last, 1.0);
+    const dx = p2.x - p1.x, dy = p2.y - p1.y;
+    const len = Math.hypot(dx, dy) || 1;
+    segments.push({
+      type: 'line', x0: p2.x, y0: p2.y,
+      x1: p2.x + (dx / len) * ESCAPE_RUN_LENGTH, y1: p2.y + (dy / len) * ESCAPE_RUN_LENGTH,
+    });
+  }
+
+  return { segments, terminal };
+}
+
 // Placement only — unchanged from before, only considers empty arm sites.
 function findNearestPlacementSite(mouseX, mouseY, experiment, axis, width) {
   let closest = null;
@@ -195,7 +341,10 @@ function findNearestDeletable(mouseX, mouseY, experiment, axis) {
   return closest;
 }
 
-export default function LabPanel({ experiment, setExperiment, expMode, setExpMode, displayBools }) {
+const LabPanel = forwardRef(function LabPanel(
+  { experiment, setExperiment, expMode, setExpMode, displayBools, setParticleCount, resetToken },
+  ref
+) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
@@ -207,6 +356,13 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
   const [bbImageRef, bbImageLoaded] = useImage(bbImage);
   // This holds positions for a preview image or for checking component deletion ranges, as needed
   const [mousePos, setMousePos] = useState(null); // null = no preview to show right now and not in deletion mode
+  // Live, per-frame-mutated particle list -- deliberately a ref, not state,
+  // so 60fps position updates don't re-render the whole app. particleCount
+  // (a prop, real state owned by App) is the only piece of this that the
+  // rest of the UI needs to react to.
+  const particlesRef = useRef([]);
+  const rafRef = useRef(null);
+  const lastFrameRef = useRef(null);
 
   // Resize canvas to fill container
   useEffect(() => {
@@ -230,12 +386,13 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
     return () => window.removeEventListener('resize', resizeCanvas);
   }, []);
 
-  // Drawing
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
+  // Draws everything except in-flight particles: grid, SGs, path previews,
+  // PCs/BBs, and placement/deletion highlights. Called either from the
+  // state-driven effect below (when idle) or every frame from the particle
+  // animation loop (while particles exist), so there's one definition of
+  // "what the static scene looks like" regardless of who's asking.
+  const drawScene = useCallback((ctx) => {
+    const canvas = ctx.canvas;
 
     // Clear canvas
     ctx.fillStyle = '#ffffff';
@@ -273,46 +430,19 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
         ctx.fillText(getSGLabel(sg.basis, i), x0+62, axis);
 
         if (displayBools.previewPaths) {
-          // Styling
           ctx.strokeStyle = '#303030';
           ctx.setLineDash([10, 8]);
           ctx.lineWidth = 1.5;
 
-          // Up arm first
-          if (sg['up'] !== null) {
+          ['up', 'down'].forEach((arm) => {
+            const continues = sg[arm] === null;
+            if (continues && i === experiment.length - 1) return; // nothing to continue into
+            const a = getArmArc(i, arm, axis, continues ? 'in' : 'out');
             ctx.beginPath();
-            ctx.arc(
-              x0 + SG_WIDTH, 
-              axis - (SG_HEIGHT/2) + SG_OUTPUT_UP - OUT_PATH_ARC_RADIUS, 
-              OUT_PATH_ARC_RADIUS, Math.PI/2, Math.PI/2 - OUT_PATH_ARC_ANGLE, true);
+            ctx.arc(a.cx, a.cy, a.r, a.startAngle, a.endAngle, a.ccw);
             ctx.stroke();
-          } else if (i !== (experiment.length-1)) {
-            ctx.beginPath();
-            ctx.arc(
-              x0 + SG_WIDTH, 
-              axis - (SG_HEIGHT/2) + SG_OUTPUT_UP + IN_PATH_ARC_RADIUS, 
-              IN_PATH_ARC_RADIUS, -Math.PI/2, -Math.PI/2 + IN_PATH_ARC_ANGLE, false);
-            ctx.stroke();
-          }
+          });
 
-          // Now down arm
-          if (sg['down'] !== null) {
-            ctx.beginPath();
-            ctx.arc(
-              x0 + SG_WIDTH, 
-              axis - (SG_HEIGHT/2) + SG_OUTPUT_DOWN + OUT_PATH_ARC_RADIUS, 
-              OUT_PATH_ARC_RADIUS, -Math.PI/2, -Math.PI/2 + OUT_PATH_ARC_ANGLE, false);
-            ctx.stroke();
-          } else if (i !== (experiment.length-1)) {
-            ctx.beginPath();
-            ctx.arc(
-              x0 + SG_WIDTH, 
-              axis - (SG_HEIGHT/2) + SG_OUTPUT_DOWN - IN_PATH_ARC_RADIUS, 
-              IN_PATH_ARC_RADIUS, Math.PI/2, Math.PI/2 - IN_PATH_ARC_ANGLE, true);
-            ctx.stroke();
-          }
-
-          // Set back to solid lines
           ctx.setLineDash([]);
         }
 
@@ -366,8 +496,8 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
         const center = getPlacementSiteCenter(snapped.site, expMode.build === 1 ? PC_WIDTH : BB_WIDTH);
         ctx.beginPath();
         ctx.arc(
-          center.x, center.y, 
-          expMode.build === 1 ? Math.max(PC_WIDTH, PC_HEIGHT) / 2 * 1.3 : Math.max(BB_WIDTH, BB_HEIGHT) / 2 * 1.3, 
+          center.x, center.y,
+          expMode.build === 1 ? Math.max(PC_WIDTH, PC_HEIGHT) / 2 * 1.3 : Math.max(BB_WIDTH, BB_HEIGHT) / 2 * 1.3,
           0, Math.PI * 2);
         ctx.strokeStyle = '#2ecc71';
         ctx.lineWidth = 3;
@@ -409,10 +539,122 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
         }
       }
     }
-  }, [experiment, expMode, sgImageLoaded, pcImageLoaded, mousePos, axis, canvasDims, displayBools]);
+  }, [experiment, expMode, displayBools, mousePos, axis]);
+
+  const drawParticles = useCallback((ctx) => {
+    ctx.fillStyle = PARTICLE_COLOR;
+    particlesRef.current.forEach((p) => {
+      const seg = p.segments[p.segmentIndex];
+      if (!seg) return;
+      const dur = seg.type === 'wait' ? seg.ms : (segmentLength(seg) / PARTICLE_SPEED) * 1000;
+      const t = dur > 0 ? Math.min(p.segmentElapsed / dur, 1) : 1;
+      const pos = pointOnSegment(seg, t);
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, PARTICLE_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }, []);
+
+  const spawnParticle = () => {
+    if (experiment.length === 0) return; // nothing to simulate
+    const sampled = samplePath(experiment);
+    const path = buildAnimationPath(experiment, axis, sampled);
+    particlesRef.current = [...particlesRef.current, { ...path, segmentIndex: 0, segmentElapsed: 0 }];
+    setParticleCount(particlesRef.current.length);
+  };
+
+  useImperativeHandle(ref, () => ({ spawnParticle }));
+
+  // Reset: clears every in-flight particle whenever App bumps resetToken
+  useEffect(() => {
+    particlesRef.current = [];
+    setParticleCount(0);
+  }, [resetToken, setParticleCount]);
+
+  // Particle animation loop -- only runs while particles exist. Re-subscribes
+  // (fresh closures, no stale `experiment`/etc.) whenever anything it reads
+  // changes; since experiment only changes on real events (a PC hit, a user
+  // edit) rather than every frame, this restart is cheap and infrequent.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    const tick = (now) => {
+      const dt = lastFrameRef.current ? now - lastFrameRef.current : 0;
+      lastFrameRef.current = now;
+
+      const finished = [];
+      particlesRef.current.forEach((p) => {
+        let remaining = dt;
+        while (remaining > 0 && p.segmentIndex < p.segments.length) {
+          const seg = p.segments[p.segmentIndex];
+          const dur = seg.type === 'wait' ? seg.ms : (segmentLength(seg) / PARTICLE_SPEED) * 1000;
+          const left = dur - p.segmentElapsed;
+          if (remaining < left) {
+            p.segmentElapsed += remaining;
+            remaining = 0;
+          } else {
+            remaining -= left;
+            p.segmentIndex += 1;
+            p.segmentElapsed = 0;
+          }
+        }
+        if (p.segmentIndex >= p.segments.length) finished.push(p);
+      });
+
+      if (finished.length > 0) {
+        const pcHits = finished.filter((p) => p.terminal && p.terminal.dest.type === 'pc');
+        if (pcHits.length > 0) {
+          setExperiment((prev) => {
+            const next = [...prev];
+            pcHits.forEach((p) => {
+              const { sgIndex, arm } = p.terminal;
+              next[sgIndex] = { ...next[sgIndex], [arm]: { ...next[sgIndex][arm], data: next[sgIndex][arm].data + 1 } };
+            });
+            return next;
+          });
+        }
+        particlesRef.current = particlesRef.current.filter((p) => !finished.includes(p));
+        setParticleCount(particlesRef.current.length);
+      }
+
+      drawScene(ctx);
+      drawParticles(ctx);
+
+      if (particlesRef.current.length > 0) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        rafRef.current = null;
+        lastFrameRef.current = null;
+      }
+    };
+
+    if (particlesRef.current.length > 0 && rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(tick);
+    }
+
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [experiment, expMode, displayBools, sgImageLoaded, pcImageLoaded, mousePos, axis, canvasDims, drawScene, drawParticles, setExperiment, setParticleCount]);
+
+  // Drawing (idle state) -- the particle loop above owns drawing while any
+  // particles are in flight, so this just draws the static scene once per
+  // relevant state change the rest of the time.
+  useEffect(() => {
+    if (particlesRef.current.length > 0) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    drawScene(canvas.getContext('2d'));
+  }, [experiment, expMode, sgImageLoaded, pcImageLoaded, mousePos, axis, canvasDims, displayBools, drawScene]);
 
   // Mouse handlers
   const handleClick = (e) => {
+    if (particlesRef.current.length > 0) return; // locked while particles are propagating
     if (expMode.build === 0) return;
 
     const canvas = canvasRef.current;
@@ -453,7 +695,7 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
   };
 
   const handleMouseMove = (e) => {
-    if (expMode.build === 0 || expMode.running === true) {
+    if (particlesRef.current.length > 0 || expMode.build === 0 || expMode.running === true) {
       setMousePos(null);
       return;
     }
@@ -470,10 +712,6 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
     setMousePos(null)
   }
 
-  // const handleMouseUp = () => {
-  //   setDraggingCircle(false);
-  // };
-
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%' }}>
       <canvas
@@ -482,11 +720,12 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
         onMouseLeave={handleMouseLeave}
         onClick={handleClick}
         style={{
-          //cursor: draggingCircle ? 'grabbing' : 'grab',
           display: 'block',
           touchAction: 'none',
         }}
       />
     </div>
   );
-}
+});
+
+export default LabPanel;
