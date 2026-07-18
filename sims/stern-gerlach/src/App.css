@@ -151,6 +151,9 @@
   height: 32px;
   margin-bottom: 6px;
   object-fit: contain;   /* scales the image to fit the box, preserving aspect ratio */
+  /* needed for Safari compatibility with draggable=false */
+  -webkit-user-drag: none;
+  user-select: none;
 }
 
 /* Custom axis stepper controls */
