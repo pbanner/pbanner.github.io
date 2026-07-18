@@ -467,6 +467,9 @@ const LabPanel = forwardRef(function LabPanel(
 
     // Draw the SGs, one copy of the ref image each, plus the basis labels
     if (sgImageRef.current && sgImageRef.current.complete) {
+      // This tracks whether at least some of the particles could make it
+      // through to the next SG; it's only used for drawing preview paths
+      var incomingParticles = true;
       experiment.forEach((sg, i) => {
         const x0 = SG_START_X + i * SG_SPACING;
 
@@ -480,14 +483,14 @@ const LabPanel = forwardRef(function LabPanel(
         ctx.textBaseline = 'middle';
         ctx.fillText(getSGLabel(sg.basis, i), x0+62, axis);
 
-        if (displayBools.previewPaths) {
+        if (displayBools.previewPaths && incomingParticles) {
           ctx.strokeStyle = '#303030';
           ctx.setLineDash([10, 8]);
           ctx.lineWidth = 1.5;
 
           ['up', 'down'].forEach((arm) => {
-            const continues = sg[arm] === null;
-            if (continues && i === experiment.length - 1) return; // nothing to continue into
+            var continues = sg[arm] === null;
+            if (continues && i === experiment.length - 1) continues = false; // nothing to continue into
             const a = getArmArc(i, arm, axis, continues ? 'in' : 'out');
             ctx.beginPath();
             ctx.arc(a.cx, a.cy, a.r, a.startAngle, a.endAngle, a.ccw);
@@ -495,6 +498,9 @@ const LabPanel = forwardRef(function LabPanel(
           });
 
           ctx.setLineDash([]);
+        }
+        if ((sg['up'] !== null) && (sg['down'] !== null)) {
+          incomingParticles = false;
         }
 
         // Draw SGs and BBs as needed
