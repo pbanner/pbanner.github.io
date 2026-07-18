@@ -97,21 +97,27 @@ function getPlacementSiteCenter(site, width) {
 
 // Pure function: given a mouse position, find the nearest unoccupied
 // placement site within snapping distance, or null if none qualify.
-function findNearestSite(mouseX, mouseY, experiment, axis, width) {
+function findNearestSite(mouseX, mouseY, experiment, axis, { wantOccupied, placingWidth, placingHeight }) {
   let closest = null;
-  let closestDist = SNAP_RADIUS;
+  let closestDist = Infinity;
 
   experiment.forEach((sg, sgIndex) => {
     ['up', 'down'].forEach((arm) => {
-      if (sg[arm] !== null) return; // already occupied, not a candidate
+      const occupied = sg[arm] !== null;
+      if (occupied !== wantOccupied) return; // only consider what we're actually looking for
+
+      // If occupied, size comes from what's really there; if empty, from what's about to be placed.
+      const width = occupied ? (sg[arm] === 'pc' ? PC_WIDTH : BB_WIDTH) : placingWidth;
+      const height = occupied ? (sg[arm] === 'pc' ? PC_HEIGHT : BB_HEIGHT) : placingHeight;
+      const threshold = occupied ? (Math.max(width, height) / 2) * 1.3 : SNAP_RADIUS;
 
       const site = getPlacementSite(sgIndex, arm, axis);
       const center = getPlacementSiteCenter(site, width);
       const dist = Math.hypot(mouseX - center.x, mouseY - center.y);
 
-      if (dist < closestDist) {
+      if (dist < threshold && dist < closestDist) {
         closestDist = dist;
-        closest = { sgIndex, arm, site };
+        closest = { sgIndex, arm, site, width, height };
       }
     });
   });
@@ -241,7 +247,11 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
 
     // If we're in a placement mode, draw an image of the thing being placed to drag along the cursor
     if (expMode.build > 0 && mousePos && pcImageRef.current && pcImageRef.current.complete) {
-      const snapped = findNearestSite(mousePos.x, mousePos.y, experiment, axis, expMode.build === 1 ? PC_WIDTH : BB_WIDTH);
+      const snapped = findNearestSite(mousePos.x, mousePos.y, experiment, axis, {
+        wantOccupied: false,
+        placingWidth: expMode.build === 1 ? PC_WIDTH : BB_WIDTH,
+        placingHeight: expMode.build === 1 ? PC_HEIGHT : BB_HEIGHT,
+      });
 
       if (snapped) {
         const center = getPlacementSiteCenter(snapped.site, expMode.build === 1 ? PC_WIDTH : BB_WIDTH);
@@ -263,6 +273,18 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
         expMode.build === 1 ? ctx.drawImage(pcImageRef.current, mousePos.x - PC_WIDTH / 2, mousePos.y - PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, mousePos.x - BB_WIDTH / 2, mousePos.y - BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
       }
     }
+    // Hovering over an existing component in delete mode
+    if (expMode.build === -1 && mousePos) {
+      const snapped = findNearestSite(mousePos.x, mousePos.y, experiment, axis, { wantOccupied: true });
+      if (snapped) {
+        const center = getPlacementSiteCenter(snapped.site, snapped.width);
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, (Math.max(snapped.width, snapped.height) / 2) * 1.3, 0, Math.PI * 2);
+        ctx.strokeStyle = '#900000';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
+    }
   }, [experiment, expMode, sgImageLoaded, pcImageLoaded, mousePos, axis, canvasDims, displayBools]);
 
   // Mouse handlers
@@ -274,13 +296,21 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    const snapped = findNearestSite(mouseX, mouseY, experiment, axis, expMode.build === 2 ? BB_WIDTH : PC_WIDTH);
-    if (!snapped) return; // clicked somewhere that isn't near a site — no-op
+    const deleting = expMode.build === -1;
+    const snapped = deleting
+      ? findNearestSite(mouseX, mouseY, experiment, axis, { wantOccupied: true })
+      : findNearestSite(mouseX, mouseY, experiment, axis, {
+          wantOccupied: false,
+          placingWidth: expMode.build === 1 ? PC_WIDTH : BB_WIDTH,
+          placingHeight: expMode.build === 1 ? PC_HEIGHT : BB_HEIGHT,
+        });
+
+    if (!snapped) return;
 
     const { sgIndex, arm } = snapped;
     setExperiment((prev) => {
       const next = [...prev];
-      next[sgIndex] = { ...next[sgIndex], [arm]: expMode.build === -1 ? null : (expMode.build === 1 ? 'pc' : 'bb') };
+      next[sgIndex] = { ...next[sgIndex], [arm]: deleting ? null : (expMode.build === 1 ? 'pc' : 'bb') };
       return next;
     });
   };
