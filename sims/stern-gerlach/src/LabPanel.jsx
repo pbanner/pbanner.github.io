@@ -159,17 +159,21 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
           const pcX0 = x0 + SG_WIDTH + pathArcRadius*Math.sin(pathArcAngle);
           ctx.globalAlpha = 0.5;
 
-          ctx.save();
-          ctx.translate(pcX0, axis - SG_HEIGHT/2 + SG_OUTPUT_UP - pathArcRadius*(1-Math.cos(pathArcAngle)));
-          ctx.rotate(-pathArcAngle);
-          ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT/2, PC_WIDTH, PC_HEIGHT);
-          ctx.restore();
+          if (sg.up !== 'pc') {
+            ctx.save();
+            ctx.translate(pcX0, axis - SG_HEIGHT/2 + SG_OUTPUT_UP - pathArcRadius*(1-Math.cos(pathArcAngle)));
+            ctx.rotate(-pathArcAngle);
+            ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT/2, PC_WIDTH, PC_HEIGHT);
+            ctx.restore();
+          }
 
-          ctx.save();
-          ctx.translate(pcX0, axis - SG_HEIGHT/2 + SG_OUTPUT_DOWN + pathArcRadius*(1-Math.cos(pathArcAngle)));
-          ctx.rotate(pathArcAngle);
-          ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT/2, PC_WIDTH, PC_HEIGHT);
-          ctx.restore();
+          if (sg.down !== 'pc') {
+            ctx.save();
+            ctx.translate(pcX0, axis - SG_HEIGHT/2 + SG_OUTPUT_DOWN + pathArcRadius*(1-Math.cos(pathArcAngle)));
+            ctx.rotate(pathArcAngle);
+            ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT/2, PC_WIDTH, PC_HEIGHT);
+            ctx.restore();
+          }
 
           ctx.globalAlpha = 1.0;
         }
