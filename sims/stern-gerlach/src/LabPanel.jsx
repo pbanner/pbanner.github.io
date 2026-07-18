@@ -23,8 +23,13 @@ const BB_HEIGHT = 50;
 const BB_WIDTH = 9;
 const BB_INPUT = BB_HEIGHT/2;
 // Path specs for particles
-// In path constrained by SG spacing and geometry
-const IN_PATH_ARC_ANGLE = Math.atan(Math.abs(SG_INPUT_Y - SG_OUTPUT_UP)/Math.abs(SG_SPACING - SG_WIDTH));
+// In path constrained by SG spacing and geometry. The arc must satisfy two
+// constraints at once -- horizontal run R*sin(angle) = D and vertical rise
+// R*(1-cos(angle)) = h -- and dividing those gives tan(angle/2) = h/D, not
+// tan(angle) = h/D. Using atan() directly (without the factor of 2) solves
+// only the x-constraint, leaving the y-endpoint short of the next SG's
+// input by a few px -- the small vertical jump.
+const IN_PATH_ARC_ANGLE = 2 * Math.atan(Math.abs(SG_INPUT_Y - SG_OUTPUT_UP)/Math.abs(SG_SPACING - SG_WIDTH));
 const IN_PATH_ARC_RADIUS = Math.abs(SG_SPACING - SG_WIDTH)/Math.sin(IN_PATH_ARC_ANGLE);
 // Out path not constrained, radius and angle chosen for aesthetics
 const OUT_PATH_ARC_RADIUS = 150;
@@ -545,8 +550,10 @@ const LabPanel = forwardRef(function LabPanel(
     ctx.fillStyle = PARTICLE_COLOR;
     particlesRef.current.forEach((p) => {
       const seg = p.segments[p.segmentIndex];
-      if (!seg) return;
-      const dur = seg.type === 'wait' ? seg.ms : (segmentLength(seg) / PARTICLE_SPEED) * 1000;
+      // 'wait' = "inside" the SG -- hidden rather than frozen at the input,
+      // so it reads as continuing through rather than pausing at the door.
+      if (!seg || seg.type === 'wait') return;
+      const dur = (segmentLength(seg) / PARTICLE_SPEED) * 1000;
       const t = dur > 0 ? Math.min(p.segmentElapsed / dur, 1) : 1;
       const pos = pointOnSegment(seg, t);
       ctx.beginPath();
@@ -555,32 +562,19 @@ const LabPanel = forwardRef(function LabPanel(
     });
   }, []);
 
-  const spawnParticle = () => {
-    if (experiment.length === 0) return; // nothing to simulate
-    const sampled = samplePath(experiment);
-    const path = buildAnimationPath(experiment, axis, sampled);
-    particlesRef.current = [...particlesRef.current, { ...path, segmentIndex: 0, segmentElapsed: 0 }];
-    setParticleCount(particlesRef.current.length);
-  };
-
-  useImperativeHandle(ref, () => ({ spawnParticle }));
-
-  // Reset: clears every in-flight particle whenever App bumps resetToken
-  useEffect(() => {
-    particlesRef.current = [];
-    setParticleCount(0);
-  }, [resetToken, setParticleCount]);
-
-  // Particle animation loop -- only runs while particles exist. Re-subscribes
-  // (fresh closures, no stale `experiment`/etc.) whenever anything it reads
-  // changes; since experiment only changes on real events (a PC hit, a user
-  // edit) rather than every frame, this restart is cheap and infrequent.
+  // tickRef always points at a fresh closure over the current
+  // experiment/setExperiment/drawScene/etc. -- refreshed after every render
+  // (cheap: just a closure allocation, no timers or DOM work) -- so the
+  // recursive rAF loop below is never stuck reading stale props no matter
+  // how long it's been running, without needing to cancel/restart itself
+  // whenever a dependency changes.
+  const tickRef = useRef(null);
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas ? canvas.getContext('2d') : null;
 
-    const tick = (now) => {
+    tickRef.current = (now) => {
+      if (!ctx) return;
       const dt = lastFrameRef.current ? now - lastFrameRef.current : 0;
       lastFrameRef.current = now;
 
@@ -623,24 +617,46 @@ const LabPanel = forwardRef(function LabPanel(
       drawParticles(ctx);
 
       if (particlesRef.current.length > 0) {
-        rafRef.current = requestAnimationFrame(tick);
+        rafRef.current = requestAnimationFrame((n) => tickRef.current(n));
       } else {
         rafRef.current = null;
         lastFrameRef.current = null;
       }
     };
+  });
 
-    if (particlesRef.current.length > 0 && rafRef.current === null) {
-      rafRef.current = requestAnimationFrame(tick);
-    }
-
+  // Stop the loop if the component unmounts mid-animation
+  useEffect(() => {
     return () => {
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
       }
     };
-  }, [experiment, expMode, displayBools, sgImageLoaded, pcImageLoaded, mousePos, axis, canvasDims, drawScene, drawParticles, setExperiment, setParticleCount]);
+  }, []);
+
+  const spawnParticle = () => {
+    if (experiment.length === 0) return; // nothing to simulate
+    const sampled = samplePath(experiment);
+    const path = buildAnimationPath(experiment, axis, sampled);
+    particlesRef.current = [...particlesRef.current, { ...path, segmentIndex: 0, segmentElapsed: 0 }];
+    setParticleCount(particlesRef.current.length);
+    // The loop only advances itself while already running (see tickRef
+    // above) -- if this is the first particle, nothing else will ever
+    // notice it exists, so explicitly wake the loop up here.
+    if (rafRef.current === null) {
+      lastFrameRef.current = null;
+      rafRef.current = requestAnimationFrame((now) => tickRef.current(now));
+    }
+  };
+
+  useImperativeHandle(ref, () => ({ spawnParticle }));
+
+  // Reset: clears every in-flight particle whenever App bumps resetToken
+  useEffect(() => {
+    particlesRef.current = [];
+    setParticleCount(0);
+  }, [resetToken, setParticleCount]);
 
   // Drawing (idle state) -- the particle loop above owns drawing while any
   // particles are in flight, so this just draws the static scene once per
