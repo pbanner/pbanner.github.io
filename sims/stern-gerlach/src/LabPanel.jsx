@@ -395,8 +395,25 @@ const LabPanel = forwardRef(function LabPanel(
     const resizeCanvas = () => {
       const newWidth = container.clientWidth;
       const newHeight = container.clientHeight;
-      canvas.width = newWidth;
-      canvas.height = newHeight;
+
+      // The canvas's pixel buffer (.width/.height) is a separate thing from
+      // its on-screen CSS size -- setting both to the same CSS-pixel number
+      // means the buffer only has as many pixels as a 1x display needs, so
+      // on any HiDPI/Retina screen the browser stretches that undersized
+      // buffer to fill the real pixel grid, blurring everything drawn on
+      // it. Give the buffer devicePixelRatio-many actual pixels per CSS
+      // pixel, pin the CSS size back down to the original (unscaled) size,
+      // and scale the context so all the existing drawing code -- which is
+      // written entirely in CSS-pixel coordinates -- needs no changes.
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = newWidth * dpr;
+      canvas.height = newHeight * dpr;
+      canvas.style.width = `${newWidth}px`;
+      canvas.style.height = `${newHeight}px`;
+      const resizedCtx = canvas.getContext('2d');
+      resizedCtx.scale(dpr, dpr);
+      resizedCtx.imageSmoothingQuality = 'high'; // the oven in particular is a large downscale (992x654 source)
+
       setCanvasDims({ width: newWidth, height: newHeight });
 
       const halfwayY = newHeight / 2;
@@ -414,25 +431,29 @@ const LabPanel = forwardRef(function LabPanel(
   // animation loop (while particles exist), so there's one definition of
   // "what the static scene looks like" regardless of who's asking.
   const drawScene = useCallback((ctx) => {
-    const canvas = ctx.canvas;
+    // canvas.width/height are now the devicePixelRatio-scaled backing-store
+    // size, not the CSS/logical size everything else here is drawn in --
+    // canvasDims (kept in step with the unscaled container size) is the
+    // one to use for bounds.
+    const { width, height } = canvasDims;
 
     // Clear canvas
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, width, height);
 
     // Draw grid
     ctx.strokeStyle = displayBools.gridOn ? '#e0e0e0' : '#ffffff';
     ctx.lineWidth = 1;
-    for (let i = 0; i <= canvas.width; i += 50) {
+    for (let i = 0; i <= width; i += 50) {
       ctx.beginPath();
       ctx.moveTo(i, 0);
-      ctx.lineTo(i, canvas.height);
+      ctx.lineTo(i, height);
       ctx.stroke();
     }
-    for (let i = 0; i <= canvas.height; i += 50) {
+    for (let i = 0; i <= height; i += 50) {
       ctx.beginPath();
       ctx.moveTo(0, i);
-      ctx.lineTo(canvas.width, i);
+      ctx.lineTo(width, i);
       ctx.stroke();
     }
 
@@ -565,7 +586,7 @@ const LabPanel = forwardRef(function LabPanel(
         }
       }
     }
-  }, [experiment, expMode, displayBools, mousePos, axis]);
+  }, [experiment, expMode, displayBools, mousePos, axis, canvasDims]);
 
   const drawParticles = useCallback((ctx) => {
     ctx.fillStyle = PARTICLE_COLOR;
