@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { PC_COLORS } from './colors';
 import sgImage from './assets/SG.png';
 import pcImage from './assets/PC.png';
 import bbImage from './assets/BB.png';
@@ -172,9 +173,6 @@ function samplePath(experiment) {
 
   return { hops, terminal: null }; // ran off the end of the chain, unmeasured
 }
-
-// For adding and removing PCs with appropriate color IDs
-const PC_COLORS = ['#3498db', '#e74c3c', '#28b563', '#937708', '#9b59b6', '#db6f11', '#0dc493', '#34495e'];
 
 function getUsedColorIds(experiment) {
   const used = new Set();

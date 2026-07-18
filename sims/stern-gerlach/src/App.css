@@ -127,6 +127,11 @@
 .histogram-panel {
   flex: 1 1 auto;
   min-width: 0;
+  position: relative; /* anchors the Reset button overlay to this panel's corner, not some further-out ancestor */
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 8px 10px;
+  box-sizing: border-box;
 }
 
 .histogram-canvas-wrap {
@@ -138,6 +143,12 @@
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.histogram-reset-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
 }
 
 /* Icon buttons */

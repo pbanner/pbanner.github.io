@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
 import LabPanel from './LabPanel';
+import Histogram from './Histogram';
 import sgImage from './assets/SG.png';
 import pcImage from './assets/PC.png';
 import bbImage from './assets/BB.png';
@@ -289,15 +290,14 @@ export default function App() {
                   ? (<><StopIcon /> Stop</>)
                   : (<><PlayIcon /> Start</>)}
             </button>
-            <button className="control-bar-button" style={{ margin: '6px 0 0 0' }} onClick={resetDataCollection}>
-              Reset Data Collection
-            </button>
           </div>
           {/* Histogram canvas area */}
           <div className="histogram-panel">
-            <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Histogram</h3>
+            <button className="control-bar-button histogram-reset-button" onClick={resetDataCollection}>
+              Reset Data Collection
+            </button>
             <div className="histogram-canvas-wrap">
-              <canvas />
+              <Histogram experiment={experiment} />
             </div>
           </div>
         </div>
