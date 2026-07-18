@@ -186,6 +186,7 @@ export default function Histogram({ experiment, displayBools }) {
       const legendY1 = legendY0 + legendBoxHeight;
       ctx.strokeStyle = "#999999";
       ctx.lineWidth = 1;
+      ctx.beginPath();
       ctx.roundRect(legendX0, legendY0, LEGEND_WIDTH, legendY1 - legendY0, 5);
       ctx.stroke()
       ctx.font = '11px Arial';

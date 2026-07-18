@@ -117,13 +117,6 @@
   border-color: #bbb;
 }
 
-/* Responsive for smaller screens */
-@media (max-height: 500px) {
-  .control-bar {
-    height: 200px;
-  }
-}
-
 /* Histogram */
 .histogram-panel {
   flex: 1 1 auto;
