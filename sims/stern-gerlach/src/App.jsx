@@ -47,19 +47,81 @@ function AxisStepper({ index, sg, setExperiment, disabled, resetDataCollection }
     resetDataCollection(); // a basis change is a setup change -- old counts no longer apply
   };
 
+  // `advanced` lives on the SG itself (not local component state) because
+  // SGs can be deleted from the middle of the list (LabPanel's "Remove
+  // Components" mode), which shifts every later SG's index down -- local
+  // state keyed off that same index would silently reattach to whichever
+  // SG happens to land on it afterward. Keeping it on the SG object means
+  // it's filtered/reordered right along with the SG it belongs to.
+  const setAdvanced = (advanced) => {
+    setExperiment((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], advanced };
+      return next;
+    });
+    // Not a basis change -- same angles, just a different way to edit them -- so no resetDataCollection() here.
+  };
+
+  const setAngle = (which, value) => {
+    setExperiment((prev) => {
+      const next = [...prev];
+      const [theta, phi] = next[index].basis;
+      next[index] = { ...next[index], basis: which === 'theta' ? [value, phi] : [theta, value] };
+      return next;
+    });
+    resetDataCollection();
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'row', gap: '10px', padding: '6px' }}>
-      <input type="checkbox" disabled={disabled} />
+      <input type="checkbox" disabled={disabled} checked={!!sg.advanced} onChange={(e) => setAdvanced(e.target.checked)} />
       <label>{'SG' + (index + 1)}</label>
-      <div className="axis-stepper">
-        <span className={`axis-stepper-value ${disabled ? 'disabled' : ''}`}>
-          {currentIndex === -1 ? '?' : SG_OPTION_LABELS[currentIndex]}
-        </span>
-        <div className="axis-stepper-arrows">
-          <button type="button" className="axis-stepper-arrow" onClick={() => step(1)} aria-label="Next axis" disabled={disabled}>▲</button>
-          <button type="button" className="axis-stepper-arrow" onClick={() => step(-1)} aria-label="Previous axis" disabled={disabled}>▼</button>
+      {sg.advanced ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <label style={{ width: '12px' }}>θ</label>
+            <input
+              type="number"
+              min={0}
+              max={Math.PI}
+              step={0.01}
+              value={sg.basis[0]}
+              disabled={disabled}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                if (!Number.isNaN(v)) setAngle('theta', v);
+              }}
+              style={{ width: '70px', padding: '2px' }}
+            />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <label style={{ width: '12px' }}>ϕ</label>
+            <input
+              type="number"
+              min={0}
+              max={2 * Math.PI}
+              step={0.01}
+              value={sg.basis[1]}
+              disabled={disabled}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                if (!Number.isNaN(v)) setAngle('phi', v);
+              }}
+              style={{ width: '70px', padding: '2px' }}
+            />
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="axis-stepper">
+          <span className={`axis-stepper-value ${disabled ? 'disabled' : ''}`}>
+            {currentIndex === -1 ? '?' : SG_OPTION_LABELS[currentIndex]}
+          </span>
+          <div className="axis-stepper-arrows">
+            <button type="button" className="axis-stepper-arrow" onClick={() => step(1)} aria-label="Next axis" disabled={disabled}>▲</button>
+            <button type="button" className="axis-stepper-arrow" onClick={() => step(-1)} aria-label="Previous axis" disabled={disabled}>▼</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -120,8 +182,10 @@ export default function App() {
   // setup has a measurement basis plus a statement about where its up and down
   // outputs are going
   // up and down may be null, `bb`, or { type: 'pc', data: [integer], colorId: string }
+  // advanced toggles that SG's basis control between the X/Y/Z stepper and
+  // raw theta/phi textboxes -- a display preference, not a physics value
   // Start with one apparatus already in place
-  const [experiment, setExperiment] = useState([{ basis: [0, 0], up: null, down: null }]);
+  const [experiment, setExperiment] = useState([{ basis: [0, 0], up: null, down: null, advanced: false }]);
 
   // For getting tab visibility and pausing animation as appropriate
   // Tracks whether this tab is the active one, so both particle production
@@ -163,7 +227,7 @@ export default function App() {
   const addSternGerlach = () => {
     setExperiment((prev) => [
       ...prev,
-      { basis: [0, 0], up: null, down: null },
+      { basis: [0, 0], up: null, down: null, advanced: false },
     ]);
     resetDataCollection();
   };
