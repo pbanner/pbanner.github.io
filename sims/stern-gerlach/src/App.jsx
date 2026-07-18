@@ -268,11 +268,11 @@ export default function App() {
           {/* Data Collection Controls */}
           <div className="control-bar-group">
             <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Data Collection Controls</h3>
-            <div style = {{ padding: '4px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label><input type="radio" name="DCmode" value="single" checked={expMode.dc === 'single'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} />One particle</label>
-              <label><input type="radio" name="DCmode" value="stream" checked={expMode.dc === 'stream'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} />Particle stream</label>
+            <div style = {{ padding: '2px', display: 'flex', flexDirection: 'row', gap: '20px' }}>
+              <label><input type="radio" name="DCmode" value="single" checked={expMode.dc === 'single'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} />One at a time</label>
+              <label><input type="radio" name="DCmode" value="stream" checked={expMode.dc === 'stream'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} />Continuous</label>
             </div>
-            <label style={{ margin: '6px 0 0 0' }}>
+            <label style={{ margin: '4px 0 0 0' }}>
               <input type="checkbox" checked={displayBools.previewPaths} onChange={(e) => setDisplayBools({ ...displayBools, previewPaths: e.target.checked })} />
               Preview possible paths
             </label>
@@ -293,14 +293,15 @@ export default function App() {
                   ? (<><StopIcon /> Stop</>)
                   : (<><PlayIcon /> Start</>)}
             </button>
+            <button className="control-bar-button" onClick={resetDataCollection}>
+              Reset Data Collection
+            </button>
           </div>
           {/* Histogram canvas area */}
           <div className="control-bar-group" style={{ flexDirection: 'row', flex: '1 1 auto', gap: '10px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <button className="control-bar-button" onClick={resetDataCollection} style={{ width: '100px' }}>
-                Reset Data Collection
-              </button>
-              <label style={{ margin: '0px 0 0 0' }}>
+              <h3 style={{ padding: '6px 0px' }}>Chart Options</h3>
+              <label style={{ padding: '0px 0 0 0' }}>
                 <input type="checkbox" checked={histDisplayBools.showPercentages} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showPercentages: e.target.checked })} />
                 Show percentages
               </label>
