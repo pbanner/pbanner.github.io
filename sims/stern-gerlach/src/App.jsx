@@ -67,6 +67,7 @@ export default function App() {
   // Panel 1 state
   const [displayBools, setDisplayBools] = useState({
     gridOn: true,             // Displaying the grid
+    previewPaths: false       // For previewing particle paths
   });
   // build = 0 for normal operation, 1 for placing a particle counter, 2 for placing
   // a beam block, -1 for deleting stuff
@@ -137,11 +138,15 @@ export default function App() {
               <label><input type="radio" name="DCmode" value="single" checked={expMode.dc === 'single'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} />One particle</label>
               <label><input type="radio" name="DCmode" value="stream" checked={expMode.dc === 'stream'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} />Particle stream</label>
             </div>
+            <label style={{ margin: '6px 0 0 0' }}>
+              <input type="checkbox" checked={displayBools.previewPaths} onChange={(e) => setDisplayBools({ ...displayBools, previewPaths: e.target.checked })} />
+              Preview possible paths
+            </label>
             <button className="control-bar-button" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px'}}>
               <PlayIcon /> {/* <PauseIcon />} */}
               Start
             </button>
-            <button className="control-bar-button">
+            <button className="control-bar-button" style={{ margin: '6px 0 0 0' }}>
               Reset Data Collection
             </button>
           </div>

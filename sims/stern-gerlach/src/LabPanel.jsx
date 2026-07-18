@@ -272,6 +272,50 @@ export default function LabPanel({ experiment, setExperiment, expMode, setExpMod
         ctx.textBaseline = 'middle';
         ctx.fillText(getSGLabel(sg.basis, i), x0+62, axis);
 
+        if (displayBools.previewPaths) {
+          // Styling
+          ctx.strokeStyle = '#303030';
+          ctx.setLineDash([10, 8]);
+          ctx.lineWidth = 1.5;
+
+          // Up arm first
+          if (sg['up'] !== null) {
+            ctx.beginPath();
+            ctx.arc(
+              x0 + SG_WIDTH, 
+              axis - (SG_HEIGHT/2) + SG_OUTPUT_UP - OUT_PATH_ARC_RADIUS, 
+              OUT_PATH_ARC_RADIUS, Math.PI/2, Math.PI/2 - OUT_PATH_ARC_ANGLE, true);
+            ctx.stroke();
+          } else if (i !== (experiment.length-1)) {
+            ctx.beginPath();
+            ctx.arc(
+              x0 + SG_WIDTH, 
+              axis - (SG_HEIGHT/2) + SG_OUTPUT_UP + IN_PATH_ARC_RADIUS, 
+              IN_PATH_ARC_RADIUS, -Math.PI/2, -Math.PI/2 + IN_PATH_ARC_ANGLE, false);
+            ctx.stroke();
+          }
+
+          // Now down arm
+          if (sg['down'] !== null) {
+            ctx.beginPath();
+            ctx.arc(
+              x0 + SG_WIDTH, 
+              axis - (SG_HEIGHT/2) + SG_OUTPUT_DOWN + OUT_PATH_ARC_RADIUS, 
+              OUT_PATH_ARC_RADIUS, -Math.PI/2, -Math.PI/2 + OUT_PATH_ARC_ANGLE, false);
+            ctx.stroke();
+          } else if (i !== (experiment.length-1)) {
+            ctx.beginPath();
+            ctx.arc(
+              x0 + SG_WIDTH, 
+              axis - (SG_HEIGHT/2) + SG_OUTPUT_DOWN - IN_PATH_ARC_RADIUS, 
+              IN_PATH_ARC_RADIUS, Math.PI/2, Math.PI/2 - IN_PATH_ARC_ANGLE, true);
+            ctx.stroke();
+          }
+
+          // Set back to solid lines
+          ctx.setLineDash([]);
+        }
+
         // Draw the out path arcs (temporary)
         // ctx.strokeStyle = '#303030';
         // ctx.setLineDash([10, 8]);
