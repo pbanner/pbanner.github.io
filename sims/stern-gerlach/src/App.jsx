@@ -67,9 +67,10 @@ export default function App() {
     gridOn: true,             // Displaying the grid
   });
   // build = 'normal', 'place-pc' for placing a particle counter, 'place-bb' for 
-  // placing a beam block, or 'running' when there's a particle propagating
+  // placing a beam block
+  // running = true or false
   // dc (for data collection) may be 'single' or 'stream'
-  const [expMode, setExpMode] = useState({ build: 'normal', dc: 'single' })
+  const [expMode, setExpMode] = useState({ build: 'normal', dc: 'single', running: false })
   // The experimental setup is coded as a list of present SG setups; each
   // setup has a measurement basis plus a statement about where its up and down
   // outputs are going
