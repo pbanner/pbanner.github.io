@@ -303,8 +303,8 @@ export default function App() {
             </button>
           </div>
           {/* Histogram canvas area */}
-          <div className="control-bar-group" style={{ flexDirection: 'row', flex: '1 1 auto', gap: '10px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div className="control-bar-group" style={{ flexDirection: 'row', flex: '1 1 auto', gap: '10px', minWidth: '0' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <h3 style={{ padding: '6px 0px 4px 0px' }}>Chart Options</h3>
               <div style = {{ padding: '2px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label><input type="radio" name="barLabelMode" value={0} checked={histDisplayBools.showPercentages === 0} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) });}} />Counts</label>
