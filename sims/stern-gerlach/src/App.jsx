@@ -173,8 +173,8 @@ export default function App() {
     const message =
       `The ${openArms.join(' and ')} ${plural ? 'paths are' : 'path is'} unterminated on the last ` +
       `Stern-Gerlach apparatus -- particles could fly off without ever being measured.\n\n` +
-      `Click OK to place a beam block there and start data collection, or Cancel to go back and ` +
-      `place something yourself first.`;
+      `Click OK to place a beam block ${plural ? 'at those locations' : 'there'} and start ` +
+      `data collection, or Cancel to go back and place something yourself first.`;
     if (!window.confirm(message)) return null;
 
     const nextExperiment = experiment.map((sg, i) => (i !== lastIndex ? sg : {
@@ -242,21 +242,21 @@ export default function App() {
             <div style={{ display: 'flex', flexDirection: 'row', gap: '8px' }}>
               <div style={{display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <button type="button" className="control-bar-button icon-button" aria-label="Add Stern-Gerlach apparatus" onClick={addSternGerlach} disabled={controlsLocked}>
-                  <img src={sgImage} alt="" className="icon-button-image" />
+                  <img src={sgImage} alt="" className="icon-button-image" draggable="false" />
                   <span>Add Stern-Gerlach</span>
                 </button>
-                <button type="button" className={`control-bar-button icon-button ${expMode.build === 1 ? 'active' : ''}`} aria-label="Add particle counter" onClick={() => setExpMode({ ...expMode, build: expMode.build === 1 ? 0 : 1 })} disabled={controlsLocked}>
-                  <img src={pcImage} alt="" className="icon-button-image" />
+                <button type="button" className={`control-bar-button icon-button ${expMode.build === 1 ? 'active' : ''}`} aria-label="Add particle counter" onMouseDown={() => setExpMode({ ...expMode, build: expMode.build === 1 ? 0 : 1 })} disabled={controlsLocked}>
+                  <img src={pcImage} alt="" className="icon-button-image" draggable="false" />
                   <span>Add Particle Counter</span>
                 </button>
               </div>
               <div style={{display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <button type="button" className={`control-bar-button icon-button ${expMode.build === 2 ? 'active' : ''}`} aria-label="Add beam block" onClick={() => setExpMode({ ...expMode, build: expMode.build === 2 ? 0 : 2 })} disabled={controlsLocked}>
-                  <img src={bbImage} alt="" className="icon-button-image" />
+                <button type="button" className={`control-bar-button icon-button ${expMode.build === 2 ? 'active' : ''}`} aria-label="Add beam block" onMouseDown={() => setExpMode({ ...expMode, build: expMode.build === 2 ? 0 : 2 })} disabled={controlsLocked}>
+                  <img src={bbImage} alt="" className="icon-button-image" draggable="false" />
                   <span>Add Beam Block</span>
                 </button>
                 <button type="button" className={`control-bar-button icon-button ${expMode.build === -1 ? 'active' : ''}`} aria-label="Remove components" onClick={() => setExpMode({ ...expMode, build: expMode.build === -1 ? 0 : -1 })} disabled={controlsLocked}>
-                  <img src={xImage} alt="" className="icon-button-image" />
+                  <img src={xImage} alt="" className="icon-button-image" draggable="false" />
                   <span>Remove Components</span>
                 </button>
               </div>

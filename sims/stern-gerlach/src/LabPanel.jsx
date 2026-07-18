@@ -765,6 +765,7 @@ const LabPanel = forwardRef(function LabPanel(
         ref={canvasRef}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
+        onMouseUp={handleClick}
         onClick={handleClick}
         style={{
           display: 'block',
