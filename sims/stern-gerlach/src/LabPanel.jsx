@@ -2,12 +2,17 @@ import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperat
 import sgImage from './assets/SG.png';
 import pcImage from './assets/PC.png';
 import bbImage from './assets/BB.png';
+import ovenImage from './assets/oven.png';
 
+// Oven dimensions for rescaling here
+const OVEN_HEIGHT = 75;
+const OVEN_WIDTH = Math.round(OVEN_HEIGHT*(992/654));
+const OVEN_X0 = 50;
 // SG image dimensions and specs for use throughout
 const SG_WIDTH = 160;
 const SG_HEIGHT = 90;
 const SG_SPACING = 300;   // horizontal gap between apparatus centers
-const SG_START_X = 150;   // x-position of the first apparatus
+const SG_START_X = 250;   // x-position of the first apparatus
 // From the image itself, to be used for path drawing
 const SG_INPUT_Y = 111*(SG_HEIGHT/225);
 const SG_OUTPUT_UP = 66*(SG_HEIGHT/225);
@@ -38,7 +43,7 @@ const OUT_PATH_ARC_ANGLE = 0.7; // rad
 const SNAP_RADIUS = 50;  // px — how close the cursor must be to snap
 
 // Particle animation specs -- all tunable
-const OVEN_X = 100;                // x-value where particles first appear
+const PARTICLE_START_X = OVEN_X0 + OVEN_WIDTH;     // x-value where particles first appear
 const PARTICLE_SPEED = 300;        // px/sec while visibly moving
 const SG_PROCESSING_MS = 180;      // fixed pause while "inside" an SG
 const BEAM_TRANSVERSE_WIDTH = 14;  // px, full spread of the (uniform) beam jitter
@@ -270,7 +275,7 @@ function buildAnimationPath(experiment, axis, sampled) {
   const segments = [];
 
   const sg0InputY = axis - SG_HEIGHT / 2 + SG_INPUT_Y;
-  segments.push({ type: 'line', x0: OVEN_X, y0: sg0InputY + offset, x1: getSGX0(0), y1: sg0InputY + offset });
+  segments.push({ type: 'line', x0: PARTICLE_START_X, y0: sg0InputY + offset, x1: getSGX0(0), y1: sg0InputY + offset });
 
   hops.forEach(({ sgIndex, arm }) => {
     const inputY = axis - SG_HEIGHT / 2 + SG_INPUT_Y;
@@ -367,6 +372,7 @@ const LabPanel = forwardRef(function LabPanel(
   const [offset, setOffset] = useState({ x: 0, y: 0 }); // Used for mouse dragging events
   const [axis, setAxis] = useState(300); // y-coordinate of halfway down the canvas; determines position of all user-created devices
   // These refs hold the SG and PC images for all time, using the loading hook
+  const [ovenImageRef, ovenImageLoaded] = useImage(ovenImage);
   const [sgImageRef, sgImageLoaded] = useImage(sgImage);
   const [pcImageRef, pcImageLoaded] = useImage(pcImage);
   const [bbImageRef, bbImageLoaded] = useImage(bbImage);
@@ -428,6 +434,10 @@ const LabPanel = forwardRef(function LabPanel(
       ctx.moveTo(0, i);
       ctx.lineTo(canvas.width, i);
       ctx.stroke();
+    }
+
+    if (ovenImageRef.current && ovenImageRef.current.complete) {
+      ctx.drawImage(ovenImageRef.current, OVEN_X0, axis - OVEN_HEIGHT / 2, OVEN_WIDTH, OVEN_HEIGHT);
     }
 
     // Draw the SGs, one copy of the ref image each, plus the basis labels
