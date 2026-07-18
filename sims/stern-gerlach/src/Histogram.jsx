@@ -7,10 +7,13 @@ const PADDING_RIGHT = 12;    // room for the y-axis tick labels, which sit to th
 const PADDING_BOTTOM = 16;
 const PADDING_LEFT = 40;
 const AXIS_COLOR = '#303030';
+const AXIS_HEADROOM = 1.1;   // require the top tick to clear the tallest bar by this factor, so bars never crowd the very top and rescaling kicks in a bit before a bar would actually exceed the old top tick
 const TICK_LABEL_COLOR = '#606060';
 const MIN_AXIS_MAX = 20;     // the y-axis never scales down below this, even with 0 or few counts
 const TARGET_TICK_COUNT = 5; // aim for roughly this many ticks; niceTicks may land on slightly more/fewer
 const BAR_GAP_RATIO = 0.3;   // fraction of each bar's horizontal slot left empty as a gap
+const BAR_GROUP_MARGIN = 24; // extra empty space to each side of the whole set of bars, beyond the axis padding
+const MAX_BAR_WIDTH = 60;    // a bar never grows wider than this, however few detectors there are
 
 // Every PC currently placed in the experiment, in a stable left-to-right
 // order (by SG index, then up before down) -- this is what turns into one
@@ -31,15 +34,16 @@ function getDetectors(experiment) {
 // relabels itself cleanly as the largest count grows, rather than ever
 // showing an arbitrary tick value like "37". Returns ticks from 0 up to
 // (at least) maxValue; the last tick is the axis's effective top.
-function niceTicks(maxValue, targetCount) {
-  const roughStep = maxValue / targetCount;
+function niceTicks(minTop, targetCount) {
+  const roughStep = minTop / targetCount;
   const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
-  const normalized = roughStep / magnitude; // in [1, 10)
+  const normalized = roughStep / magnitude;
   const niceNormalized = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
   const step = niceNormalized * magnitude;
+  const topTick = Math.ceil(minTop / step) * step;
 
   const ticks = [];
-  for (let v = 0; v <= maxValue + step * 0.5; v += step) {
+  for (let v = 0; v <= topTick + step * 0.5; v += step) {
     ticks.push(Math.round(v));
   }
   return ticks;
@@ -93,8 +97,8 @@ export default function Histogram({ experiment, displayBools }) {
     const detectors = getDetectors(experiment);
     const dataTotal = detectors.reduce((sum, d) => sum + d.count, 0);
     const dataMax = detectors.reduce((m, d) => Math.max(m, d.count), 0);
-    const flooredMax = Math.max(MIN_AXIS_MAX, dataMax);
-    const ticks = niceTicks(flooredMax, TARGET_TICK_COUNT);
+    const requiredMax = Math.max(MIN_AXIS_MAX, dataMax * AXIS_HEADROOM);
+    const ticks = niceTicks(requiredMax, TARGET_TICK_COUNT);
     const axisMax = ticks[ticks.length - 1];
 
     // Axes -- meet at the bottom-right corner; no gridlines crossing
@@ -124,12 +128,15 @@ export default function Histogram({ experiment, displayBools }) {
     // Bars, one per detector, evenly spaced left to right, growing up from
     // the x-axis, colored to match that detector's own identifying dot.
     if (detectors.length > 0) {
-      const slotWidth = (plotX1 - plotX0) / detectors.length;
-      const barWidth = slotWidth * (1 - BAR_GAP_RATIO);
+      const groupX0 = plotX0 + BAR_GROUP_MARGIN;
+      const groupX1 = plotX1 - BAR_GROUP_MARGIN;
+      const slotWidth = (groupX1 - groupX0) / detectors.length;
+      const barWidth = Math.min(MAX_BAR_WIDTH, slotWidth * (1 - BAR_GAP_RATIO));
 
       detectors.forEach((d, i) => {
-        const barHeight = Math.max(1.5,(d.count / axisMax) * (plotY1 - plotY0));
-        const barX = plotX0 + i * slotWidth + (slotWidth - barWidth) / 2;
+        const barHeight = Math.max(1.5, (d.count / axisMax) * (plotY1 - plotY0));
+        const slotCenter = groupX0 + (i + 0.5) * slotWidth;
+        const barX = slotCenter - barWidth / 2;
         const barY = plotY1 - barHeight;
 
         ctx.fillStyle = PC_COLORS[d.colorId] ?? '#999999';
