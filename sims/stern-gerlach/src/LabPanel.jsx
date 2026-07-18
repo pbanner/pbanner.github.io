@@ -319,7 +319,7 @@ function findNearestDeletable(mouseX, mouseY, experiment, axis) {
 }
 
 const LabPanel = forwardRef(function LabPanel(
-  { experiment, setExperiment, expMode, setExpMode, displayBools, setParticleCount, resetToken, resetDataCollection },
+  { experiment, setExperiment, expMode, setExpMode, displayBools, setParticleCount, resetToken, resetDataCollection, tabVisible },
   ref
 ) {
   const canvasRef = useRef(null);
@@ -657,6 +657,26 @@ const LabPanel = forwardRef(function LabPanel(
       }
     };
   }, []);
+
+  // Pause the animation loop while the tab is hidden, in lockstep with App
+  // pausing particle production (see its tabVisible effect) -- otherwise
+  // the two drift out of sync based on whatever throttling the browser
+  // happens to apply to timers vs. rAF callbacks in background tabs. In-
+  // flight particles are left as they are (not cleared), so this is a true
+  // pause: resuming resets lastFrameRef to null so the next tick computes
+  // dt from zero, rather than treating the whole hidden interval as one
+  // giant elapsed frame and fast-forwarding every particle to its end.
+  useEffect(() => {
+    if (!tabVisible) {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    } else if (particlesRef.current.length > 0 && rafRef.current === null) {
+      lastFrameRef.current = null;
+      rafRef.current = requestAnimationFrame((now) => tickRef.current(now));
+    }
+  }, [tabVisible]);
 
   // `experimentOverride` lets a caller that just synchronously updated
   // `experiment` (e.g. auto-inserting a beam block right before starting)

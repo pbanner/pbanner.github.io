@@ -121,6 +121,19 @@ export default function App() {
   // Start with one apparatus already in place
   const [experiment, setExperiment] = useState([{ basis: [0, 0], up: null, down: null }]);
 
+  // For getting tab visibility and pausing animation as appropriate
+  // Tracks whether this tab is the active one, so both particle production
+  // (below) and the animation itself (inside LabPanel) can pause together
+  // while it's hidden, rather than each drifting out of sync with the
+  // other based on whatever throttling the browser happens to apply to
+  // timers and rAF callbacks in background tabs.
+  const [tabVisible, setTabVisible] = useState(!document.hidden);
+  useEffect(() => {
+    const onVisibilityChange = () => setTabVisible(!document.hidden);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
+
   // Particle propagation
   const labPanelRef = useRef(null);
   const [particleCount, setParticleCount] = useState(0);
@@ -208,13 +221,13 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (expMode.dc === 'stream' && expMode.running) {
+    if (expMode.dc === 'stream' && expMode.running && tabVisible) {
       streamTimerRef.current = setInterval(() => {
         labPanelRef.current?.spawnParticle();
       }, 1/expMode.rate*1000);
       return () => clearInterval(streamTimerRef.current);
     }
-  }, [expMode.dc, expMode.running, expMode.rate]);
+  }, [expMode.dc, expMode.running, expMode.rate, tabVisible]);
 
   return (
     <div className="app-layout">
@@ -230,6 +243,7 @@ export default function App() {
           setParticleCount={setParticleCount}
           resetToken={resetToken}
           resetDataCollection={resetDataCollection}
+          tabVisible={tabVisible}
         />
       </div>
 
