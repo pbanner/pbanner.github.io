@@ -2,10 +2,10 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { PC_COLORS } from './colors';
 
 // Plot layout -- all tunable
-const PADDING_TOP = 44;
-const PADDING_RIGHT = 44;    // room for the y-axis tick labels, which sit to the right of the axis
+const PADDING_TOP = 25;
+const PADDING_RIGHT = 12;    // room for the y-axis tick labels, which sit to the right of the axis
 const PADDING_BOTTOM = 16;
-const PADDING_LEFT = 12;
+const PADDING_LEFT = 40;
 const AXIS_COLOR = '#303030';
 const TICK_LABEL_COLOR = '#606060';
 const MIN_AXIS_MAX = 20;     // the y-axis never scales down below this, even with 0 or few counts
@@ -101,23 +101,23 @@ export default function Histogram({ experiment }) {
     ctx.strokeStyle = AXIS_COLOR;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(plotX1, plotY0);
-    ctx.lineTo(plotX1, plotY1);
+    ctx.moveTo(plotX0, plotY0);
     ctx.lineTo(plotX0, plotY1);
+    ctx.lineTo(plotX1, plotY1);
     ctx.stroke();
 
     // Y-axis ticks + labels
     ctx.fillStyle = TICK_LABEL_COLOR;
     ctx.font = '11px Arial';
-    ctx.textAlign = 'left';
+    ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
     ticks.forEach((tickValue) => {
       const y = plotY1 - (tickValue / axisMax) * (plotY1 - plotY0);
       ctx.beginPath();
-      ctx.moveTo(plotX1, y);
-      ctx.lineTo(plotX1 + 5, y);
+      ctx.moveTo(plotX0 - 5, y);
+      ctx.lineTo(plotX0 + 5, y);
       ctx.stroke();
-      ctx.fillText(String(tickValue), plotX1 + 8, y);
+      ctx.fillText(String(tickValue), plotX0 - 8, y);
     });
 
     // Bars, one per detector, evenly spaced left to right, growing up from

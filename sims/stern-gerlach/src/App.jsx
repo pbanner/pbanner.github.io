@@ -292,12 +292,20 @@ export default function App() {
             </button>
           </div>
           {/* Histogram canvas area */}
-          <div className="histogram-panel">
-            <button className="control-bar-button histogram-reset-button" onClick={resetDataCollection}>
-              Reset Data Collection
-            </button>
-            <div className="histogram-canvas-wrap">
-              <Histogram experiment={experiment} />
+          <div className="control-bar-group" style={{ flexDirection: 'row', flex: '1 1 auto', gap: '10px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <button className="control-bar-button" onClick={resetDataCollection} style={{ width: '100px' }}>
+                Reset Data Collection
+              </button>
+              <label style={{ margin: '6px 0 0 0' }}>
+                <input type="checkbox" />
+                Normalize
+              </label>
+            </div>
+            <div className="histogram-panel">
+              <div className="histogram-canvas-wrap">
+                <Histogram experiment={experiment} />
+              </div>
             </div>
           </div>
         </div>
