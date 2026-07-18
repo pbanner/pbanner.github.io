@@ -467,6 +467,18 @@ const LabPanel = forwardRef(function LabPanel(
 
     // Draw the SGs, one copy of the ref image each, plus the basis labels
     if (sgImageRef.current && sgImageRef.current.complete) {
+      // Preview mode wants to show the oven → first SG path. Draw it separately.
+      if (displayBools.previewPaths) {
+        ctx.strokeStyle = '#303030';
+        ctx.setLineDash([10, 8]);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(axis, OVEN_X0 + OVEN_WIDTH);
+        ctx.lineTo(axis, SG_START_X);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
       // This tracks whether at least some of the particles could make it
       // through to the next SG; it's only used for drawing preview paths
       var incomingParticles = true;
