@@ -5,7 +5,7 @@ import { PC_COLORS } from './colors';
 // Plot layout -- all tunable
 const PADDING_TOP = 25;
 const PADDING_RIGHT = 12;    // room for the y-axis tick labels, which sit to the right of the axis
-const PADDING_BOTTOM = 16;
+const PADDING_BOTTOM = 20;
 const PADDING_LEFT = 40;
 const AXIS_COLOR = '#303030';
 const AXIS_HEADROOM = 1.1;   // require the top tick to clear the tallest bar by this factor, so bars never crowd the very top and rescaling kicks in a bit before a bar would actually exceed the old top tick
@@ -222,6 +222,13 @@ export default function Histogram({ experiment, displayBools }) {
         ctx.textBaseline = 'bottom';
         const barLabel = ((displayBools.showPercentages === 1 && dataTotal === 0) ? "---" : "") + (displayBools.showPercentages !== 1 ? String(d.count) : "") + (showBothActual ? " (" : "") + ((displayBools.showPercentages !== 0 && dataTotal !== 0) ? (d.count/dataTotal*100).toFixed(1) + "%" : "") + (showBothActual ? ")" : "");
         ctx.fillText(barLabel, barX + barWidth / 2, barY - 4 - (drawErrorBars ? errOffset : 0));
+
+        // Detector label below the bar, in the same style as the axis's own tick labels
+        ctx.fillStyle = TICK_LABEL_COLOR;
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(`SG${d.sgIndex + 1}` + (d.arm == 'up' ? '↑' : '↓'), slotCenter, plotY1 + 6);
       });
     }
 
