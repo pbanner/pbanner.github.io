@@ -16,6 +16,12 @@ const BAR_GROUP_MARGIN = 24; // extra empty space to each side of the whole set 
 const MAX_BAR_WIDTH = 60;    // a bar never grows wider than this, however few detectors there are
 const ERROR_BAR_WIDTH_RATIO = 0.4;
 const ERROR_BAR_WIDTH_MIN = 20;
+const LEGEND_WIDTH = 120;
+const LEGEND_GAP = 14;
+const LEGEND_PADDING = 8;
+const LEGEND_SWATCH_SIZE = 12;
+const LEGEND_ROW_HEIGHT = 18;
+const TOTAL_COLOR = '#303030';
 
 // Every PC currently placed in the experiment, in a stable left-to-right
 // order (by SG index, then up before down) -- this is what turns into one
@@ -91,17 +97,22 @@ export default function Histogram({ experiment, displayBools }) {
     const { width, height } = canvasDims;
     ctx.clearRect(0, 0, width, height);
 
-    const plotX0 = PADDING_LEFT;
-    const plotX1 = width - PADDING_RIGHT;
-    const plotY0 = PADDING_TOP;
-    const plotY1 = height - PADDING_BOTTOM;
-
     const detectors = getDetectors(experiment);
     const dataTotal = detectors.reduce((sum, d) => sum + d.count, 0);
     const dataMax = detectors.reduce((m, d) => Math.max(m, d.count), 0);
     const requiredMax = Math.max(MIN_AXIS_MAX, dataMax * AXIS_HEADROOM);
     const ticks = niceTicks(requiredMax, TARGET_TICK_COUNT);
     const axisMax = ticks[ticks.length - 1];
+
+    const legendOn = displayBools.showLegend;
+    const legendX1 = width - PADDING_RIGHT;
+    const legendX0 = legendX1 - LEGEND_WIDTH;
+    const legendBoxHeight = LEGEND_PADDING * 2 + Math.max(detectors.length, 1) * LEGEND_ROW_HEIGHT;
+
+    const plotX0 = PADDING_LEFT;
+    const plotX1 = legendOn ? legendX0 - LEGEND_GAP : width - PADDING_RIGHT;
+    const plotY0 = PADDING_TOP;
+    const plotY1 = height - PADDING_BOTTOM;
 
     // Axes -- meet at the bottom-right corner; no gridlines crossing
     // through the bars, just short tick marks off the y-axis.
@@ -160,13 +171,46 @@ export default function Histogram({ experiment, displayBools }) {
           ctx.stroke();
         }
 
+        const showBothActual = (displayBools.showPercentages === 2 && dataTotal > 0);
         ctx.fillStyle = PC_COLORS[d.colorId];
         ctx.font = '11px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
-        const barLabel = (displayBools.showPercentages === 1 ? "" : String(d.count)) + ((displayBools.showPercentages !== 1 && dataTotal !== 0) ? " (" + (d.count/dataTotal*100).toFixed(1) + "%)" : "");
+        const barLabel = ((displayBools.showPercentages === 1 && dataTotal === 0) ? "---" : "") + (displayBools.showPercentages !== 1 ? String(d.count) : "") + (showBothActual ? " (" : "") + ((displayBools.showPercentages !== 0 && dataTotal !== 0) ? (d.count/dataTotal*100).toFixed(1) + "%" : "") + (showBothActual ? ")" : "");
         ctx.fillText(barLabel, barX + barWidth / 2, barY - 4 - (drawErrorBars ? errOffset : 0));
       });
+    }
+
+    if (legendOn) {
+      const legendY0 = plotY0;
+      const legendY1 = legendY0 + legendBoxHeight;
+      ctx.strokeStyle = "#999999";
+      ctx.lineWidth = 1;
+      ctx.roundRect(legendX0, legendY0, LEGEND_WIDTH, legendY1 - legendY0, 5);
+      ctx.stroke()
+      ctx.font = '11px Arial';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      if (detectors.length === 0) {
+        ctx.fillStyle = TICK_LABEL_COLOR;
+        ctx.fillText('No detectors', legendX0 + LEGEND_PADDING, legendY0 + legendBoxHeight / 2);
+      } else {
+        detectors.forEach((d, i) => {
+          const rowY = legendY0 + LEGEND_PADDING + i * LEGEND_ROW_HEIGHT + LEGEND_ROW_HEIGHT / 2;
+          ctx.fillStyle = PC_COLORS[d.colorId] ?? '#999999';
+          ctx.fillRect(legendX0 + LEGEND_PADDING, rowY - LEGEND_SWATCH_SIZE / 2, LEGEND_SWATCH_SIZE, LEGEND_SWATCH_SIZE);
+          ctx.fillStyle = AXIS_COLOR;
+          ctx.fillText(`SG${d.sgIndex + 1} ${d.arm}`, legendX0 + LEGEND_PADDING + LEGEND_SWATCH_SIZE + 6, rowY);
+        });
+      }
+    }
+
+    if (displayBools.showTotal) {
+      ctx.fillStyle = TOTAL_COLOR;
+      ctx.font = 'bold 12px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`N = ${dataTotal}`, (plotX0 + plotX1)/2, PADDING_TOP / 2);
     }
   }, [experiment, displayBools, canvasDims]);
 

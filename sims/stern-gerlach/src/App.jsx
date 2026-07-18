@@ -306,9 +306,9 @@ export default function App() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <h3 style={{ padding: '6px 0px 4px 0px' }}>Chart Options</h3>
               <div style = {{ padding: '2px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label><input type="radio" name="barLabelMode" value={0} checked={histDisplayBools.showPercentages === 0} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: event.target.value });}} />Counts</label>
-                <label><input type="radio" name="barLabelMode" value={1} checked={histDisplayBools.showPercentages === 1} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: event.target.value });}} />Percentages</label>
-                <label><input type="radio" name="barLabelMode" value={2} checked={histDisplayBools.showPercentages === 2} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: event.target.value });}} />Both</label>
+                <label><input type="radio" name="barLabelMode" value={0} checked={histDisplayBools.showPercentages === 0} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) });}} />Counts</label>
+                <label><input type="radio" name="barLabelMode" value={1} checked={histDisplayBools.showPercentages === 1} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) });}} />Percentages</label>
+                <label><input type="radio" name="barLabelMode" value={2} checked={histDisplayBools.showPercentages === 2} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) });}} />Both</label>
               </div>
               <label style={{ padding: '0px 0 0 0' }}>
                 <input type="checkbox" checked={histDisplayBools.showErrorBars} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showErrorBars: e.target.checked })} />
