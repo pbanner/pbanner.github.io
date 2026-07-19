@@ -30,6 +30,10 @@ function StopIcon({ size = '0.9em' }) {
 
 const SG_OPTION_LABELS = ['X', 'Y', 'Z'];
 const SG_OPTION_BASES = [[Math.PI/2, 0], [Math.PI/2, Math.PI/2], [0, 0]];
+// The advanced θ/ϕ controls are degrees-in, degrees-out for the user -- sg.basis
+// itself always stays in radians, since that's what every physics function expects.
+const RAD_TO_DEG = 180 / Math.PI;
+const DEG_TO_RAD = Math.PI / 180;
 
 function AxisStepper({ index, sg, setExperiment, disabled, resetDataCollection }) {
   const currentIndex = SG_OPTION_BASES.findIndex(
@@ -83,32 +87,34 @@ function AxisStepper({ index, sg, setExperiment, disabled, resetDataCollection }
             <input
               type="number"
               min={0}
-              max={Math.PI}
-              step={0.01}
-              value={sg.basis[0]}
+              max={180}
+              step={1}
+              value={sg.basis[0] * RAD_TO_DEG}
               disabled={disabled}
               onChange={(e) => {
                 const v = parseFloat(e.target.value);
-                if (!Number.isNaN(v)) setAngle('theta', v);
+                if (!Number.isNaN(v)) setAngle('theta', v * DEG_TO_RAD);
               }}
               style={{ width: '70px', padding: '2px' }}
             />
+            <span>°</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <label style={{ width: '12px' }}>ϕ</label>
             <input
               type="number"
               min={0}
-              max={2 * Math.PI}
-              step={0.01}
-              value={sg.basis[1]}
+              max={360}
+              step={1}
+              value={sg.basis[1] * RAD_TO_DEG}
               disabled={disabled}
               onChange={(e) => {
                 const v = parseFloat(e.target.value);
-                if (!Number.isNaN(v)) setAngle('phi', v);
+                if (!Number.isNaN(v)) setAngle('phi', v * DEG_TO_RAD);
               }}
               style={{ width: '70px', padding: '2px' }}
             />
+            <span>°</span>
           </div>
         </div>
       ) : (
