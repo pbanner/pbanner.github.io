@@ -110,9 +110,24 @@ export default function Histogram({ experiment, displayBools }) {
     // same dataTotal the observed bars are drawn against, so the reference
     // line is a fair comparison against however much data has actually
     // been collected so far.
+    //
+    // theoreticalProbabilities() is normalized against the *entire* oven
+    // ensemble, including particles that never reach a placed PC at all
+    // (absorbed by a beam block, or run off the end of the chain
+    // unmeasured) -- but dataTotal only ever counts particles that landed
+    // in a placed PC, since that's all the histogram can see. Comparing
+    // raw theoryProb against that would make the reference lines too low
+    // (and not sum to dataTotal) any time a BB or an open end siphons off
+    // some fraction of the particles, so it's renormalized here to sum to
+    // 1 across just the placed PCs, matching what dataTotal actually
+    // represents.
     const theoryOn = displayBools.showTheory;
     const theoryMap = theoryOn
-      ? new Map(theoreticalProbabilities(experiment).map((t) => [`${t.sgIndex}-${t.arm}`, t.prob]))
+      ? (() => {
+          const theoryList = theoreticalProbabilities(experiment);
+          const theorySum = theoryList.reduce((s, t) => s + t.prob, 0);
+          return new Map(theoryList.map((t) => [`${t.sgIndex}-${t.arm}`, theorySum > 0 ? t.prob / theorySum : 0]));
+        })()
       : null;
     const detectors = rawDetectors.map((d) => ({
       ...d,
