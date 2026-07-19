@@ -1,0 +1,42 @@
+name: Build Stern-Gerlach Simulation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'sims/stern-gerlach/**'
+      - '.github/workflows/build-sg-sim.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write  # Allows the action to push code to the repo
+      pull-requests: write # Use this if your action adds PR comments
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '24'
+      
+      - name: Install dependencies
+        working-directory: ./sims/stern-gerlach
+        run: npm install
+      
+      - name: Build simulation
+        working-directory: ./sims/stern-gerlach
+        run: npm run build
+      
+      - name: Commit and push dist
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add sims/stern-gerlach/dist/
+          git commit -m "Build: update stern-gerlach-sim dist folder" || echo "No changes to commit"
+          git push
