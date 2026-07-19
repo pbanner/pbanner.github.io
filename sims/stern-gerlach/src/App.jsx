@@ -34,6 +34,10 @@ const SG_OPTION_BASES = [[Math.PI/2, 0], [Math.PI/2, Math.PI/2], [0, 0]];
 // itself always stays in radians, since that's what every physics function expects.
 const RAD_TO_DEG = 180 / Math.PI;
 const DEG_TO_RAD = Math.PI / 180;
+// Rounds for *display only* -- the underlying radians value in sg.basis is
+// never touched, so this just hides floating-point noise like
+// 59.999999999999996 in the textbox without losing any real precision.
+const roundDeg = (d) => Math.round(d * 1000) / 1000;
 
 function AxisStepper({ index, sg, setExperiment, disabled, resetDataCollection }) {
   const currentIndex = SG_OPTION_BASES.findIndex(
@@ -89,7 +93,7 @@ function AxisStepper({ index, sg, setExperiment, disabled, resetDataCollection }
               min={0}
               max={180}
               step={1}
-              value={sg.basis[0] * RAD_TO_DEG}
+              value={roundDeg(sg.basis[0] * RAD_TO_DEG)}
               disabled={disabled}
               onChange={(e) => {
                 const v = parseFloat(e.target.value);
@@ -106,7 +110,7 @@ function AxisStepper({ index, sg, setExperiment, disabled, resetDataCollection }
               min={0}
               max={360}
               step={1}
-              value={sg.basis[1] * RAD_TO_DEG}
+              value={roundDeg(sg.basis[1] * RAD_TO_DEG)}
               disabled={disabled}
               onChange={(e) => {
                 const v = parseFloat(e.target.value);
