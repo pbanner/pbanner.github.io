@@ -462,13 +462,13 @@ export default function App() {
             </label>
             <div className="control-group" style={{ marginTop: '0.5em' }}>
               <SliderPlusTextboxControl
-                label="Particle Number"
+                label="Particles per Second"
                 valueNum={expMode.rate}
                 onChangeNum={(val) => {setExpMode({ ...expMode, rate: val });}}
                 min={0.0}
                 max={100}
                 step={0.1}
-                disabled={expMode.build !== 0}
+                disabled={(expMode.build !== 0) || (expMode.dc === 'single')}
               />
             </div>
             <button className="control-bar-button" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px'}} onClick={handleStartPause} disabled={expMode.build !== 0}>
