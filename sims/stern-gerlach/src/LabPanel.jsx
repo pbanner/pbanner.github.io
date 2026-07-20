@@ -207,6 +207,43 @@ function getArmArc(sgIndex, arm, axis, kind /* 'in' | 'out' */) {
     : { cx, cy: outputY - IN_PATH_ARC_RADIUS, r: IN_PATH_ARC_RADIUS, startAngle: Math.PI / 2, endAngle: Math.PI / 2 - IN_PATH_ARC_ANGLE, ccw: true };
 }
 
+// Dashed "possible paths" preview: the oven → first SG run, then one arc per
+// arm for every SG a particle could still reach (stops at the first SG
+// where both arms are occupied, since nothing gets past that one). Takes
+// the experiment to draw as a param, not a closed-over one, specifically so
+// drawScene can call this twice -- once for the real experiment, once for
+// a hypothetical one -- to preview the effect of a pending placement or
+// removal before it's actually committed.
+function drawPreviewArcs(ctx, exp, axis, color) {
+  ctx.strokeStyle = color;
+  ctx.setLineDash([10, 8]);
+  ctx.lineWidth = 1.5;
+
+  ctx.beginPath();
+  ctx.moveTo(OVEN_X0 + OVEN_WIDTH, axis);
+  ctx.lineTo(SG_START_X, axis);
+  ctx.stroke();
+
+  let incomingParticles = true;
+  exp.forEach((sg, i) => {
+    if (incomingParticles) {
+      ['up', 'down'].forEach((arm) => {
+        let continues = sg[arm] === null;
+        if (continues && i === exp.length - 1) continues = false; // nothing to continue into
+        const a = getArmArc(i, arm, axis, continues ? 'in' : 'out');
+        ctx.beginPath();
+        ctx.arc(a.cx, a.cy, a.r, a.startAngle, a.endAngle, a.ccw);
+        ctx.stroke();
+      });
+    }
+    if (sg['up'] !== null && sg['down'] !== null) {
+      incomingParticles = false;
+    }
+  });
+
+  ctx.setLineDash([]);
+}
+
 function segmentLength(seg) {
   if (seg.type === 'line') return Math.hypot(seg.x1 - seg.x0, seg.y1 - seg.y0);
   if (seg.type === 'arc') return seg.r * Math.abs(seg.endAngle - seg.startAngle);
@@ -318,6 +355,40 @@ function findNearestDeletable(mouseX, mouseY, experiment, axis) {
   return closest;
 }
 
+// While build/delete mode is hovering a valid snap target, this is what
+// `experiment` would look like immediately after committing that action --
+// used so the path preview can show the *resulting* paths, not just the
+// current ones, before the user actually clicks. Only single-arm changes
+// (placing or removing a PC/BB) get a preview this way: deleting a whole SG
+// changes the chain's length and shifts every later SG's position, so
+// there's no well-defined overlay for it against the still-unchanged, still
+// full-length real experiment -- that case keeps only the existing
+// cascade-highlight (see the delete-mode block in drawScene) with no path
+// preview.
+function getPreviewExperiment(experiment, expMode, mousePos, axis) {
+  if (!mousePos) return null;
+
+  if (expMode.build === 1 || expMode.build === 2) {
+    const width = expMode.build === 1 ? PC_WIDTH : BB_WIDTH;
+    const snapped = findNearestPlacementSite(mousePos.x, mousePos.y, experiment, axis, width);
+    if (!snapped) return null;
+    const next = [...experiment];
+    const placed = expMode.build === 1 ? { type: 'pc', data: 0, colorId: null } : 'bb';
+    next[snapped.sgIndex] = { ...next[snapped.sgIndex], [snapped.arm]: placed };
+    return next;
+  }
+
+  if (expMode.build === -1) {
+    const target = findNearestDeletable(mousePos.x, mousePos.y, experiment, axis);
+    if (!target || target.kind !== 'arm') return null;
+    const next = [...experiment];
+    next[target.sgIndex] = { ...next[target.sgIndex], [target.arm]: null };
+    return next;
+  }
+
+  return null;
+}
+
 const LabPanel = forwardRef(function LabPanel(
   { experiment, setExperiment, expMode, setExpMode, displayBools, setParticleCount, resetToken, resetDataCollection, tabVisible },
   ref
@@ -422,21 +493,22 @@ const LabPanel = forwardRef(function LabPanel(
 
     // Draw the SGs, one copy of the ref image each, plus the basis labels
     if (sgImageRef.current && sgImageRef.current.complete) {
-      // Preview mode wants to show the oven → first SG path. Draw it separately.
       if (displayBools.previewPaths) {
-        ctx.strokeStyle = '#303030';
-        ctx.setLineDash([10, 8]);
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(OVEN_X0 + OVEN_WIDTH, axis);
-        ctx.lineTo(SG_START_X, axis);
-        ctx.stroke();
-        ctx.setLineDash([]);
+        // While hovering a valid placement/removal target, show the *old*
+        // path (still real until the click actually lands) in light gray
+        // underneath the *resulting* path in the normal preview color, so
+        // the effect of the pending change is visible before committing to
+        // it. Off target (or not in build/delete mode at all), there's
+        // nothing to contrast against, so just the one normal-color path.
+        const previewExperiment = getPreviewExperiment(experiment, expMode, mousePos, axis);
+        if (previewExperiment) {
+          drawPreviewArcs(ctx, experiment, axis, '#cccccc');
+          drawPreviewArcs(ctx, previewExperiment, axis, '#303030');
+        } else {
+          drawPreviewArcs(ctx, experiment, axis, '#303030');
+        }
       }
 
-      // This tracks whether at least some of the particles could make it
-      // through to the next SG; it's only used for drawing preview paths
-      var incomingParticles = true;
       experiment.forEach((sg, i) => {
         const x0 = SG_START_X + i * SG_SPACING;
 
@@ -449,26 +521,6 @@ const LabPanel = forwardRef(function LabPanel(
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(getSGLabel(sg.basis, i), x0+62, axis);
-
-        if (displayBools.previewPaths && incomingParticles) {
-          ctx.strokeStyle = '#303030';
-          ctx.setLineDash([10, 8]);
-          ctx.lineWidth = 1.5;
-
-          ['up', 'down'].forEach((arm) => {
-            var continues = sg[arm] === null;
-            if (continues && i === experiment.length - 1) continues = false; // nothing to continue into
-            const a = getArmArc(i, arm, axis, continues ? 'in' : 'out');
-            ctx.beginPath();
-            ctx.arc(a.cx, a.cy, a.r, a.startAngle, a.endAngle, a.ccw);
-            ctx.stroke();
-          });
-
-          ctx.setLineDash([]);
-        }
-        if ((sg['up'] !== null) && (sg['down'] !== null)) {
-          incomingParticles = false;
-        }
 
         // Draw SGs and BBs as needed
         ['up', 'down'].forEach((arm) => {

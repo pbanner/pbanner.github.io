@@ -196,10 +196,14 @@ function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step
 // screens and as one pane of the compact tab-switcher on narrow ones --
 // showHeader is turned off in compact mode, where the current pane's title
 // is instead shown in a shared header row alongside the tab-switch button.
-function BuildExperimentPanel({ addSternGerlach, expMode, setExpMode, controlsLocked, showHeader = true }) {
+function BuildExperimentPanel({ addSternGerlach, expMode, setExpMode, controlsLocked, displayBools, setDisplayBools, showHeader = true }) {
   return (
     <>
       {showHeader && <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Build Experiment</h3>}
+      <label style={{ margin: '0 0 8px 0' }}>
+        <input type="checkbox" disabled={controlsLocked} checked={displayBools.previewPaths} onChange={(e) => setDisplayBools({ ...displayBools, previewPaths: e.target.checked })} />
+        Preview possible paths
+      </label>
       <div style={{ display: 'flex', flexDirection: 'row', gap: '8px' }}>
         <div style={{display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <button type="button" className="control-bar-button icon-button" aria-label="Add Stern-Gerlach apparatus" onClick={addSternGerlach} disabled={controlsLocked}>
@@ -383,6 +387,20 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  // Turns "Preview possible paths" on automatically the moment build/delete
+  // mode is entered (build going from 0 to non-zero) -- but only on that
+  // transition, not on every render or every switch between build modes
+  // (e.g. PC mode straight to BB mode), so a user who unchecks it while
+  // still building doesn't get overridden again until they leave and
+  // re-enter build mode.
+  const prevBuildRef = useRef(expMode.build);
+  useEffect(() => {
+    if (prevBuildRef.current === 0 && expMode.build !== 0) {
+      setDisplayBools((prev) => ({ ...prev, previewPaths: true }));
+    }
+    prevBuildRef.current = expMode.build;
+  }, [expMode.build]);
+
   useEffect(() => {
     if (expMode.dc === 'stream' && expMode.running && tabVisible) {
       streamTimerRef.current = setInterval(() => {
@@ -432,7 +450,7 @@ export default function App() {
               </div>
               <div className="compact-tab-stack">
                 <div className={`compact-tab-pane ${compactTab === 'build' ? '' : 'compact-tab-hidden'}`}>
-                  <BuildExperimentPanel addSternGerlach={addSternGerlach} expMode={expMode} setExpMode={setExpMode} controlsLocked={controlsLocked} showHeader={false} />
+                  <BuildExperimentPanel addSternGerlach={addSternGerlach} expMode={expMode} setExpMode={setExpMode} controlsLocked={controlsLocked} displayBools={displayBools} setDisplayBools={setDisplayBools} showHeader={false} />
                 </div>
                 <div className={`compact-tab-pane ${compactTab === 'bases' ? '' : 'compact-tab-hidden'}`}>
                   <SetMeasurementBasesPanel experiment={experiment} setExperiment={setExperiment} controlsLocked={controlsLocked} expMode={expMode} resetDataCollection={resetDataCollection} showHeader={false} />
@@ -442,7 +460,7 @@ export default function App() {
           ) : (
             <>
               <div className="control-bar-group">
-                <BuildExperimentPanel addSternGerlach={addSternGerlach} expMode={expMode} setExpMode={setExpMode} controlsLocked={controlsLocked} />
+                <BuildExperimentPanel addSternGerlach={addSternGerlach} expMode={expMode} setExpMode={setExpMode} controlsLocked={controlsLocked} displayBools={displayBools} setDisplayBools={setDisplayBools} />
               </div>
               <div className="control-bar-group">
                 <SetMeasurementBasesPanel experiment={experiment} setExperiment={setExperiment} controlsLocked={controlsLocked} expMode={expMode} resetDataCollection={resetDataCollection} />
@@ -456,19 +474,15 @@ export default function App() {
               <label><input type="radio" name="DCmode" value="single" checked={expMode.dc === 'single'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} disabled={expMode.build !== 0} />One at a time</label>
               <label><input type="radio" name="DCmode" value="stream" checked={expMode.dc === 'stream'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} disabled={expMode.build !== 0} />Continuous</label>
             </div>
-            <label style={{ margin: '4px 0 0 0' }}>
-              <input type="checkbox" disabled={expMode.build !== 0} checked={displayBools.previewPaths} onChange={(e) => setDisplayBools({ ...displayBools, previewPaths: e.target.checked })} />
-              Preview possible paths
-            </label>
             <div className="control-group" style={{ marginTop: '0.5em' }}>
               <SliderPlusTextboxControl
-                label="Particle Number"
+                label="Particles per Second"
                 valueNum={expMode.rate}
                 onChangeNum={(val) => {setExpMode({ ...expMode, rate: val });}}
                 min={0.0}
                 max={100}
                 step={0.1}
-                disabled={expMode.build !== 0}
+                disabled={(expMode.build !== 0) || (expMode.dc === 'single')}
               />
             </div>
             <button className="control-bar-button" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px'}} onClick={handleStartPause} disabled={expMode.build !== 0}>
