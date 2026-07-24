@@ -246,7 +246,7 @@ export default function App() {
   // Panel 1 state
   const [displayBools, setDisplayBools] = useState({
     gridOn: true,             // Displaying the grid
-    previewPaths: false       // For previewing particle paths
+    previewPaths: true       // For previewing particle paths
   });
   const [histDisplayBools, setHistDisplayBools] = useState({
     showPercentages: 2,    // 0 = counts only, 1 = percentages only, 2 = both
