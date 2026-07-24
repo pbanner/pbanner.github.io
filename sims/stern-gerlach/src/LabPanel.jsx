@@ -792,6 +792,7 @@ const LabPanel = forwardRef(function LabPanel(
           return next;
         });
       }
+      setExpMode({ ...expMode, build: 0 });
       resetDataCollection(); // deleting a component is a setup change
       return;
     }
@@ -810,6 +811,7 @@ const LabPanel = forwardRef(function LabPanel(
       }
       return next;
     });
+    setExpMode({ ...expMode, build: 0 });
     resetDataCollection(); // placing a component is a setup change
   };
 
