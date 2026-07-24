@@ -295,13 +295,16 @@ function buildAnimationPath(experiment, axis, sampled) {
 }
 
 // Placement only — unchanged from before, only considers empty arm sites.
-function findNearestPlacementSite(mouseX, mouseY, experiment, axis, width) {
+function findNearestPlacementSite(mouseX, mouseY, experiment, axis, width, buildMode) {
   let closest = null;
   let closestDist = SNAP_RADIUS;
 
   experiment.forEach((sg, sgIndex) => {
     ['up', 'down'].forEach((arm) => {
-      if (sg[arm] !== null) return;
+      // Don't want to replace PCs, that's weird behavior; BBs don't matter
+      if (sg[arm] !== null) {
+        if (sg[arm].type === 'pc' && buildMode === 1) return;
+      }
 
       const site = getPlacementSite(sgIndex, arm, axis);
       const center = getPlacementSiteCenter(site, width);
@@ -370,7 +373,7 @@ function getPreviewExperiment(experiment, expMode, mousePos, axis) {
 
   if (expMode.build === 1 || expMode.build === 2) {
     const width = expMode.build === 1 ? PC_WIDTH : BB_WIDTH;
-    const snapped = findNearestPlacementSite(mousePos.x, mousePos.y, experiment, axis, width);
+    const snapped = findNearestPlacementSite(mousePos.x, mousePos.y, experiment, axis, width, expMode.build);
     if (!snapped) return null;
     const next = [...experiment];
     const placed = expMode.build === 1 ? { type: 'pc', data: 0, colorId: null } : 'bb';
@@ -566,7 +569,7 @@ const LabPanel = forwardRef(function LabPanel(
 
     // If we're in a placement mode, draw an image of the thing being placed to drag along the cursor
     if (expMode.build > 0 && mousePos && pcImageRef.current && pcImageRef.current.complete) {
-      const snapped = findNearestPlacementSite(mousePos.x, mousePos.y, experiment, axis, expMode.build === 1 ? PC_WIDTH : BB_WIDTH);
+      const snapped = findNearestPlacementSite(mousePos.x, mousePos.y, experiment, axis, expMode.build === 1 ? PC_WIDTH : BB_WIDTH, expMode.build);
 
       if (snapped) {
         const center = getPlacementSiteCenter(snapped.site, expMode.build === 1 ? PC_WIDTH : BB_WIDTH);
@@ -797,7 +800,7 @@ const LabPanel = forwardRef(function LabPanel(
       return;
     }
 
-    const snapped = findNearestPlacementSite(mouseX, mouseY, experiment, axis, expMode.build === 1 ? PC_WIDTH : BB_WIDTH);
+    const snapped = findNearestPlacementSite(mouseX, mouseY, experiment, axis, expMode.build === 1 ? PC_WIDTH : BB_WIDTH, expMode.build);
     if (!snapped) return;
 
     const { sgIndex, arm } = snapped;
