@@ -220,9 +220,9 @@ function BuildExperimentPanel({ addSternGerlach, expMode, setExpMode, controlsLo
             <img src={bbImage} alt="" className="icon-button-image" draggable="false" />
             <span>Add Beam Block</span>
           </button>
-          <button type="button" className={`control-bar-button icon-button ${expMode.build === -1 ? 'active' : ''}`} aria-label="Remove components" onClick={() => setExpMode({ ...expMode, build: expMode.build === -1 ? 0 : -1 })} disabled={controlsLocked}>
+          <button type="button" className={`control-bar-button icon-button ${expMode.build === -1 ? 'active' : ''}`} aria-label="Remove component" onClick={() => setExpMode({ ...expMode, build: expMode.build === -1 ? 0 : -1 })} disabled={controlsLocked}>
             <img src={xImage} alt="" className="icon-button-image" draggable="false" />
-            <span>Remove Components</span>
+            <span>Remove Component</span>
           </button>
         </div>
       </div>
