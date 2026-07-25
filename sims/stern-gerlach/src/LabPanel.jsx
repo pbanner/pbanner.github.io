@@ -100,6 +100,15 @@ function useImage(src) {
 
   return [imgRef, loaded];
 }
+// The five images (oven, ovenOff, sg, pc, bb) load independently and in no
+// guaranteed order -- ctx.drawImage throws a TypeError, uncaught all the
+// way up through React (no error boundary here), if handed a ref whose
+// image hasn't loaded yet (imgRef.current is still null). Every drawImage
+// call needs to check *its own* image's readiness, not some other image's,
+// or a slow/unlucky load order crashes the whole canvas until reload.
+function imageReady(imgRef) {
+  return imgRef.current !== null && imgRef.current.complete;
+}
 
 // This is the fundemantal function of the first part of the animation pipeline!!!
 // Walk the SG chain for one particle. A real measurement (and thus
@@ -578,8 +587,14 @@ const LabPanel = forwardRef(function LabPanel(
       ? findNearestPlacementSite(mousePos.x, mousePos.y, experiment, axis, expMode.build)
       : null;
 
+    // Whichever image the three build-mode overlay blocks below actually
+    // draw -- pc in PC mode, bb in BB mode -- so each can check readiness
+    // of the one it needs instead of always checking pcImageRef regardless
+    // of mode (the bug: in BB mode that let a not-yet-loaded bbImageRef
+    // through and crashed on drawImage).
+    const activeComponentImageRef = expMode.build === 1 ? pcImageRef : bbImageRef;
     // Draw the SGs, one copy of the ref image each, plus the basis labels
-    if (sgImageRef.current && sgImageRef.current.complete) {
+    if (imageReady(sgImageRef) && imageReady(pcImageRef) && imageReady(bbImageRef)) {
       if (displayBools.previewPaths) {
         // While hovering a valid placement/removal target, show the *old*
         // path (still real until the click actually lands) in light gray
@@ -656,7 +671,7 @@ const LabPanel = forwardRef(function LabPanel(
     // instant build mode is entered. Left in place for every site except the
     // one currently snapped to below, which gets its own green circle and
     // full-opacity component instead -- drawing both there would double up.
-    if (expMode.build > 0 && pcImageRef.current && pcImageRef.current.complete) {
+    if (expMode.build > 0 && imageReady(activeComponentImageRef)) {
       getPlacementCandidates(experiment, axis, expMode.build).forEach((candidate) => {
         if (buildSnappedSite && candidate.sgIndex === buildSnappedSite.sgIndex && candidate.arm === buildSnappedSite.arm) return;
         ctx.strokeStyle = '#f39c12';
@@ -683,7 +698,7 @@ const LabPanel = forwardRef(function LabPanel(
     // component, not whatever it's replacing) around that one site, and
     // draw the new component there at full opacity, standing in for
     // whatever's really occupying it (skipped above, in the SG loop).
-    if (expMode.build > 0 && buildSnappedSite && pcImageRef.current && pcImageRef.current.complete) {
+    if (expMode.build > 0 && buildSnappedSite && imageReady(activeComponentImageRef)) {
       const newDims = getNewComponentDims(expMode.build);
       const center = getPlacementSiteCenter(buildSnappedSite.site, newDims.width);
 
@@ -704,7 +719,7 @@ const LabPanel = forwardRef(function LabPanel(
     // pre-replacement UI's drag-along ghost. Once the cursor snaps to a
     // site (block above), this stops -- the docked full-opacity component
     // there is the only preview shown.
-    if (expMode.build > 0 && mousePos && !buildSnappedSite && pcImageRef.current && pcImageRef.current.complete) {
+    if (expMode.build > 0 && mousePos && !buildSnappedSite && imageReady(activeComponentImageRef)) {
       ctx.globalAlpha = 0.5;
       expMode.build === 1
         ? ctx.drawImage(pcImageRef.current, mousePos.x - PC_WIDTH / 2, mousePos.y - PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT)
@@ -924,7 +939,7 @@ const LabPanel = forwardRef(function LabPanel(
     const canvas = canvasRef.current;
     if (!canvas) return;
     drawScene(canvas.getContext('2d'));
-  }, [experiment, expMode, ovenImageLoaded, ovenOffImageLoaded, sgImageLoaded, pcImageLoaded, mousePos, axis, canvasDims, displayBools, startError, drawScene]);
+  }, [experiment, expMode, ovenImageLoaded, ovenOffImageLoaded, sgImageLoaded, pcImageLoaded, bbImageLoaded, mousePos, axis, canvasDims, displayBools, startError, drawScene]);
 
   // Mouse handlers
   const handleClick = (e) => {
