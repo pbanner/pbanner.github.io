@@ -6,7 +6,9 @@ import { PC_COLORS } from './colors';
 const PADDING_TOP = 25;
 const PADDING_RIGHT = 12;    // room for the y-axis tick labels, which sit to the right of the axis
 const PADDING_BOTTOM = 20;
-const PADDING_LEFT = 40;
+const TICK_LABEL_GAP = 8;   // gap between the axis line and the tick numbers, and between the tick numbers and the "Counts" label past them
+const Y_AXIS_LABEL_THICKNESS = 12; // the rotated "Counts" label's own font size -- its horizontal footprint once turned sideways
+const Y_AXIS_LABEL_MARGIN = 4; // margin between the "Counts" label and the canvas's own left edge
 const AXIS_COLOR = '#303030';
 const AXIS_HEADROOM = 1.1;   // require the top tick to clear the tallest bar by this factor, so bars never crowd the very top and rescaling kicks in a bit before a bar would actually exceed the old top tick
 const TICK_LABEL_COLOR = '#606060';
@@ -145,13 +147,22 @@ export default function Histogram({ experiment, displayBools }) {
     const ticks = niceTicks(requiredMax, TARGET_TICK_COUNT);
     const axisMax = ticks[ticks.length - 1];
 
+        // How much horizontal room the tick numbers need changes as the axis
+    // rescales (e.g. "20" vs "100000"), so the left padding -- and with it,
+    // where the "Counts" label sits -- is measured fresh each draw rather
+    // than fixed, keeping the label flush against the tick numbers no
+    // matter how wide they get.
+    ctx.font = '11px Arial';
+    const maxTickLabelWidth = ticks.reduce((w, t) => Math.max(w, ctx.measureText(String(t)).width), 0);
+    const paddingLeft = Y_AXIS_LABEL_MARGIN + Y_AXIS_LABEL_THICKNESS + TICK_LABEL_GAP + maxTickLabelWidth + TICK_LABEL_GAP;
+
     const legendOn = displayBools.showLegend;
     const legendX1 = width - PADDING_RIGHT;
     const legendX0 = legendX1 - LEGEND_WIDTH;
     const legendRowCount = detectors.length === 0 ? 1 : detectors.length + (theoryOn ? 1 : 0);
     const legendBoxHeight = LEGEND_PADDING * 2 + legendRowCount * LEGEND_ROW_HEIGHT;
 
-    const plotX0 = PADDING_LEFT;
+    const plotX0 = paddingLeft;
     const plotX1 = legendOn ? legendX0 - LEGEND_GAP : width - PADDING_RIGHT;
     const plotY0 = PADDING_TOP;
     const plotY1 = height - PADDING_BOTTOM;
@@ -177,8 +188,22 @@ export default function Histogram({ experiment, displayBools }) {
       ctx.moveTo(plotX0 - 5, y);
       ctx.lineTo(plotX0 + 5, y);
       ctx.stroke();
-      ctx.fillText(String(tickValue), plotX0 - 8, y);
+      ctx.fillText(String(tickValue), plotX0 - TICK_LABEL_GAP, y);
     });
+
+    // Y-axis title, rotated to read bottom-to-top and centered against the
+    // axis's full height, sitting just past the tick numbers -- paddingLeft
+    // above already reserved exactly enough room for this, however wide
+    // those numbers turned out to be.
+    ctx.save();
+    ctx.translate(Y_AXIS_LABEL_MARGIN + Y_AXIS_LABEL_THICKNESS / 2, (plotY0 + plotY1) / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillStyle = TICK_LABEL_COLOR;
+    ctx.font = `bold ${Y_AXIS_LABEL_THICKNESS}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Counts', 0, 0);
+    ctx.restore();
 
         // Bars, one per detector, growing up from the x-axis, colored to match
     // that detector's own identifying dot. Bars belonging to the same SG
