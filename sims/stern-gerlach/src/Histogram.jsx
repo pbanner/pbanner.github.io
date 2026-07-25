@@ -32,7 +32,7 @@ const THEORY_LINE_WIDTH = 2;
 const THEORY_LINE_OVERHANG = 6; // extra px each side beyond the bar's own width, so the line reads as "wider than the bar" rather than flush with its edges
 const LOUPE_DIAMETER = 200;  // css px, the magnifier's own on-screen size
 const LOUPE_ZOOM = 10;        // how much the loupe magnifies the chart underneath the cursor
-const LOUPE_INK_SCALE = 1 / LOUPE_ZOOM * 1.5; // shrinks line widths/font sizes before the zoom transform blows them back up, so they render at their normal apparent size instead of getting magnified too
+const LOUPE_INK_SCALE = 1 / LOUPE_ZOOM * 2.0; // shrinks line widths/font sizes before the zoom transform blows them back up, so they render at their normal apparent size instead of getting magnified too
 
 // Every PC currently placed in the experiment, in a stable left-to-right
 // order (by SG index, then up before down) -- this is what turns into one
@@ -458,7 +458,28 @@ export default function Histogram({ experiment, displayBools }) {
 
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
-      <canvas ref={canvasRef} style={{ display: 'block' }} />
+      {/* Clipping layer holding the chart and the loupe. Being absolutely
+          positioned, it (and everything in it) drops out of the ancestors'
+          intrinsic-width calculation -- without this, the canvas's own
+          fixed pixel width feeds .histogram-panel's max-content, which
+          feeds the group's and .control-bar-content's, and since
+          .control-bar just scrolls (overflow-x: auto) rather than forcing
+          anything narrower, the canvas could only ever grow: nothing ever
+          shrank it back, so the ResizeObserver never fired again.
+          overflow: hidden then keeps the loupe from spilling past the
+          chart's bottom edge into the group's scrollable overflow (which
+          popped a vertical scrollbar, whose width in turn nudged the
+          layout and, via the same ratchet, never recovered).
+          The button deliberately sits OUTSIDE this layer so its negative
+          left offset isn't clipped. */}
+      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+        <canvas ref={canvasRef} style={{ display: 'block' }} />
+        {magnifierOn && (
+          <div ref={loupeWrapperRef} className="histogram-loupe" style={{ display: 'none' }}>
+            <canvas ref={loupeCanvasRef} />
+          </div>
+        )}
+      </div>
       <button
         type="button"
         className={`control-bar-button icon-only-button icon-only-button-square histogram-magnifier-toggle${magnifierOn ? ' active' : ''}`}
@@ -472,11 +493,6 @@ export default function Histogram({ experiment, displayBools }) {
           <line x1="8" y1="11" x2="14" y2="11" />
         </svg>
       </button>
-      {magnifierOn && (
-        <div ref={loupeWrapperRef} className="histogram-loupe" style={{ display: 'none' }}>
-          <canvas ref={loupeCanvasRef} />
-        </div>
-      )}
     </div>
   );
 }

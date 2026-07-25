@@ -548,9 +548,9 @@ export default function App() {
           <div className="control-bar-group" style={{ flexDirection: 'row', flex: '1 1 auto', gap: '10px', minWidth: histDisplayBools.showLegend ? '650px' : '450px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <h3 style={{ padding: '0px 0px 4px 0px' }}>Chart Options</h3>
-              <div style = {{ padding: '0px', display: 'flex', flexDirection: 'row', gap: '4px', alignItems: 'center' }}>
+              <div style = {{ padding: '0px', display: 'flex', flexDirection: 'row', gap: '3px', alignItems: 'center' }}>
                 <p style={{ padding: '0px 4px 0 0', fontSize: '14px', fontWeight: '500' }}>Show:</p>
-                <div style = {{ padding: '4px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style = {{ padding: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                   <label><input type="radio" name="barLabelMode" value={0} disabled={expMode.build !== 0} checked={histDisplayBools.showPercentages === 0} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) });}} />Counts</label>
                   <label><input type="radio" name="barLabelMode" value={1} disabled={expMode.build !== 0} checked={histDisplayBools.showPercentages === 1} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) });}} />Percentages</label>
                   <label><input type="radio" name="barLabelMode" value={2} disabled={expMode.build !== 0} checked={histDisplayBools.showPercentages === 2} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) });}} />Both</label>
