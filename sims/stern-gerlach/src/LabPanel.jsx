@@ -603,23 +603,43 @@ const LabPanel = forwardRef(function LabPanel(
       });
     }
 
-    // Build mode: not snapped to anything yet -- highlight every site the
-    // new component could legally go, sized to whatever's already there (or
-    // to the new component itself, if the site is empty).
-    if ((expMode.build === 1 || expMode.build === 2) && mousePos && !buildSnappedSite) {
-      ctx.strokeStyle = '#f39c12';
-      ctx.lineWidth = 3;
+    // Build mode: highlight every site the new component could legally go --
+    // one circle per site, sized to whatever's already there (or to the new
+    // component itself, if the site is empty) -- plus a half-opacity preview
+    // of the new component at sites that don't have anything on them yet.
+    // Drawn unconditionally whenever build mode is active, not just once the
+    // cursor happens to be over the canvas, so the sites are visible the
+    // instant build mode is entered. Left in place even once the cursor
+    // snaps to one of them below, rather than being cleared -- the snapped
+    // site's green circle/full-opacity component (next block) just gets
+    // painted on top of whichever of these it lines up with.
+    if (expMode.build > 0 && pcImageRef.current && pcImageRef.current.complete) {
       getPlacementCandidates(experiment, axis, expMode.build).forEach((candidate) => {
+        ctx.strokeStyle = '#f39c12';
+        ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.arc(candidate.center.x, candidate.center.y, candidate.radius, 0, Math.PI * 2);
         ctx.stroke();
+
+        if (experiment[candidate.sgIndex][candidate.arm] === null) {
+          ctx.save();
+          ctx.translate(candidate.site.x, candidate.site.y);
+          ctx.rotate(candidate.site.angle);
+          ctx.globalAlpha = 0.5;
+          expMode.build === 1
+            ? ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT)
+            : ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
+          ctx.globalAlpha = 1.0;
+          ctx.restore();
+        }
       });
     }
-    // Build mode: snapped to a site -- drop the candidate circles, show a
-    // green circle (always sized to the new component, not whatever it's
-    // replacing) around that one site, and draw the new component there
-    // instead of whatever's really occupying it (skipped above, in the SG loop).
-    if ((expMode.build === 1 || expMode.build === 2) && buildSnappedSite && pcImageRef.current && pcImageRef.current.complete) {
+    // Build mode: cursor has snapped to a site -- on top of the candidate
+    // circles/previews above, show a green circle (always sized to the new
+    // component, not whatever it's replacing) around that one site, and
+    // draw the new component there at full opacity, standing in for
+    // whatever's really occupying it (skipped above, in the SG loop).
+    if (expMode.build > 0 && buildSnappedSite && pcImageRef.current && pcImageRef.current.complete) {
       const newDims = getNewComponentDims(expMode.build);
       const center = getPlacementSiteCenter(buildSnappedSite.site, newDims.width);
 
