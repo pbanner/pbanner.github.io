@@ -81,7 +81,7 @@ function AxisStepper({ index, sg, setExperiment, disabled, resetDataCollection }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', padding: '6px' }}>
-      <label style={{ fontSize: '14px', fontWeight: '500' }}>{'SG' + (index + 1)}</label>
+      <label style={{ fontSize: '14px', fontWeight: '500', marginRight: '5px' }}>{'SG' + (index + 1)}</label>
       {sg.advanced ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -141,7 +141,7 @@ function AxisStepper({ index, sg, setExperiment, disabled, resetDataCollection }
         disabled={disabled}
         style={{ marginLeft: 'auto' }}
       >
-        Advanced
+        {sg.advanced ? 'Set by axis' : 'Set by angles' }
       </button>
     </div>
   );
@@ -315,7 +315,7 @@ function SetMeasurementBasesPanel({ experiment, setExperiment, controlsLocked, e
   return (
     <>
       {showHeader && <p style={{ margin: '10px 0 0px 0', fontWeight: 'bold', fontSize: '14px', color: '#333' }}>Set Measurement Bases</p>}
-      <p style={{ width: '250px' }}>Click Advanced next to an SG to set its basis by angles (θ, ϕ).</p>
+      {/* <p style={{ width: '250px' }}>Click Set by Angles/Set by Axis to set an SG's basis by angles (θ, ϕ).</p> */}
       {experiment.map((sg, i) => (
         <AxisStepper key={i} index={i} sg={sg} setExperiment={setExperiment} disabled={controlsLocked || (expMode.build !== 0)} resetDataCollection={resetDataCollection} />
       ))}
