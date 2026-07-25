@@ -268,7 +268,7 @@ export default function App() {
   // advanced toggles that SG's basis control between the X/Y/Z stepper and
   // raw theta/phi textboxes -- a display preference, not a physics value
   // Start with one apparatus already in place
-  const [experiment, setExperiment] = useState([{ basis: [0, 0], up: null, down: null, advanced: false }]);
+  const [experiment, setExperiment] = useState([{ basis: [0, 0], up: 'bb', down: 'bb', advanced: false }]);
 
   // Below COMPACT_MAX_WIDTH_PX or COMPACT_MAX_ASPECT_RATIO, "Build Experiment"
   // and "Set Measurement Bases" collapse into one tab-switched group instead
