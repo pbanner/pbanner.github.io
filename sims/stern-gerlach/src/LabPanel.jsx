@@ -658,6 +658,18 @@ const LabPanel = forwardRef(function LabPanel(
       expMode.build === 1 ? ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
       ctx.restore();
     }
+    // Build mode: not snapped anywhere -- follow the cursor with a
+    // half-opacity, unrotated preview of the new component, same as the
+    // pre-replacement UI's drag-along ghost. Once the cursor snaps to a
+    // site (block above), this stops -- the docked full-opacity component
+    // there is the only preview shown.
+    if (expMode.build > 0 && mousePos && !buildSnappedSite && pcImageRef.current && pcImageRef.current.complete) {
+      ctx.globalAlpha = 0.5;
+      expMode.build === 1
+        ? ctx.drawImage(pcImageRef.current, mousePos.x - PC_WIDTH / 2, mousePos.y - PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT)
+        : ctx.drawImage(bbImageRef.current, mousePos.x - BB_WIDTH / 2, mousePos.y - BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
+      ctx.globalAlpha = 1.0;
+    }
 
     // Hovering over an existing component in delete mode
     if (expMode.build === -1 && mousePos) {
