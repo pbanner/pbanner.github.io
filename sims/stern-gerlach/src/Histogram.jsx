@@ -238,6 +238,21 @@ export default function Histogram({ experiment, displayBools }) {
         ctx.fillStyle = PC_COLORS[d.colorId] ?? '#999999';
         ctx.fillRect(barX, barY, barWidth, barHeight);
 
+        // Draw the theory reference lines
+        if (theoryOn && dataTotal > 0) {
+          const expectedCount = d.theoryProb * dataTotal;
+          const lineY = plotY1 - (expectedCount / axisMax) * (plotY1 - plotY0);
+          const lineHalfWidth = barWidth / 2 + THEORY_LINE_OVERHANG;
+          ctx.strokeStyle = THEORY_LINE_COLOR;
+          ctx.lineWidth = THEORY_LINE_WIDTH;
+          //ctx.setLineDash(THEORY_LINE_DASH);
+          ctx.beginPath();
+          ctx.moveTo(slotCenter - lineHalfWidth, lineY);
+          ctx.lineTo(slotCenter + lineHalfWidth, lineY);
+          ctx.stroke();
+          //ctx.setLineDash([]);
+        }
+
         // Draw the error bars
         const drawErrorBars = (d.count > 2 && displayBools.showErrorBars);
         const errOffset = Math.sqrt(d.count)*(barHeight/d.count);
@@ -253,21 +268,6 @@ export default function Histogram({ experiment, displayBools }) {
           ctx.moveTo(slotCenter - halfErrorBarWidth, barY + errOffset);
           ctx.lineTo(slotCenter + halfErrorBarWidth, barY + errOffset);
           ctx.stroke();
-        }
-
-        // Draw the theory reference lines
-        if (theoryOn && dataTotal > 0) {
-          const expectedCount = d.theoryProb * dataTotal;
-          const lineY = plotY1 - (expectedCount / axisMax) * (plotY1 - plotY0);
-          const lineHalfWidth = barWidth / 2 + THEORY_LINE_OVERHANG;
-          ctx.strokeStyle = THEORY_LINE_COLOR;
-          ctx.lineWidth = THEORY_LINE_WIDTH;
-          //ctx.setLineDash(THEORY_LINE_DASH);
-          ctx.beginPath();
-          ctx.moveTo(slotCenter - lineHalfWidth, lineY);
-          ctx.lineTo(slotCenter + lineHalfWidth, lineY);
-          ctx.stroke();
-          //ctx.setLineDash([]);
         }
 
         // Write the labels on all the bars
