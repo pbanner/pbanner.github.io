@@ -180,18 +180,31 @@ export default function Histogram({ experiment, displayBools }) {
       ctx.fillText(String(tickValue), plotX0 - 8, y);
     });
 
-    // Bars, one per detector, evenly spaced left to right, growing up from
-    // the x-axis, colored to match that detector's own identifying dot.
+        // Bars, one per detector, growing up from the x-axis, colored to match
+    // that detector's own identifying dot. Bars belonging to the same SG
+    // sit flush against each other with no gap; a gap is inserted only
+    // where the SG changes. The whole set of (possibly grouped) bars is
+    // then centered as one cluster within the plot's bar area.
     if (detectors.length > 0) {
       const groupX0 = plotX0 + BAR_GROUP_MARGIN;
       const groupX1 = plotX1 - BAR_GROUP_MARGIN;
       const slotWidth = (groupX1 - groupX0) / detectors.length;
       const barWidth = Math.min(MAX_BAR_WIDTH, slotWidth * (1 - BAR_GAP_RATIO));
+      const sgGapWidth = slotWidth * BAR_GAP_RATIO;
+      const sgGroupCount = new Set(detectors.map((d) => d.sgIndex)).size;
+      const clusterWidth = detectors.length * barWidth + (sgGroupCount - 1) * sgGapWidth;
+      const clusterStart = groupX0 + (groupX1 - groupX0 - clusterWidth) / 2;
 
+      let cursor = clusterStart;
       detectors.forEach((d, i) => {
+        if (i > 0 && d.sgIndex !== detectors[i - 1].sgIndex) {
+          cursor += sgGapWidth;
+        }
+        const barX = cursor;
+        const slotCenter = barX + barWidth / 2;
+        cursor += barWidth;
+
         const barHeight = Math.max(1.5, (d.count / axisMax) * (plotY1 - plotY0));
-        const slotCenter = groupX0 + (i + 0.5) * slotWidth;
-        const barX = slotCenter - barWidth / 2;
         const barY = plotY1 - barHeight;
 
         ctx.fillStyle = PC_COLORS[d.colorId] ?? '#999999';
@@ -236,7 +249,8 @@ export default function Histogram({ experiment, displayBools }) {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
         const barLabel = ((displayBools.showPercentages === 1 && dataTotal === 0) ? "---" : "") + (displayBools.showPercentages !== 1 ? String(d.count) : "") + (showBothActual ? " (" : "") + ((displayBools.showPercentages !== 0 && dataTotal !== 0) ? (d.count/dataTotal*100).toFixed(1) + "%" : "") + (showBothActual ? ")" : "");
-        ctx.fillText(barLabel, barX + barWidth / 2, barY - 4 - (drawErrorBars ? errOffset : 0));
+        const barLabelXOffset = (detectors.length < 2) ? 0 : ((i > 0 && d.sgIndex === detectors[i - 1].sgIndex) ? 3 : (i < detectors.length - 1 && d.sgIndex === detectors[i + 1].sgIndex ? -3 : 0));
+        ctx.fillText(barLabel, barX + barWidth / 2 + barLabelXOffset, barY - 4 - (drawErrorBars ? errOffset : 0));
 
         // Detector label below the bar, in the same style as the axis's own tick labels
         ctx.fillStyle = TICK_LABEL_COLOR;
