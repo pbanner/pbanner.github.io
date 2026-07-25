@@ -24,9 +24,21 @@ const SG_OUTPUT_DOWN = 158*(SG_HEIGHT/225);
 const PC_HEIGHT = 50;
 const PC_WIDTH = 100;
 //const PC_INPUT = PC_HEIGHT/2;
-const PC_COLOR_DOT_X = 340*(PC_WIDTH/400);
-const PC_COLOR_DOT_R = 40*(PC_WIDTH/400);
+// Identifying color stripe -- runs the PC's whole short (vertical)
+// dimension, in place of the small dot that used to sit here, so the color
+// that ties this detector to its histogram bar is hard to miss while
+// placing it. Kept at the old dot's x and diameter; the source image is
+// fully opaque across that band top to bottom, so a full-height rect never
+// overhangs the body's rounded corners.
+const PC_STRIPE_CENTER_X = 330*(PC_WIDTH/400);
+const PC_STRIPE_WIDTH = 50*(PC_WIDTH/400);
+const PC_STRIPE_ALPHA = 0.5;
 const PC_TEXT_CENTER_X = 190*(PC_WIDTH/400);
+// The white label plate spans y 93..166 of the source image's 200px
+// height: the running count sits centered in it, and the SG/arm label goes
+// in the clear space above it (centered between the body top and y=93).
+const PC_COUNT_CENTER_Y = 132*(PC_HEIGHT/200) - PC_HEIGHT/2;
+const PC_LABEL_CENTER_Y = 50*(PC_HEIGHT/200) - PC_HEIGHT/2;
 const BB_HEIGHT = 50;
 const BB_WIDTH = 9;
 //const BB_INPUT = BB_HEIGHT/2;
@@ -641,20 +653,26 @@ const LabPanel = forwardRef(function LabPanel(
           if (sg[arm].type === 'pc') {
             ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT);
             if (sg[arm].colorId !== null) {
-              ctx.beginPath();
-              ctx.arc(PC_COLOR_DOT_X, 0, PC_COLOR_DOT_R, 0, Math.PI * 2);
+              ctx.save();
+              ctx.globalAlpha = PC_STRIPE_ALPHA;
               ctx.fillStyle = PC_COLORS[sg[arm].colorId];
-              ctx.fill();
-              ctx.strokeStyle = '#ffffff';
-              ctx.lineWidth = 1.5;
-              ctx.stroke();
+              ctx.fillRect(PC_STRIPE_CENTER_X - PC_STRIPE_WIDTH / 2, -PC_HEIGHT / 2, PC_STRIPE_WIDTH, PC_HEIGHT);
+              ctx.restore();
             }
+            // Same "SG1🠉" wording the histogram puts under each bar, so the
+            // detector reads identically in both places without the student
+            // having to match colors through the legend.
+            ctx.fillStyle = '#666';
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`SG${i + 1}` + (arm === 'up' ? '🠉' : '🠋'), PC_TEXT_CENTER_X, PC_LABEL_CENTER_Y);
             if (sg[arm].data !== null) {
-              ctx.fillStyle = '#303030';
+              ctx.fillStyle = sg[arm].colorId !== null ? PC_COLORS[sg[arm].colorId] : '#303030';
               ctx.font = '12px Arial';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
-              ctx.fillText(sg[arm].data, PC_TEXT_CENTER_X, 0);
+              ctx.fillText(sg[arm].data, PC_TEXT_CENTER_X, PC_COUNT_CENTER_Y);
             }
           } else {
             ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
