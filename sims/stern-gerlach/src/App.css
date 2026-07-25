@@ -147,7 +147,7 @@
 }
 
 .setup-experiment-width-floor {
-  min-width: 220px;
+  min-width: 240px;
   height: 0;
 }
 
@@ -156,7 +156,7 @@
 .add-component-row {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 12px;
   margin: 4px 0 20px 0;
 }
 
