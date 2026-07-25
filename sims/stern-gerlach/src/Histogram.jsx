@@ -249,7 +249,11 @@ export default function Histogram({ experiment, displayBools }) {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
         const barLabel = ((displayBools.showPercentages === 1 && dataTotal === 0) ? "---" : "") + (displayBools.showPercentages !== 1 ? String(d.count) : "") + (showBothActual ? " (" : "") + ((displayBools.showPercentages !== 0 && dataTotal !== 0) ? (d.count/dataTotal*100).toFixed(1) + "%" : "") + (showBothActual ? ")" : "");
-        const barLabelXOffset = (detectors.length < 2) ? 0 : ((i > 0 && d.sgIndex === detectors[i - 1].sgIndex) ? 3 : (i < detectors.length - 1 && d.sgIndex === detectors[i + 1].sgIndex ? -3 : 0));
+        // Wider counts push their "(xx.x%)" half further out, so a fixed
+        // offset that clears a 3-digit count starts clashing again once
+        // counts hit 4+ digits -- scale it up by 3px per digit beyond 3.
+        const labelOffsetMagnitude = 3 * Math.max(1, String(d.count).length - 2);
+        const barLabelXOffset = (!showBothActual || detectors.length < 2) ? 0 : ((i > 0 && d.sgIndex === detectors[i - 1].sgIndex) ? labelOffsetMagnitude : (i < detectors.length - 1 && d.sgIndex === detectors[i + 1].sgIndex ? -labelOffsetMagnitude : 0));
         ctx.fillText(barLabel, barX + barWidth / 2 + barLabelXOffset, barY - 4 - (drawErrorBars ? errOffset : 0));
 
         // Detector label below the bar, in the same style as the axis's own tick labels
