@@ -204,7 +204,14 @@ function AddComponentButton({ image, shape, ariaLabel, hoverLabel, active = fals
 
 function SetUpExperimentPanel({ experiment, setExperiment, addSternGerlach, expMode, setExpMode, controlsLocked, displayBools, setDisplayBools, resetDataCollection }) {
   return (
-    <>
+        <>
+      {/* Zero-height, purely a width floor -- see .setup-experiment-group
+          in App.css for why this (rather than a CSS min-width on the group
+          itself) is what keeps the group from ever rendering narrower than
+          320px. Negative marginBottom cancels out the group's own 6px flex
+          gap, which would otherwise open up a sliver of empty space right
+          below this, being the first child. */}
+      <div className="setup-experiment-width-floor" style={{ marginBottom: '-6px' }} aria-hidden="true" />
       <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Set Up Experiment</h3>
       <label style={{ margin: '0 0 8px 0' }}>
         <input type="checkbox" disabled={controlsLocked} checked={displayBools.previewPaths} onChange={(e) => setDisplayBools({ ...displayBools, previewPaths: e.target.checked })} />

@@ -52,6 +52,14 @@
   line-height: 1.2;
   box-sizing: border-box;
   overflow-y: auto;
+  /* Per spec, when overflow-y isn't 'visible', a still-default overflow-x
+     of 'visible' silently computes to 'auto' instead -- so without this,
+     any group can grow an unwanted horizontal scrollbar/scrollable region
+     the moment something inside it overflows sideways, even by content
+     that's invisible at rest (e.g. an absolutely-positioned tooltip label
+     with visibility: hidden -- still part of scrollWidth, unlike
+     display: none). Groups here should only ever scroll vertically. */
+  overflow-x: hidden;
   min-height: 0;
 }
 
@@ -135,7 +143,12 @@
    so it still grows past that floor if its own content (e.g. a longer
    hover label) ever needs more room, the same as every other group here. */
 .setup-experiment-group {
-  min-width: max(320px, max-content);
+  min-width: max-content;
+}
+
+.setup-experiment-width-floor {
+  min-width: 320px;
+  height: 0;
 }
 
 /* "Add:" row in Set Up Experiment: a label plus a row of icon-only
