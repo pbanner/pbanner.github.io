@@ -30,6 +30,7 @@ const PC_TEXT_CENTER_X = 190*(PC_WIDTH/400);
 const BB_HEIGHT = 50;
 const BB_WIDTH = 9;
 const BB_INPUT = BB_HEIGHT/2;
+
 // Path specs for particles
 // In path constrained by SG spacing and geometry. The arc must satisfy two
 // constraints at once -- horizontal run R*sin(angle) = D and vertical rise
@@ -42,8 +43,11 @@ const IN_PATH_ARC_RADIUS = Math.abs(SG_SPACING - SG_WIDTH)/Math.sin(IN_PATH_ARC_
 // Out path not constrained, radius and angle chosen for aesthetics
 const OUT_PATH_ARC_RADIUS = 150;
 const OUT_PATH_ARC_ANGLE = 0.7; // rad
-// Snap radius for UI
-const SNAP_RADIUS = 50;  // px — how close the cursor must be to snap
+
+// For placement and deletion snapping and finding -- shared by delete-mode's
+// target highlight and build-mode's site circles, so hitbox size always
+// matches the circle actually drawn on screen.
+const SITE_MARGIN = 1.3; // multiplier on half-the-longest-dimension
 
 // Particle animation specs -- all tunable
 const PARTICLE_START_X = OVEN_X0 + OVEN_WIDTH;     // x-value where particles first appear
@@ -147,6 +151,17 @@ function getNextColorId(experiment) {
   return null; // more PCs placed at once than the palette has colors
 }
 
+// Dimensions of an already-placed component -- 'bb' is stored as a bare
+// string, a placed particle counter as { type: 'pc', ... }.
+function getComponentDims(component) {
+  return component === 'bb' ? { width: BB_WIDTH, height: BB_HEIGHT } : { width: PC_WIDTH, height: PC_HEIGHT };
+}
+
+// Dimensions of whatever build mode is currently about to place.
+function getNewComponentDims(buildMode) {
+  return buildMode === 1 ? { width: PC_WIDTH, height: PC_HEIGHT } : { width: BB_WIDTH, height: BB_HEIGHT };
+}
+
 // Mouse behavior handlers for placing new components
 // The anchor point (input edge, matching where drawImage's local origin sits)
 // and rotation angle for a given SG's up/down output site.
@@ -177,9 +192,6 @@ function getPlacementSiteCenter(site, width) {
     y: site.y + (width / 2) * Math.sin(site.angle),
   };
 }
-
-// For placement and deletion snapping and finding
-const DELETE_MARGIN = 1.3; // multiplier on half-the-longest-dimension, for all delete hitboxes/highlights
 
 function getSGX0(sgIndex) {
   return SG_START_X + sgIndex * SG_SPACING;
@@ -294,27 +306,48 @@ function buildAnimationPath(experiment, axis, sampled) {
   return { segments, terminal };
 }
 
-// Placement only — unchanged from before, only considers empty arm sites.
-function findNearestPlacementSite(mouseX, mouseY, experiment, axis, width, buildMode) {
-  let closest = null;
-  let closestDist = SNAP_RADIUS;
+// Every site the currently-selected build-mode component could legally go --
+// empty arms, plus occupied arms it's allowed to replace (anything can
+// replace a BB; only a BB may replace a PC, since silently overwriting a PC
+// would also silently discard its collected counts). Each candidate's
+// center/radius are sized to whatever's already there, or to the new
+// component's own size if the site is empty -- shared by the nearest-site
+// snap logic below and by drawScene's site-circle highlight, so the two
+// always agree with each other.
+function getPlacementCandidates(experiment, axis, buildMode) {
+  const newDims = getNewComponentDims(buildMode);
+  const candidates = [];
 
   experiment.forEach((sg, sgIndex) => {
     ['up', 'down'].forEach((arm) => {
-      // Don't want to replace PCs, that's weird behavior; BBs don't matter
-      if (sg[arm] !== null) {
-        if (sg[arm].type === 'pc' && buildMode === 1) return;
-      }
+      const existing = sg[arm];
+      if (existing !== null && existing.type === 'pc' && buildMode === 1) return;
 
+      const dims = existing === null ? newDims : getComponentDims(existing);
       const site = getPlacementSite(sgIndex, arm, axis);
-      const center = getPlacementSiteCenter(site, width);
-      const dist = Math.hypot(mouseX - center.x, mouseY - center.y);
+      const center = getPlacementSiteCenter(site, dims.width);
+      const radius = (Math.max(dims.width, dims.height) / 2) * SITE_MARGIN;
 
-      if (dist < closestDist) {
-        closestDist = dist;
-        closest = { sgIndex, arm, site };
-      }
+      candidates.push({ sgIndex, arm, site, center, radius });
     });
+  });
+
+  return candidates;
+}
+
+// Nearest candidate site within its own circle -- each site's snap radius
+// is exactly the radius of the circle drawn there (see getPlacementCandidates),
+// so a big existing component is easier to hit than an empty site would be.
+function findNearestPlacementSite(mouseX, mouseY, experiment, axis, buildMode) {
+  let closest = null;
+  let closestDist = Infinity;
+
+  getPlacementCandidates(experiment, axis, buildMode).forEach((candidate) => {
+    const dist = Math.hypot(mouseX - candidate.center.x, mouseY - candidate.center.y);
+    if (dist < candidate.radius && dist < closestDist) {
+      closestDist = dist;
+      closest = candidate;
+    }
   });
 
   return closest;
@@ -329,7 +362,7 @@ function findNearestDeletable(mouseX, mouseY, experiment, axis) {
   experiment.forEach((sg, sgIndex) => {
     // The SG apparatus body itself
     const sgCenter = getSGCenter(sgIndex, axis);
-    const sgRadius = (Math.max(SG_WIDTH, SG_HEIGHT) / 2) * DELETE_MARGIN;
+    const sgRadius = (Math.max(SG_WIDTH, SG_HEIGHT) / 2) * SITE_MARGIN;
     const sgDist = Math.hypot(mouseX - sgCenter.x, mouseY - sgCenter.y);
 
     if (sgDist < sgRadius && sgDist < closestDist) {
@@ -345,7 +378,7 @@ function findNearestDeletable(mouseX, mouseY, experiment, axis) {
       const height = sg[arm].type === 'pc' ? PC_HEIGHT : BB_HEIGHT;
       const site = getPlacementSite(sgIndex, arm, axis);
       const center = getPlacementSiteCenter(site, width);
-      const radius = (Math.max(width, height) / 2) * DELETE_MARGIN;
+      const radius = (Math.max(width, height) / 2) * SITE_MARGIN;
       const dist = Math.hypot(mouseX - center.x, mouseY - center.y);
 
       if (dist < radius && dist < closestDist) {
@@ -372,8 +405,7 @@ function getPreviewExperiment(experiment, expMode, mousePos, axis) {
   if (!mousePos) return null;
 
   if (expMode.build === 1 || expMode.build === 2) {
-    const width = expMode.build === 1 ? PC_WIDTH : BB_WIDTH;
-    const snapped = findNearestPlacementSite(mousePos.x, mousePos.y, experiment, axis, width, expMode.build);
+    const snapped = findNearestPlacementSite(mousePos.x, mousePos.y, experiment, axis, expMode.build);
     if (!snapped) return null;
     const next = [...experiment];
     const placed = expMode.build === 1 ? { type: 'pc', data: 0, colorId: null } : 'bb';
@@ -494,6 +526,14 @@ const LabPanel = forwardRef(function LabPanel(
       ctx.drawImage(ovenOffImageRef.current, OVEN_X0, axis - OVEN_HEIGHT / 2, OVEN_WIDTH, OVEN_HEIGHT);
     }
 
+    // Build mode's snap target, computed once up front so both the SG loop
+    // below (which needs to skip drawing whatever's really occupying the
+    // snapped site) and the site-circle overlay after it agree on the same
+    // site.
+    const buildSnappedSite = (expMode.build === 1 || expMode.build === 2) && mousePos
+      ? findNearestPlacementSite(mousePos.x, mousePos.y, experiment, axis, expMode.build)
+      : null;
+
     // Draw the SGs, one copy of the ref image each, plus the basis labels
     if (sgImageRef.current && sgImageRef.current.complete) {
       if (displayBools.previewPaths) {
@@ -525,72 +565,77 @@ const LabPanel = forwardRef(function LabPanel(
         ctx.textBaseline = 'middle';
         ctx.fillText(getSGLabel(sg.basis, i), x0+62, axis);
 
-        // Draw SGs and BBs as needed
+        // Draw whatever's really placed on each arm -- except the site
+        // currently snapped to in build mode, whose occupant (if any) is
+        // about to be replaced, so the new component is drawn there instead
+        // by the overlay below.
         ['up', 'down'].forEach((arm) => {
-          // If we're not in a preview mode and there's no component here, don't draw anything
-          if (expMode.build < 1 && sg[arm] === null) return;
-          // We're drawing SOMETHING
+          if (sg[arm] === null) return;
+          if (buildSnappedSite && buildSnappedSite.sgIndex === i && buildSnappedSite.arm === arm) return;
+
           const site = getPlacementSite(i, arm, axis);
           ctx.save();
           ctx.translate(site.x, site.y);
           ctx.rotate(site.angle);
-          if (sg[arm] !== null) {
-            if (sg[arm].type === 'pc') {
-              ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT);
-              if (sg[arm].colorId !== null) {
-                ctx.beginPath();
-                ctx.arc(PC_COLOR_DOT_X, 0, PC_COLOR_DOT_R, 0, Math.PI * 2);
-                ctx.fillStyle = PC_COLORS[sg[arm].colorId];
-                ctx.fill();
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 1.5;
-                ctx.stroke();
-              }
-              if (sg[arm].data !== null) {
-                ctx.fillStyle = '#303030';
-                ctx.font = '12px Arial';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(sg[arm].data, PC_TEXT_CENTER_X, 0);
-              }
-            } else {
-              ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
+          if (sg[arm].type === 'pc') {
+            ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT);
+            if (sg[arm].colorId !== null) {
+              ctx.beginPath();
+              ctx.arc(PC_COLOR_DOT_X, 0, PC_COLOR_DOT_R, 0, Math.PI * 2);
+              ctx.fillStyle = PC_COLORS[sg[arm].colorId];
+              ctx.fill();
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+            }
+            if (sg[arm].data !== null) {
+              ctx.fillStyle = '#303030';
+              ctx.font = '12px Arial';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(sg[arm].data, PC_TEXT_CENTER_X, 0);
             }
           } else {
-            // If we've reached this point, we're previewing sites
-            ctx.globalAlpha = 0.5;
-            expMode.build === 1 ? ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
-            ctx.globalAlpha = 1.0;
+            ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
           }
           ctx.restore();
         });
       });
     }
 
-    // If we're in a placement mode, draw an image of the thing being placed to drag along the cursor
-    if (expMode.build > 0 && mousePos && pcImageRef.current && pcImageRef.current.complete) {
-      const snapped = findNearestPlacementSite(mousePos.x, mousePos.y, experiment, axis, expMode.build === 1 ? PC_WIDTH : BB_WIDTH, expMode.build);
-
-      if (snapped) {
-        const center = getPlacementSiteCenter(snapped.site, expMode.build === 1 ? PC_WIDTH : BB_WIDTH);
+    // Build mode: not snapped to anything yet -- highlight every site the
+    // new component could legally go, sized to whatever's already there (or
+    // to the new component itself, if the site is empty).
+    if ((expMode.build === 1 || expMode.build === 2) && mousePos && !buildSnappedSite) {
+      ctx.strokeStyle = '#f39c12';
+      ctx.lineWidth = 3;
+      getPlacementCandidates(experiment, axis, expMode.build).forEach((candidate) => {
         ctx.beginPath();
-        ctx.arc(
-          center.x, center.y,
-          expMode.build === 1 ? Math.max(PC_WIDTH, PC_HEIGHT) / 2 * 1.3 : Math.max(BB_WIDTH, BB_HEIGHT) / 2 * 1.3,
-          0, Math.PI * 2);
-        ctx.strokeStyle = '#2ecc71';
-        ctx.lineWidth = 3;
+        ctx.arc(candidate.center.x, candidate.center.y, candidate.radius, 0, Math.PI * 2);
         ctx.stroke();
-
-        ctx.save();
-        ctx.translate(snapped.site.x, snapped.site.y);
-        ctx.rotate(snapped.site.angle);
-        expMode.build === 1 ? ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
-        ctx.restore();
-      } else {
-        expMode.build === 1 ? ctx.drawImage(pcImageRef.current, mousePos.x - PC_WIDTH / 2, mousePos.y - PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, mousePos.x - BB_WIDTH / 2, mousePos.y - BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
-      }
+      });
     }
+    // Build mode: snapped to a site -- drop the candidate circles, show a
+    // green circle (always sized to the new component, not whatever it's
+    // replacing) around that one site, and draw the new component there
+    // instead of whatever's really occupying it (skipped above, in the SG loop).
+    if ((expMode.build === 1 || expMode.build === 2) && buildSnappedSite && pcImageRef.current && pcImageRef.current.complete) {
+      const newDims = getNewComponentDims(expMode.build);
+      const center = getPlacementSiteCenter(buildSnappedSite.site, newDims.width);
+
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, (Math.max(newDims.width, newDims.height) / 2) * SITE_MARGIN, 0, Math.PI * 2);
+      ctx.strokeStyle = '#2ecc71';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.save();
+      ctx.translate(buildSnappedSite.site.x, buildSnappedSite.site.y);
+      ctx.rotate(buildSnappedSite.site.angle);
+      expMode.build === 1 ? ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
+      ctx.restore();
+    }
+
     // Hovering over an existing component in delete mode
     if (expMode.build === -1 && mousePos) {
       const target = findNearestDeletable(mousePos.x, mousePos.y, experiment, axis);
@@ -612,7 +657,7 @@ const LabPanel = forwardRef(function LabPanel(
             const site = getPlacementSite(target.sgIndex, arm, axis);
             const armCenter = getPlacementSiteCenter(site, width);
             ctx.beginPath();
-            ctx.arc(armCenter.x, armCenter.y, (Math.max(width, height) / 2) * DELETE_MARGIN, 0, Math.PI * 2);
+            ctx.arc(armCenter.x, armCenter.y, (Math.max(width, height) / 2) * SITE_MARGIN, 0, Math.PI * 2);
             ctx.stroke();
           });
         }
@@ -800,7 +845,7 @@ const LabPanel = forwardRef(function LabPanel(
       return;
     }
 
-    const snapped = findNearestPlacementSite(mouseX, mouseY, experiment, axis, expMode.build === 1 ? PC_WIDTH : BB_WIDTH, expMode.build);
+    const snapped = findNearestPlacementSite(mouseX, mouseY, experiment, axis, expMode.build);
     if (!snapped) return;
 
     const { sgIndex, arm } = snapped;
