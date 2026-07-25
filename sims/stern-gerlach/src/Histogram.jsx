@@ -324,10 +324,10 @@ export default function Histogram({ experiment, displayBools }) {
 
         // Detector label below the bar, in the same style as the axis's own tick labels
         ctx.fillStyle = TICK_LABEL_COLOR;
-        ctx.font = `11px Arial`;
+        ctx.font = `12px Arial`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
-        ctx.fillText(`SG${d.sgIndex + 1}` + (d.arm == 'up' ? '↑' : '↓'), slotCenter, plotY1 + 6);
+        ctx.fillText(`SG${d.sgIndex + 1}` + (d.arm == 'up' ? '🠉' : '🠋'), slotCenter, plotY1 + 6);
       });
     }
 
