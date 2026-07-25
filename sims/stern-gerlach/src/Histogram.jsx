@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { theoreticalProbabilities } from './physics';
 import { PC_COLORS } from './colors';
 

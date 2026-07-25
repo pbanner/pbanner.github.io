@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { upEigenstate, downEigenstate, applyT, sampleOvenState, cAbs2 } from './physics';
 import { PC_COLORS } from './colors';
 import sgImage from './assets/SG.png';
@@ -23,13 +23,13 @@ const SG_OUTPUT_DOWN = 158*(SG_HEIGHT/225);
 // PC image dimensions and specs for use throughout
 const PC_HEIGHT = 50;
 const PC_WIDTH = 100;
-const PC_INPUT = PC_HEIGHT/2;
+//const PC_INPUT = PC_HEIGHT/2;
 const PC_COLOR_DOT_X = 340*(PC_WIDTH/400);
 const PC_COLOR_DOT_R = 40*(PC_WIDTH/400);
 const PC_TEXT_CENTER_X = 190*(PC_WIDTH/400);
 const BB_HEIGHT = 50;
 const BB_WIDTH = 9;
-const BB_INPUT = BB_HEIGHT/2;
+//const BB_INPUT = BB_HEIGHT/2;
 
 // Path specs for particles
 // In path constrained by SG spacing and geometry. The arc must satisfy two
@@ -82,6 +82,9 @@ function useImage(src) {
 
   useEffect(() => {
     let cancelled = false;
+    // There's a lint error here, but the dependency, src, is static, so 
+    // the setting won't cause the re-render that's warned about
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoaded(false);
     imgRef.current = null;
 
@@ -484,7 +487,6 @@ const LabPanel = forwardRef(function LabPanel(
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
-  const [offset, setOffset] = useState({ x: 0, y: 0 }); // Used for mouse dragging events
   const [axis, setAxis] = useState(300); // y-coordinate of halfway down the canvas; determines position of all user-created devices
   // These refs hold the SG and PC images for all time, using the loading hook
   const [ovenImageRef, ovenImageLoaded] = useImage(ovenImage);
@@ -793,7 +795,7 @@ const LabPanel = forwardRef(function LabPanel(
         drawWrappedText(ctx, message, center.x + radius + ERROR_TEXT_GAP, center.y);
       });
     }
-  }, [experiment, expMode, displayBools, mousePos, axis, canvasDims, startError]);
+  }, [experiment, expMode, displayBools, mousePos, axis, canvasDims, startError, bbImageRef, pcImageRef, ovenImageRef, ovenOffImageRef, sgImageRef]);
 
   const drawParticles = useCallback((ctx) => {
     ctx.fillStyle = PARTICLE_COLOR;
