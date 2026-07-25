@@ -304,13 +304,12 @@ export default function Histogram({ experiment, displayBools }) {
       }
     }
 
-    if (displayBools.showTotal) {
-      ctx.fillStyle = TOTAL_COLOR;
-      ctx.font = 'bold 12px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(`N = ${dataTotal}`, (plotX0 + plotX1)/2, PADDING_TOP / 2);
-    }
+    // Plot title
+    ctx.fillStyle = TOTAL_COLOR;
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Experimental Data' + (displayBools.showTotal ? ` (N = ${dataTotal})` : ''), (plotX0 + plotX1)/2, PADDING_TOP / 2);
   }, [experiment, displayBools, canvasDims]);
 
   useEffect(() => {
