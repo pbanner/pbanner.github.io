@@ -18,6 +18,7 @@ const BAR_GAP_RATIO = 0.3;   // fraction of each bar's horizontal slot left empt
 const BAR_GROUP_MARGIN = 24; // extra empty space to each side of the whole set of bars, beyond the axis padding
 const MAX_BAR_WIDTH = 60;    // a bar never grows wider than this, however few detectors there are
 const ERROR_BAR_WIDTH_RATIO = 0.4;
+const BAR_LABEL_CLASH_HEIGHT = 18; // same-SG neighbors whose bars differ by at least this many px sit far enough apart vertically that their labels can't actually clash, so the horizontal offset is skipped
 const ERROR_BAR_WIDTH_MIN = 20;
 const LEGEND_WIDTH = 100;
 const LEGEND_GAP = 14;
@@ -220,6 +221,8 @@ export default function Histogram({ experiment, displayBools }) {
       const clusterWidth = detectors.length * barWidth + (sgGroupCount - 1) * sgGapWidth;
       const clusterStart = groupX0 + (groupX1 - groupX0 - clusterWidth) / 2;
 
+      const barHeightOf = (count) => Math.max(1.5, (count / axisMax) * (plotY1 - plotY0));
+
       let cursor = clusterStart;
       detectors.forEach((d, i) => {
         if (i > 0 && d.sgIndex !== detectors[i - 1].sgIndex) {
@@ -229,7 +232,7 @@ export default function Histogram({ experiment, displayBools }) {
         const slotCenter = barX + barWidth / 2;
         cursor += barWidth;
 
-        const barHeight = Math.max(1.5, (d.count / axisMax) * (plotY1 - plotY0));
+        const barHeight = barHeightOf(d.count);
         const barY = plotY1 - barHeight;
 
         ctx.fillStyle = PC_COLORS[d.colorId] ?? '#999999';
@@ -278,7 +281,27 @@ export default function Histogram({ experiment, displayBools }) {
         // offset that clears a 3-digit count starts clashing again once
         // counts hit 4+ digits -- scale it up by 3px per digit beyond 3.
         const labelOffsetMagnitude = 3 * Math.max(1, String(d.count).length - 2);
-        const barLabelXOffset = (!showBothActual || detectors.length < 2) ? 0 : ((i > 0 && d.sgIndex === detectors[i - 1].sgIndex) ? labelOffsetMagnitude : (i < detectors.length - 1 && d.sgIndex === detectors[i + 1].sgIndex ? -labelOffsetMagnitude : 0));
+        const sameSgAsPrev = i > 0 && d.sgIndex === detectors[i - 1].sgIndex;
+        const sameSgAsNext = i < detectors.length - 1 && d.sgIndex === detectors[i + 1].sgIndex;
+        // Only one of these is ever true for a given bar (a detector has at
+        // most one same-SG neighbor per side, and never both a prev and a
+        // next in the same pair), so neighborHeight always resolves to
+        // "the other bar in this pair" when one exists.
+        const neighborHeight = sameSgAsPrev
+          ? barHeightOf(detectors[i - 1].count)
+          : sameSgAsNext
+          ? barHeightOf(detectors[i + 1].count)
+          : null;
+        // A bar sitting much taller than its neighbor already has its label
+        // well clear of that shorter neighbor's bar, so it doesn't need
+        // nudging. But the shorter bar's label sits right alongside the
+        // taller neighbor's face regardless of how big the height gap
+        // gets, so it still needs the offset -- hence comparing the signed
+        // difference (not the absolute gap) to the clash threshold: only
+        // this bar being the taller one by more than the threshold turns
+        // the offset off.
+        const needsOffset = neighborHeight !== null && (barHeight - neighborHeight) < BAR_LABEL_CLASH_HEIGHT;
+        const barLabelXOffset = (!showBothActual || !needsOffset) ? 0 : (sameSgAsPrev ? labelOffsetMagnitude : -labelOffsetMagnitude);
         ctx.fillText(barLabel, barX + barWidth / 2 + barLabelXOffset, barY - 4 - (drawErrorBars ? errOffset : 0));
 
         // Detector label below the bar, in the same style as the axis's own tick labels
