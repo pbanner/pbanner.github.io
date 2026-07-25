@@ -240,7 +240,7 @@ function SetUpExperimentPanel({ experiment, setExperiment, addSternGerlach, expM
           disabled={controlsLocked}
         />
         {/* Inert placeholder for a component we haven't built yet -- reuses
-            the beam block icon for now purely as a stand-in. */}
+            the beam block icon for now purely as a stand-in. 
         <AddComponentButton
           image={bbImage}
           shape="square"
@@ -248,6 +248,7 @@ function SetUpExperimentPanel({ experiment, setExperiment, addSternGerlach, expM
           hoverLabel="Screen"
           disabled={controlsLocked}
         />
+        */}
       </div>
 
       <button
