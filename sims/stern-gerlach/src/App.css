@@ -117,6 +117,16 @@
   border-color: #bbb;
 }
 
+/* The per-SG "Advanced" toggle in Set Measurement Bases -- same button
+   look as everywhere else (including the blue .active state), just smaller
+   to fit a compact row alongside the axis stepper / theta-phi textboxes. */
+.advanced-toggle-button {
+  padding: 3px 8px;
+  margin: 0;
+  font-size: 11px;
+  flex-shrink: 0; /* never lets the row's other content squeeze this narrower than its own text */
+}
+
 /* "Set Up Experiment" group -- combines what used to be the separate
    "Build Experiment" and "Set Measurement Bases" groups (and, on narrow
    screens, a tab-switcher between them) into one group at every screen
