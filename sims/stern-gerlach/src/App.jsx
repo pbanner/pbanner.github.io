@@ -230,6 +230,52 @@ function BuildExperimentPanel({ addSternGerlach, expMode, setExpMode, controlsLo
   );
 }
 
+// Pure check for the two ways a start/spawn attempt could go wrong: no SG to
+// measure through at all, or the last SG's output isn't fully terminated (a
+// PC or BB on both arms) so particles could exit unmeasured. Returns a small
+// descriptor for whichever problem applies, or null if the setup's fine to
+// start -- doesn't mutate anything itself; App decides what to do with the
+// result, and LabPanel turns a non-null one into the on-canvas warning.
+function getStartError(experiment) {
+  if (experiment.length === 0) return { kind: 'noSG' };
+
+  const lastIndex = experiment.length - 1;
+  const lastSG = experiment[lastIndex];
+  const openArms = [];
+  if (lastSG.up === null) openArms.push('up');
+  if (lastSG.down === null) openArms.push('down');
+  if (openArms.length === 0) return null;
+
+  return { kind: 'unterminated', sgIndex: lastIndex, openArms };
+}
+// Given an already-latched start error, checks whether the *same* problem
+// is still present -- narrowing it (dropping arms that got terminated) or
+// clearing it entirely (dropping it to null), but deliberately never
+// escalating to a *different* problem than the one that was actually
+// latched. That asymmetry is the point: fixing "no SG at all" by adding one
+// SG immediately creates a new "unterminated path" problem on that SG, but
+// this must not surface it -- only an actual Start/Make One Particle press
+// (getStartError, above) is allowed to report a problem the user hasn't
+// been told about yet. Returns the *same* object reference when nothing
+// about the error has changed, so callers can compare by reference to
+// decide whether a state update is actually needed.
+function recheckStartError(error, experiment) {
+  if (!error) return null;
+
+  if (error.kind === 'noSG') {
+    return experiment.length === 0 ? error : null;
+  }
+
+  // 'unterminated' -- keep tracking the same SG only for as long as it's
+  // still the last one in the chain (once it isn't, whether it's open or
+  // not no longer matters for start-validation), and only for whichever of
+  // the originally-flagged arms are still actually open.
+  if (error.sgIndex !== experiment.length - 1) return null;
+  const sg = experiment[error.sgIndex];
+  const stillOpen = error.openArms.filter((arm) => sg[arm] === null);
+  if (stillOpen.length === 0) return null;
+  return stillOpen.length === error.openArms.length ? error : { ...error, openArms: stillOpen };
+}
 function SetMeasurementBasesPanel({ experiment, setExperiment, controlsLocked, expMode, resetDataCollection, showHeader = true }) {
   return (
     <>
@@ -296,6 +342,22 @@ export default function App() {
   const streamTimerRef = useRef(null);
 
   const controlsLocked = particleCount > 0;
+  
+  // Latched only by handleStartPause, when it refuses to start because
+  // getStartError found a problem -- LabPanel renders whatever this holds
+  // as the on-canvas warning. Every render, recheckStartError narrows or
+  // clears it against the live experiment (never escalates it to a
+  // *different* problem -- see that function's comment), and if that comes
+  // out different from what's currently latched, the state is corrected
+  // right here before this render commits. This is the standard React
+  // pattern for keeping derived state in sync without an effect: it only
+  // fires when the two actually disagree, so it settles in one extra pass
+  // rather than looping.
+  const [startError, setStartError] = useState(null);
+  const liveStartError = recheckStartError(startError, experiment);
+  if (liveStartError !== startError) {
+    setStartError(liveStartError);
+  }
 
   // Any setup change (add/remove an SG, place/remove a PC or BB, change a
   // basis) invalidates whatever's been collected so far -- called
@@ -357,12 +419,14 @@ export default function App() {
 
   const handleStartPause = () => {
     const startingNow = expMode.dc === 'single' || !expMode.running;
-    let experimentToSpawnFrom = experiment;
 
     if (startingNow) {
-      const result = ensureTerminatedThenGetExperiment();
-      if (result === null) return; // cancelled -- don't start anything
-      experimentToSpawnFrom = result;
+      const error = getStartError(experiment);
+      if (error) {
+        setStartError(error); // LabPanel shows this on-canvas; user must fix the setup themselves
+        return;
+      }
+      setStartError(null);
     }
 
     setExpMode((prev) => ({
@@ -371,7 +435,7 @@ export default function App() {
       running: prev.dc === 'single' ? prev.running : !prev.running,
     }));
     if (expMode.dc === 'single') {
-      labPanelRef.current?.spawnParticle(experimentToSpawnFrom);
+      labPanelRef.current?.spawnParticle();
     }
   };
 
@@ -425,6 +489,7 @@ export default function App() {
           resetToken={resetToken}
           resetDataCollection={resetDataCollection}
           tabVisible={tabVisible}
+          startError={liveStartError}
         />
       </div>
 

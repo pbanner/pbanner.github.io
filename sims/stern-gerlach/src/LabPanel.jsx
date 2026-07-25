@@ -58,6 +58,10 @@ const PARTICLE_RADIUS = 4;
 const PARTICLE_COLOR = '#3498db';  // same blue as .control-bar-button etc.
 const ESCAPE_RUN_LENGTH = 1200;    // px of straight travel for a particle that exits the chain unmeasured
 
+const ERROR_TEXT_MAX_WIDTH = 200;  // px -- how far the wrapped warning text may run horizontally
+const ERROR_TEXT_LINE_HEIGHT = 18; // px between wrapped lines
+const ERROR_TEXT_GAP = 14;         // px between a warning circle's edge and its text
+
 const SUB_LABELS = "₁₂₃₄₅₆₇₈₉";
 function getSGLabel(angles, id) {
   if (angles[0] == 0) {
@@ -427,8 +431,45 @@ function getPreviewExperiment(experiment, expMode, mousePos, axis) {
   return null;
 }
 
+// --- Start-validation warning -----------------------------------------
+// Wraps `text` into lines no wider than ERROR_TEXT_MAX_WIDTH (in the
+// context's current font), breaking on whitespace -- keeps the on-canvas
+// error explanation from running far off to the side of the panel.
+function wrapText(ctx, text, maxWidth) {
+  const words = text.split(' ');
+  const lines = [];
+  let current = '';
+
+  words.forEach((word) => {
+    const candidate = current ? `${current} ${word}` : word;
+    if (current && ctx.measureText(candidate).width > maxWidth) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+  });
+  if (current) lines.push(current);
+
+  return lines;
+}
+
+// Draws `text`, left-justified and word-wrapped to ERROR_TEXT_MAX_WIDTH, as
+// a block vertically centered on yCenter -- so a warning's text always
+// reads as "pointing at" the same height regardless of how many lines it
+// wraps to. Caller is expected to have already set ctx.fillStyle.
+function drawWrappedText(ctx, text, x, yCenter) {
+  ctx.font = '18px Arial';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+
+  const lines = wrapText(ctx, text, ERROR_TEXT_MAX_WIDTH);
+  const startY = yCenter - ((lines.length - 1) * ERROR_TEXT_LINE_HEIGHT) / 2;
+  lines.forEach((line, i) => ctx.fillText(line, x, startY + i * ERROR_TEXT_LINE_HEIGHT));
+}
+
 const LabPanel = forwardRef(function LabPanel(
-  { experiment, setExperiment, expMode, setExpMode, displayBools, setParticleCount, resetToken, resetDataCollection, tabVisible },
+  { experiment, setExperiment, expMode, setExpMode, displayBools, setParticleCount, resetToken, resetDataCollection, tabVisible, startError },
   ref
 ) {
   const canvasRef = useRef(null);
@@ -698,7 +739,46 @@ const LabPanel = forwardRef(function LabPanel(
         }
       }
     }
-  }, [experiment, expMode, displayBools, mousePos, axis, canvasDims]);
+    
+    // Start-validation warning: bright red circle(s) around whatever's
+    // missing -- the not-yet-existing first SG, or each open arm on the
+    // last one -- with its own left-justified, word-wrapped explanation
+    // vertically centered on that circle (not on `axis` -- an open "up" and
+    // open "down" arm each get their own message at their own height, not
+    // one message shared between the two). Only ever set by App in
+    // response to an actual Make One Particle/Start press (see the
+    // startError prop), and only ever cleared or narrowed by App from
+    // there -- never re-derived from scratch -- so fixing one problem can't
+    // eagerly reveal a different one; see recheckStartError. Drawn last so
+    // it always sits on top of any build-mode overlay underneath.
+    if (startError) {
+      const sites = startError.kind === 'noSG'
+        ? [{
+            center: getSGCenter(0, axis),
+            radius: (Math.max(SG_WIDTH, SG_HEIGHT) / 2) * SITE_MARGIN,
+            message: 'Add a Stern-Gerlach apparatus before starting.',
+          }]
+        : startError.openArms.map((arm) => {
+            const site = getPlacementSite(startError.sgIndex, arm, axis);
+            const center = getPlacementSiteCenter(site, PC_WIDTH);
+            return {
+              center,
+              radius: (Math.max(PC_WIDTH, PC_HEIGHT) / 2) * SITE_MARGIN,
+              message: `The ${arm} path is unterminated -- add a particle counter or beam block here before starting.`,
+            };
+          });
+
+      ctx.strokeStyle = '#ff0000';
+      ctx.fillStyle = '#ff0000';
+      ctx.lineWidth = 3;
+      sites.forEach(({ center, radius, message }) => {
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        drawWrappedText(ctx, message, center.x + radius + ERROR_TEXT_GAP, center.y);
+      });
+    }
+  }, [experiment, expMode, displayBools, mousePos, axis, canvasDims, startError]);
 
   const drawParticles = useCallback((ctx) => {
     ctx.fillStyle = PARTICLE_COLOR;
@@ -819,10 +899,9 @@ const LabPanel = forwardRef(function LabPanel(
   // async and this component's own `experiment` prop won't reflect it
   // until the next render.
   const spawnParticle = (experimentOverride) => {
-    const exp = experimentOverride ?? experiment;
-    if (exp.length === 0) return; // nothing to simulate
-    const sampled = samplePath(exp);
-    const path = buildAnimationPath(exp, axis, sampled);
+    if (experiment.length === 0) return; // nothing to simulate
+    const sampled = samplePath(experiment);
+    const path = buildAnimationPath(experiment, axis, sampled);
     particlesRef.current = [...particlesRef.current, { ...path, segmentIndex: 0, segmentElapsed: 0 }];
     setParticleCount(particlesRef.current.length);
     // The loop only advances itself while already running (see tickRef
@@ -850,7 +929,7 @@ const LabPanel = forwardRef(function LabPanel(
     const canvas = canvasRef.current;
     if (!canvas) return;
     drawScene(canvas.getContext('2d'));
-  }, [experiment, expMode, ovenImageLoaded, ovenOffImageLoaded, sgImageLoaded, pcImageLoaded, mousePos, axis, canvasDims, displayBools, drawScene]);
+  }, [experiment, expMode, ovenImageLoaded, ovenOffImageLoaded, sgImageLoaded, pcImageLoaded, mousePos, axis, canvasDims, displayBools, startError, drawScene]);
 
   // Mouse handlers
   const handleClick = (e) => {
