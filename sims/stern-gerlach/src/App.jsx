@@ -481,7 +481,7 @@ export default function App() {
                 onChangeNum={(val) => {setExpMode({ ...expMode, rate: val });}}
                 min={0.0}
                 max={100}
-                step={0.1}
+                step={1.0}
                 disabled={(expMode.build !== 0) || (expMode.dc === 'single')}
               />
             </div>
