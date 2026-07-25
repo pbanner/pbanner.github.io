@@ -893,12 +893,7 @@ const LabPanel = forwardRef(function LabPanel(
     }
   }, [tabVisible]);
 
-  // `experimentOverride` lets a caller that just synchronously updated
-  // `experiment` (e.g. auto-inserting a beam block right before starting)
-  // spawn against the fresh value immediately, since setExperiment is
-  // async and this component's own `experiment` prop won't reflect it
-  // until the next render.
-  const spawnParticle = (experimentOverride) => {
+  const spawnParticle = () => {
     if (experiment.length === 0) return; // nothing to simulate
     const sampled = samplePath(experiment);
     const path = buildAnimationPath(experiment, axis, sampled);
