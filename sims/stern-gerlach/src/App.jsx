@@ -572,7 +572,7 @@ export default function App() {
                 <input type="checkbox" disabled={expMode.build !== 0} checked={histDisplayBools.showTheory} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showTheory: e.target.checked })} />
                 Theoretical probabilities
               </label>
-              <label style={{ padding: '4px 0 0 0', fontWeight: '500' }}>Right-click the plot to copy/save!</label>
+              <label style={{ padding: '4px 0 0 0', fontWeight: '500', width: '220px' }}>Right-click the plot to copy/save!</label>
             </div>
             <div className="histogram-panel">
               <div className="histogram-canvas-wrap">

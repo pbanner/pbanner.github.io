@@ -31,8 +31,8 @@ const THEORY_LINE_WIDTH = 2;
 //const THEORY_LINE_DASH = [4, 3];
 const THEORY_LINE_OVERHANG = 6; // extra px each side beyond the bar's own width, so the line reads as "wider than the bar" rather than flush with its edges
 const LOUPE_DIAMETER = 200;  // css px, the magnifier's own on-screen size
-const LOUPE_ZOOM = 4;        // how much the loupe magnifies the chart underneath the cursor
-const LOUPE_INK_SCALE = 1 / LOUPE_ZOOM * 1.0; // shrinks line widths/font sizes before the zoom transform blows them back up, so they render at their normal apparent size instead of getting magnified too
+const LOUPE_ZOOM = 10;        // how much the loupe magnifies the chart underneath the cursor
+const LOUPE_INK_SCALE = 1 / LOUPE_ZOOM * 1.5; // shrinks line widths/font sizes before the zoom transform blows them back up, so they render at their normal apparent size instead of getting magnified too
 
 // Every PC currently placed in the experiment, in a stable left-to-right
 // order (by SG index, then up before down) -- this is what turns into one
@@ -198,7 +198,7 @@ export default function Histogram({ experiment, displayBools }) {
 
     // Y-axis ticks + labels
     ctx.fillStyle = TICK_LABEL_COLOR;
-    ctx.font = '${11 * inkScale}px Arial';
+    ctx.font = `11px Arial`;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
     ticks.forEach((tickValue) => {
@@ -218,7 +218,7 @@ export default function Histogram({ experiment, displayBools }) {
     ctx.translate(Y_AXIS_LABEL_MARGIN + Y_AXIS_LABEL_THICKNESS / 2, (plotY0 + plotY1) / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.fillStyle = TICK_LABEL_COLOR;
-    ctx.font = `bold ${Y_AXIS_LABEL_THICKNESS * inkScale}px Arial`;
+    ctx.font = `bold ${Y_AXIS_LABEL_THICKNESS}px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('Counts', 0, 0);
@@ -291,7 +291,7 @@ export default function Histogram({ experiment, displayBools }) {
         // Write the labels on all the bars
         const showBothActual = (displayBools.showPercentages === 2 && dataTotal > 0);
         ctx.fillStyle = PC_COLORS[d.colorId];
-        ctx.font = '${11 * inkScale}px Arial';
+        ctx.font = `11px Arial`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
         const barLabel = ((displayBools.showPercentages === 1 && dataTotal === 0) ? "---" : "") + (displayBools.showPercentages !== 1 ? String(d.count) : "") + (showBothActual ? " (" : "") + ((displayBools.showPercentages !== 0 && dataTotal !== 0) ? (d.count/dataTotal*100).toFixed(1) + "%" : "") + (showBothActual ? ")" : "");
@@ -324,7 +324,7 @@ export default function Histogram({ experiment, displayBools }) {
 
         // Detector label below the bar, in the same style as the axis's own tick labels
         ctx.fillStyle = TICK_LABEL_COLOR;
-        ctx.font = '${11 * inkScale}px Arial';
+        ctx.font = `11px Arial`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         ctx.fillText(`SG${d.sgIndex + 1}` + (d.arm == 'up' ? '↑' : '↓'), slotCenter, plotY1 + 6);
@@ -339,7 +339,7 @@ export default function Histogram({ experiment, displayBools }) {
       ctx.beginPath();
       ctx.roundRect(legendX0, legendY0, LEGEND_WIDTH, legendY1 - legendY0, 5);
       ctx.stroke()
-      ctx.font = '${11 * inkScale}px Arial';
+      ctx.font = `11px Arial`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       if (detectors.length === 0) {
@@ -372,7 +372,7 @@ export default function Histogram({ experiment, displayBools }) {
 
     // Plot title
     ctx.fillStyle = TOTAL_COLOR;
-    ctx.font = 'bold ${14 * inkScale}px Arial';
+    ctx.font = `bold 14px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('Experimental Data' + (displayBools.showTotal ? ` (N = ${dataTotal})` : ''), (plotX0 + plotX1)/2, PADDING_TOP / 2);
