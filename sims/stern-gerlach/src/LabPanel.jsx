@@ -321,7 +321,10 @@ function getPlacementCandidates(experiment, axis, buildMode) {
   experiment.forEach((sg, sgIndex) => {
     ['up', 'down'].forEach((arm) => {
       const existing = sg[arm];
-      if (existing !== null && existing.type === 'pc' && buildMode === 1) return;
+      if (existing !== null) {
+        if (existing.type === 'pc' && buildMode === 1) return;
+        if (existing === 'bb' && buildMode === 2) return;
+      }
 
       const dims = existing === null ? newDims : getComponentDims(existing);
       const site = getPlacementSite(sgIndex, arm, axis);
@@ -609,12 +612,12 @@ const LabPanel = forwardRef(function LabPanel(
     // of the new component at sites that don't have anything on them yet.
     // Drawn unconditionally whenever build mode is active, not just once the
     // cursor happens to be over the canvas, so the sites are visible the
-    // instant build mode is entered. Left in place even once the cursor
-    // snaps to one of them below, rather than being cleared -- the snapped
-    // site's green circle/full-opacity component (next block) just gets
-    // painted on top of whichever of these it lines up with.
+    // instant build mode is entered. Left in place for every site except the
+    // one currently snapped to below, which gets its own green circle and
+    // full-opacity component instead -- drawing both there would double up.
     if (expMode.build > 0 && pcImageRef.current && pcImageRef.current.complete) {
       getPlacementCandidates(experiment, axis, expMode.build).forEach((candidate) => {
+        if (buildSnappedSite && candidate.sgIndex === buildSnappedSite.sgIndex && candidate.arm === buildSnappedSite.arm) return;
         ctx.strokeStyle = '#f39c12';
         ctx.lineWidth = 3;
         ctx.beginPath();
