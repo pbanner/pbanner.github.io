@@ -117,73 +117,82 @@
   border-color: #bbb;
 }
 
-/* Compact "Build Experiment" / "Set Measurement Bases" tab-switcher, used
-   below COMPACT_MAX_WIDTH_PX / COMPACT_MAX_ASPECT_RATIO in App.jsx.
-   Pinned to a fixed width matching Build Experiment's own content (a static
-   2x2 icon-button grid, so this doesn't need to track anything dynamic).
-   That's a deliberate departure from this codebase's usual min-width:
-   max-content sizing: max-content would size the group to fit whichever of
-   -- the two panes, or the header's title text plus the switch button --
-   happens to need the most room on a given render, which is exactly the
-   width-changes-with-the-active-tab problem this group exists to avoid.
-   A fixed width also gives the header's title text-overflow: ellipsis
-   below something definite to truncate against; against an intrinsic
-   (auto) width, padding/overflow don't shrink an element's own contribution
-   to its ancestor's size, they only affect rendering once a width is
-   already fixed from outside -- so both problems share the same fix. */
-.compact-combined-group {
+/* "Set Up Experiment" group -- combines what used to be the separate
+   "Build Experiment" and "Set Measurement Bases" groups (and, on narrow
+   screens, a tab-switcher between them) into one group at every screen
+   size. Floored at 320px -- a bit wider than either of those previous
+   groups ever got on their own -- via max() rather than a plain min-width,
+   so it still grows past that floor if its own content (e.g. a longer
+   hover label) ever needs more room, the same as every other group here. */
+.setup-experiment-group {
+  min-width: max(320px, max-content);
+}
+
+/* "Add:" row in Set Up Experiment: a label plus a row of icon-only
+   buttons, each with a hover-revealed name underneath. */
+.add-component-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 4px 0 20px 0;
+}
+
+.add-component-row-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  padding-top: 10px; /* centers against the 36px-tall buttons themselves, ignoring the hover-label space reserved below them */
+}
+
+.add-component-item {
   position: relative;
-  width: 300px;
-  min-width: 300px;
-  max-width: 300px;
 }
 
-.compact-tab-header {
-  min-height: 52px; /* clears .tab-switch-button's full height (up to 3 wrapped lines) so it can't overlap the pane content below */
+.icon-only-button {
+  height: 36px;
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.compact-tab-header h3 {
-  margin: 0 0 6px 0;
-  padding-right: 84px;
-  font-size: 14px; /* a bit smaller than the usual 16px, so "Set Measurement Bases" has a real chance of fitting without truncating */
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+.icon-only-button-wide {
+  width: auto;
+  min-width: 52px; /* comfortably fits the SG/PC icons, which are wider than they are tall */
 }
 
-.tab-switch-button {
+.icon-only-button-square {
+  width: 36px;
+  padding: 4px;
+}
+
+.icon-only-button-image {
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+/* Always present (so hovering never shifts layout), just invisible until
+   its button is hovered. */
+.add-component-hover-label {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 78px;
-  padding: 3px 6px;
-  border: 1px solid #999;
-  border-radius: 4px;
-  background: #eee;
-  color: #111;
-  font-size: 10px;
-  line-height: 1.25;
-  text-align: right;
-  white-space: normal; /* the other pane's title can be long enough to wrap within this narrow a button */
-  cursor: pointer;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.2;
+  color: #333;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+  visibility: hidden;
 }
 
-.tab-switch-button:hover {
-  background: #ddd;
-}
-
-/* Both panes are always mounted, stacked in the same grid cell -- so the
-   grid (and thus the group) is always sized to fit the wider/taller of the
-   two, and switching tabs (toggling which one is visible) never shifts the
-   group's own width or height. */
-.compact-tab-stack {
-  display: grid;
-  min-width: 0;
-}
-
-.compact-tab-pane {
-  grid-column: 1;
-  grid-row: 1;
+.add-component-item:hover .add-component-hover-label {
+  visibility: visible;
 }
 
 .compact-tab-pane.compact-tab-hidden {
@@ -207,27 +216,6 @@
   display: block;
   width: 100%;
   height: 100%;
-}
-
-/* Icon buttons */
-.icon-button {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 8px;
-  font-size: 0.60rem;
-  min-width: 120px;
-}
-
-.icon-button-image {
-  height: 32px;
-  margin-bottom: 6px;
-  object-fit: contain;   /* scales the image to fit the box, preserving aspect ratio */
-  /* needed for Safari compatibility with draggable=false */
-  -webkit-user-drag: none;
-  user-select: none;
 }
 
 /* Custom axis stepper controls */
