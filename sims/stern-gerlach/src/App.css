@@ -241,6 +241,35 @@
   height: 100%;
 }
 
+.histogram-magnifier-toggle {
+  position: absolute;
+  top: 6px;
+  left: -24px;
+  z-index: 2;
+}
+
+/* The magnifier loupe -- a small, separate canvas showing a zoomed crop of
+   the chart under the cursor. The circular shape and thick ring are plain
+   CSS (not canvas clipping): simpler, and avoids drawImage self-copy
+   ambiguity since the loupe is always a distinct canvas element from the
+   main chart it's sampling from. */
+.histogram-loupe {
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  border: 4px solid #333;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.histogram-loupe canvas {
+  display: block;
+}
+
 /* Custom axis stepper controls */
 .axis-stepper {
   display: inline-flex;

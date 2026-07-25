@@ -30,6 +30,9 @@ const THEORY_LINE_COLOR = '#707070';
 const THEORY_LINE_WIDTH = 2;
 //const THEORY_LINE_DASH = [4, 3];
 const THEORY_LINE_OVERHANG = 6; // extra px each side beyond the bar's own width, so the line reads as "wider than the bar" rather than flush with its edges
+const LOUPE_DIAMETER = 200;  // css px, the magnifier's own on-screen size
+const LOUPE_ZOOM = 4;        // how much the loupe magnifies the chart underneath the cursor
+const LOUPE_INK_SCALE = 1 / LOUPE_ZOOM * 1.0; // shrinks line widths/font sizes before the zoom transform blows them back up, so they render at their normal apparent size instead of getting magnified too
 
 // Every PC currently placed in the experiment, in a stable left-to-right
 // order (by SG index, then up before down) -- this is what turns into one
@@ -69,6 +72,14 @@ export default function Histogram({ experiment, displayBools }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [canvasDims, setCanvasDims] = useState({ width: 300, height: 200 });
+  
+  const [magnifierOn, setMagnifierOn] = useState(false);
+  const loupeCanvasRef = useRef(null);
+  const loupeWrapperRef = useRef(null);
+  // The cursor position (in the same CSS-pixel space as canvasDims) the
+  // loupe is currently centered on -- a ref, not state, since mousemove
+  // fires far too often to push through React's render cycle.
+  const cursorPosRef = useRef(null);
 
   // Resize -- same devicePixelRatio handling as LabPanel's canvas (see the
   // comment there for why), but using a ResizeObserver rather than a
@@ -101,7 +112,14 @@ export default function Histogram({ experiment, displayBools }) {
     return () => observer.disconnect();
   }, []);
 
-  const drawHistogram = useCallback((ctx) => {
+  // inkScale lets this same drawing routine be reused, unmodified, to render
+  // into the magnifier loupe: the loupe applies a zoom transform to its own
+  // context before calling this, so every position (bar heights, gaps, tick
+  // spacing) comes out magnified for free -- but stroke widths and font
+  // sizes would get magnified right along with them unless divided down by
+  // that same zoom factor first, which is what inkScale is for. Passing 1
+  // (the default) reproduces the exact unmagnified drawing.
+  const drawHistogram = useCallback((ctx, inkScale = 1) => {
     const { width, height } = canvasDims;
     ctx.clearRect(0, 0, width, height);
 
@@ -171,7 +189,7 @@ export default function Histogram({ experiment, displayBools }) {
     // Axes -- meet at the bottom-right corner; no gridlines crossing
     // through the bars, just short tick marks off the y-axis.
     ctx.strokeStyle = AXIS_COLOR;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.5 * inkScale;
     ctx.beginPath();
     ctx.moveTo(plotX0, plotY0);
     ctx.lineTo(plotX0, plotY1);
@@ -180,7 +198,7 @@ export default function Histogram({ experiment, displayBools }) {
 
     // Y-axis ticks + labels
     ctx.fillStyle = TICK_LABEL_COLOR;
-    ctx.font = '11px Arial';
+    ctx.font = '${11 * inkScale}px Arial';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
     ticks.forEach((tickValue) => {
@@ -200,13 +218,13 @@ export default function Histogram({ experiment, displayBools }) {
     ctx.translate(Y_AXIS_LABEL_MARGIN + Y_AXIS_LABEL_THICKNESS / 2, (plotY0 + plotY1) / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.fillStyle = TICK_LABEL_COLOR;
-    ctx.font = `bold ${Y_AXIS_LABEL_THICKNESS}px Arial`;
+    ctx.font = `bold ${Y_AXIS_LABEL_THICKNESS * inkScale}px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('Counts', 0, 0);
     ctx.restore();
 
-        // Bars, one per detector, growing up from the x-axis, colored to match
+    // Bars, one per detector, growing up from the x-axis, colored to match
     // that detector's own identifying dot. Bars belonging to the same SG
     // sit flush against each other with no gap; a gap is inserted only
     // where the SG changes. The whole set of (possibly grouped) bars is
@@ -244,7 +262,7 @@ export default function Histogram({ experiment, displayBools }) {
           const lineY = plotY1 - (expectedCount / axisMax) * (plotY1 - plotY0);
           const lineHalfWidth = barWidth / 2 + THEORY_LINE_OVERHANG;
           ctx.strokeStyle = THEORY_LINE_COLOR;
-          ctx.lineWidth = THEORY_LINE_WIDTH;
+          ctx.lineWidth = THEORY_LINE_WIDTH * inkScale;
           //ctx.setLineDash(THEORY_LINE_DASH);
           ctx.beginPath();
           ctx.moveTo(slotCenter - lineHalfWidth, lineY);
@@ -259,7 +277,7 @@ export default function Histogram({ experiment, displayBools }) {
         if (drawErrorBars) {
           const halfErrorBarWidth = Math.min(barWidth*ERROR_BAR_WIDTH_RATIO, ERROR_BAR_WIDTH_MIN)/2;
           ctx.strokeStyle = AXIS_COLOR;
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = 1.5 * inkScale;
           ctx.beginPath();
           ctx.moveTo(slotCenter - halfErrorBarWidth, barY - errOffset);
           ctx.lineTo(slotCenter + halfErrorBarWidth, barY - errOffset);
@@ -273,7 +291,7 @@ export default function Histogram({ experiment, displayBools }) {
         // Write the labels on all the bars
         const showBothActual = (displayBools.showPercentages === 2 && dataTotal > 0);
         ctx.fillStyle = PC_COLORS[d.colorId];
-        ctx.font = '11px Arial';
+        ctx.font = '${11 * inkScale}px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
         const barLabel = ((displayBools.showPercentages === 1 && dataTotal === 0) ? "---" : "") + (displayBools.showPercentages !== 1 ? String(d.count) : "") + (showBothActual ? " (" : "") + ((displayBools.showPercentages !== 0 && dataTotal !== 0) ? (d.count/dataTotal*100).toFixed(1) + "%" : "") + (showBothActual ? ")" : "");
@@ -306,7 +324,7 @@ export default function Histogram({ experiment, displayBools }) {
 
         // Detector label below the bar, in the same style as the axis's own tick labels
         ctx.fillStyle = TICK_LABEL_COLOR;
-        ctx.font = '11px Arial';
+        ctx.font = '${11 * inkScale}px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         ctx.fillText(`SG${d.sgIndex + 1}` + (d.arm == 'up' ? '↑' : '↓'), slotCenter, plotY1 + 6);
@@ -317,11 +335,11 @@ export default function Histogram({ experiment, displayBools }) {
       const legendY0 = plotY0;
       const legendY1 = legendY0 + legendBoxHeight;
       ctx.strokeStyle = "#999999";
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1 * inkScale;
       ctx.beginPath();
       ctx.roundRect(legendX0, legendY0, LEGEND_WIDTH, legendY1 - legendY0, 5);
       ctx.stroke()
-      ctx.font = '11px Arial';
+      ctx.font = '${11 * inkScale}px Arial';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       if (detectors.length === 0) {
@@ -339,7 +357,7 @@ export default function Histogram({ experiment, displayBools }) {
         if (theoryOn) {
           const rowY = legendY0 + LEGEND_PADDING + detectors.length * LEGEND_ROW_HEIGHT + LEGEND_ROW_HEIGHT / 2;
           ctx.strokeStyle = THEORY_LINE_COLOR;
-          ctx.lineWidth = THEORY_LINE_WIDTH;
+          ctx.lineWidth = THEORY_LINE_WIDTH * inkScale;
           //ctx.setLineDash(THEORY_LINE_DASH);
           ctx.beginPath();
           ctx.moveTo(legendX0 + LEGEND_PADDING, rowY);
@@ -354,21 +372,111 @@ export default function Histogram({ experiment, displayBools }) {
 
     // Plot title
     ctx.fillStyle = TOTAL_COLOR;
-    ctx.font = 'bold 14px Arial';
+    ctx.font = 'bold ${14 * inkScale}px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('Experimental Data' + (displayBools.showTotal ? ` (N = ${dataTotal})` : ''), (plotX0 + plotX1)/2, PADDING_TOP / 2);
-  }, [experiment, displayBools, canvasDims]);
+    }, [experiment, displayBools, canvasDims]);
+
+  // Renders the loupe: re-runs the exact same drawHistogram routine against
+  // the loupe's own canvas, but first stacks a translate/scale/translate
+  // transform onto it that maps the region of the main chart around the
+  // cursor onto the loupe's full (small) area. Because that transform is
+  // applied to the context *before* drawHistogram runs, every position it
+  // computes (bar heights, gaps, tick spacing) comes out magnified for
+  // free -- drawHistogram itself never needs to know it's being magnified,
+  // aside from the inkScale passed through to keep line widths/fonts from
+  // being magnified right along with everything else.
+  const drawLoupe = useCallback(() => {
+    const loupeCanvas = loupeCanvasRef.current;
+    const cursor = cursorPosRef.current;
+    if (!loupeCanvas || !cursor) return;
+    const dpr = window.devicePixelRatio || 1;
+    const loupeCtx = loupeCanvas.getContext('2d');
+    // setTransform (not scale/translate relative to whatever was already
+    // there) so each redraw starts from a clean slate instead of compounding
+    // onto the previous frame's transform.
+    loupeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    loupeCtx.clearRect(0, 0, LOUPE_DIAMETER, LOUPE_DIAMETER);
+    loupeCtx.translate(LOUPE_DIAMETER / 2, LOUPE_DIAMETER / 2);
+    loupeCtx.scale(LOUPE_ZOOM, LOUPE_ZOOM);
+    loupeCtx.translate(-cursor.x, -cursor.y);
+    drawHistogram(loupeCtx, LOUPE_INK_SCALE);
+  }, [drawHistogram]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     drawHistogram(canvas.getContext('2d'));
-  }, [drawHistogram]);
+    if (magnifierOn) drawLoupe();
+  }, [drawHistogram, magnifierOn, drawLoupe]);
+
+  // Sets up the loupe canvas's own backing resolution whenever it mounts
+  // (i.e. whenever the magnifier is toggled on) -- same devicePixelRatio
+  // handling as the main canvas's resize effect above.
+  useEffect(() => {
+    if (!magnifierOn) return;
+    const loupeCanvas = loupeCanvasRef.current;
+    if (!loupeCanvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    loupeCanvas.width = LOUPE_DIAMETER * dpr;
+    loupeCanvas.height = LOUPE_DIAMETER * dpr;
+    loupeCanvas.style.width = `${LOUPE_DIAMETER}px`;
+    loupeCanvas.style.height = `${LOUPE_DIAMETER}px`;
+  }, [magnifierOn]);
+
+  // Tracks the cursor over the main canvas while the magnifier is active,
+  // positioning the loupe (via direct style mutation, not React state --
+  // mousemove fires far too often to re-render on) and redrawing it live.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const wrapper = loupeWrapperRef.current;
+    if (!canvas || !magnifierOn) return;
+
+    const handleMouseMove = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      cursorPosRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      if (wrapper) {
+        wrapper.style.left = `${cursorPosRef.current.x - LOUPE_DIAMETER / 2}px`;
+        wrapper.style.top = `${cursorPosRef.current.y - LOUPE_DIAMETER / 2}px`;
+        wrapper.style.display = 'block';
+      }
+      drawLoupe();
+    };
+    const handleMouseLeave = () => {
+      cursorPosRef.current = null;
+      if (wrapper) wrapper.style.display = 'none';
+    };
+
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mouseleave', handleMouseLeave);
+    return () => {
+      canvas.removeEventListener('mousemove', handleMouseMove);
+      canvas.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  }, [magnifierOn, drawLoupe]);
 
   return (
-    <div ref={containerRef} style={{ width: '100%', height: '100%' }}>
+    <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
       <canvas ref={canvasRef} style={{ display: 'block' }} />
+      <button
+        type="button"
+        className={`control-bar-button icon-only-button icon-only-button-square histogram-magnifier-toggle${magnifierOn ? ' active' : ''}`}
+        onClick={() => setMagnifierOn((on) => !on)}
+        title="Magnify"
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <circle cx="11" cy="11" r="7" />
+          <line x1="16.2" y1="16.2" x2="21" y2="21" />
+          <line x1="11" y1="8" x2="11" y2="14" />
+          <line x1="8" y1="11" x2="14" y2="11" />
+        </svg>
+      </button>
+      {magnifierOn && (
+        <div ref={loupeWrapperRef} className="histogram-loupe" style={{ display: 'none' }}>
+          <canvas ref={loupeCanvasRef} />
+        </div>
+      )}
     </div>
   );
 }
