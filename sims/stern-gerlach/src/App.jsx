@@ -515,9 +515,12 @@ export default function App() {
           {/* Data Collection Controls */}
           <div className="control-bar-group">
             <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Data Collection Controls</h3>
-            <div style = {{ padding: '2px', display: 'flex', flexDirection: 'row', gap: '20px' }}>
-              <label><input type="radio" name="DCmode" value="single" checked={expMode.dc === 'single'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} disabled={expMode.build !== 0} />One at a time</label>
-              <label><input type="radio" name="DCmode" value="stream" checked={expMode.dc === 'stream'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} disabled={expMode.build !== 0} />Continuous</label>
+            <div style = {{ display: 'flex', flexDirection: 'row', gap: '10px', alignItems: 'center' }}>
+              <p style={{ fontSize: '14px', fontWeight: '500' }}>Mode:</p>
+              <div style = {{ padding: '2px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <label><input type="radio" name="DCmode" value="single" checked={expMode.dc === 'single'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} disabled={expMode.build !== 0} />One at a time</label>
+                <label><input type="radio" name="DCmode" value="stream" checked={expMode.dc === 'stream'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} disabled={expMode.build !== 0} />Continuous</label>
+              </div>
             </div>
             <div className="control-group" style={{ marginTop: '0.5em' }}>
               <SliderPlusTextboxControl
