@@ -1,11 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import './App.css';
 import LabPanel from './LabPanel';
 import Histogram from './Histogram';
 import sgImage from './assets/SG.png';
 import pcImage from './assets/PC.png';
 import bbImage from './assets/BB.png';
-import xImage from './assets/delete.png';
 
 // Unicode glyphs (▶ ⏸ ⌂) bake their own, font-dependent vertical padding
 // into the glyph box, so flexbox centering lines up the boxes but not the
@@ -26,28 +25,6 @@ function StopIcon({ size = '0.9em' }) {
       <rect x="3" y="3" width="10" height="10" />
     </svg>
   );
-}
-
-// Below this width, or squarer than this aspect ratio (e.g. a 4:3 tablet,
-// vs. a 16:9 laptop), there isn't room for "Build Experiment" and "Set
-// Measurement Bases" as two separate always-visible groups -- both numbers
-// are tunable to taste.
-const COMPACT_MAX_WIDTH_PX = 1300;
-const COMPACT_MAX_ASPECT_RATIO = '3/2'; // 16:9 (~1.78) stays wide; 4:3 (~1.33) goes compact
-const COMPACT_QUERY = `(max-width: ${COMPACT_MAX_WIDTH_PX}px), (max-aspect-ratio: ${COMPACT_MAX_ASPECT_RATIO})`;
-
-// Tracks a CSS media query live, so resizing the window or rotating a
-// device updates layout immediately rather than only on next page load.
-function useMediaQuery(query) {
-  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
-  useEffect(() => {
-    const mql = window.matchMedia(query);
-    const onChange = () => setMatches(mql.matches);
-    onChange();
-    mql.addEventListener('change', onChange);
-    return () => mql.removeEventListener('change', onChange);
-  }, [query]);
-  return matches;
 }
 
 const SG_OPTION_LABELS = ['X', 'Y', 'Z'];
@@ -103,9 +80,8 @@ function AxisStepper({ index, sg, setExperiment, disabled, resetDataCollection }
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'row', gap: '10px', padding: '6px' }}>
-      <input type="checkbox" disabled={disabled} checked={!!sg.advanced} onChange={(e) => setAdvanced(e.target.checked)} />
-      <label>{'SG' + (index + 1)}</label>
+    <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', padding: '6px' }}>
+      <label style={{ fontSize: '14px', fontWeight: '500', marginRight: '5px' }}>{'SG' + (index + 1)}</label>
       {sg.advanced ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -154,6 +130,19 @@ function AxisStepper({ index, sg, setExperiment, disabled, resetDataCollection }
           </div>
         </div>
       )}
+      {/* marginLeft: auto pins this to the row's right edge regardless of
+          whether the stepper or the (differently-sized) theta/phi textboxes
+          are showing above, rather than sitting immediately after them. */}
+      <button
+        type="button"
+        className={`control-bar-button advanced-toggle-button ${sg.advanced ? 'active' : ''}`}
+        aria-label={`Toggle advanced basis controls for SG${index + 1}`}
+        onClick={() => setAdvanced(!sg.advanced)}
+        disabled={disabled}
+        style={{ marginLeft: 'auto' }}
+      >
+        {sg.advanced ? 'Set by axis' : 'Set by angles' }
+      </button>
     </div>
   );
 }
@@ -191,50 +180,150 @@ function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step
   );
 }
 
-// Factored out of the main render so the exact same markup (including its
-// own header) can be used both as a permanent, always-visible group on wide
-// screens and as one pane of the compact tab-switcher on narrow ones --
-// showHeader is turned off in compact mode, where the current pane's title
-// is instead shown in a shared header row alongside the tab-switch button.
-function BuildExperimentPanel({ addSternGerlach, expMode, setExpMode, controlsLocked, displayBools, setDisplayBools, showHeader = true }) {
+// One icon-only button in the "Add:" row, plus the space below it (always
+// reserved, so hovering never shifts layout) where hoverLabel appears --
+// shape picks between a square button (BB, and the inert fourth slot) and
+// one just wide enough for its own icon (SG, PC -- both wider than tall).
+function AddComponentButton({ image, shape, ariaLabel, hoverLabel, active = false, disabled = false, onClick, onMouseDown }) {
   return (
-    <>
-      {showHeader && <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Build Experiment</h3>}
+    <div className="add-component-item">
+      <button
+        type="button"
+        className={`control-bar-button icon-only-button icon-only-button-${shape} ${active ? 'active' : ''}`}
+        aria-label={ariaLabel}
+        onClick={onClick}
+        onMouseDown={onMouseDown}
+        disabled={disabled}
+      >
+        <img src={image} alt="" className="icon-only-button-image" draggable="false" />
+      </button>
+      <span className="add-component-hover-label">{hoverLabel}</span>
+    </div>
+  );
+}
+
+function SetUpExperimentPanel({ experiment, setExperiment, addSternGerlach, expMode, setExpMode, controlsLocked, displayBools, setDisplayBools, resetDataCollection }) {
+  return (
+        <>
+      {/* Zero-height, purely a width floor -- see .setup-experiment-group
+          in App.css for why this (rather than a CSS min-width on the group
+          itself) is what keeps the group from ever rendering narrower than
+          320px. Negative marginBottom cancels out the group's own 6px flex
+          gap, which would otherwise open up a sliver of empty space right
+          below this, being the first child. */}
+      <div className="setup-experiment-width-floor" style={{ marginBottom: '-6px' }} aria-hidden="true" />
+      <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Set Up Experiment</h3>
       <label style={{ margin: '0 0 8px 0' }}>
         <input type="checkbox" disabled={controlsLocked} checked={displayBools.previewPaths} onChange={(e) => setDisplayBools({ ...displayBools, previewPaths: e.target.checked })} />
         Preview possible paths
       </label>
-      <div style={{ display: 'flex', flexDirection: 'row', gap: '8px' }}>
-        <div style={{display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <button type="button" className="control-bar-button icon-button" aria-label="Add Stern-Gerlach apparatus" onClick={addSternGerlach} disabled={controlsLocked}>
-            <img src={sgImage} alt="" className="icon-button-image" draggable="false" />
-            <span>Add Stern-Gerlach</span>
-          </button>
-          <button type="button" className={`control-bar-button icon-button ${expMode.build === 1 ? 'active' : ''}`} aria-label="Add particle counter" onMouseDown={() => setExpMode({ ...expMode, build: expMode.build === 1 ? 0 : 1 })} disabled={controlsLocked}>
-            <img src={pcImage} alt="" className="icon-button-image" draggable="false" />
-            <span>Add Particle Counter</span>
-          </button>
-        </div>
-        <div style={{display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <button type="button" className={`control-bar-button icon-button ${expMode.build === 2 ? 'active' : ''}`} aria-label="Add beam block" onMouseDown={() => setExpMode({ ...expMode, build: expMode.build === 2 ? 0 : 2 })} disabled={controlsLocked}>
-            <img src={bbImage} alt="" className="icon-button-image" draggable="false" />
-            <span>Add Beam Block</span>
-          </button>
-          <button type="button" className={`control-bar-button icon-button ${expMode.build === -1 ? 'active' : ''}`} aria-label="Remove components" onClick={() => setExpMode({ ...expMode, build: expMode.build === -1 ? 0 : -1 })} disabled={controlsLocked}>
-            <img src={xImage} alt="" className="icon-button-image" draggable="false" />
-            <span>Remove Components</span>
-          </button>
-        </div>
+
+      <div className="add-component-row">
+        <span className="add-component-row-label">Add:</span>
+        <AddComponentButton
+          image={sgImage}
+          shape="wide"
+          ariaLabel="Add Stern-Gerlach apparatus"
+          hoverLabel="Stern-Gerlach"
+          onClick={addSternGerlach}
+          disabled={controlsLocked}
+        />
+        <AddComponentButton
+          image={pcImage}
+          shape="wide"
+          ariaLabel="Add particle counter"
+          hoverLabel="Particle Counter"
+          active={expMode.build === 1}
+          onMouseDown={() => setExpMode({ ...expMode, build: expMode.build === 1 ? 0 : 1 })}
+          disabled={controlsLocked}
+        />
+        <AddComponentButton
+          image={bbImage}
+          shape="square"
+          ariaLabel="Add beam block"
+          hoverLabel="Beam Block"
+          active={expMode.build === 2}
+          onMouseDown={() => setExpMode({ ...expMode, build: expMode.build === 2 ? 0 : 2 })}
+          disabled={controlsLocked}
+        />
+        {/* Inert placeholder for a component we haven't built yet -- reuses
+            the beam block icon for now purely as a stand-in. 
+        <AddComponentButton
+          image={bbImage}
+          shape="square"
+          ariaLabel="Add screen to end of setup"
+          hoverLabel="Screen"
+          disabled={controlsLocked}
+        />
+        */}
       </div>
+
+      <button
+        type="button"
+        className={`control-bar-button ${expMode.build === -1 ? 'active-special' : ''}`}
+        aria-label="Remove components"
+        onClick={() => setExpMode({ ...expMode, build: expMode.build === -1 ? 0 : -1 })}
+        disabled={controlsLocked}
+      >
+        Remove Components
+      </button>
+
+      <SetMeasurementBasesPanel experiment={experiment} setExperiment={setExperiment} controlsLocked={controlsLocked} expMode={expMode} resetDataCollection={resetDataCollection} />
     </>
   );
 }
 
+// Pure check for the two ways a start/spawn attempt could go wrong: no SG to
+// measure through at all, or the last SG's output isn't fully terminated (a
+// PC or BB on both arms) so particles could exit unmeasured. Returns a small
+// descriptor for whichever problem applies, or null if the setup's fine to
+// start -- doesn't mutate anything itself; App decides what to do with the
+// result, and LabPanel turns a non-null one into the on-canvas warning.
+function getStartError(experiment) {
+  if (experiment.length === 0) return { kind: 'noSG' };
+
+  const lastIndex = experiment.length - 1;
+  const lastSG = experiment[lastIndex];
+  const openArms = [];
+  if (lastSG.up === null) openArms.push('up');
+  if (lastSG.down === null) openArms.push('down');
+  if (openArms.length === 0) return null;
+
+  return { kind: 'unterminated', sgIndex: lastIndex, openArms };
+}
+// Given an already-latched start error, checks whether the *same* problem
+// is still present -- narrowing it (dropping arms that got terminated) or
+// clearing it entirely (dropping it to null), but deliberately never
+// escalating to a *different* problem than the one that was actually
+// latched. That asymmetry is the point: fixing "no SG at all" by adding one
+// SG immediately creates a new "unterminated path" problem on that SG, but
+// this must not surface it -- only an actual Start/Make One Particle press
+// (getStartError, above) is allowed to report a problem the user hasn't
+// been told about yet. Returns the *same* object reference when nothing
+// about the error has changed, so callers can compare by reference to
+// decide whether a state update is actually needed.
+function recheckStartError(error, experiment) {
+  if (!error) return null;
+
+  if (error.kind === 'noSG') {
+    return experiment.length === 0 ? error : null;
+  }
+
+  // 'unterminated' -- keep tracking the same SG only for as long as it's
+  // still the last one in the chain (once it isn't, whether it's open or
+  // not no longer matters for start-validation), and only for whichever of
+  // the originally-flagged arms are still actually open.
+  if (error.sgIndex !== experiment.length - 1) return null;
+  const sg = experiment[error.sgIndex];
+  const stillOpen = error.openArms.filter((arm) => sg[arm] === null);
+  if (stillOpen.length === 0) return null;
+  return stillOpen.length === error.openArms.length ? error : { ...error, openArms: stillOpen };
+}
 function SetMeasurementBasesPanel({ experiment, setExperiment, controlsLocked, expMode, resetDataCollection, showHeader = true }) {
   return (
     <>
-      {showHeader && <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Set Measurement Bases</h3>}
-      <p style={{ width: '180px' }}>Check the checkbox next to an SG label to set its basis by angles (θ, ϕ).</p>
+      {showHeader && <p style={{ margin: '10px 0 0px 0', fontWeight: 'bold', fontSize: '14px', color: '#333' }}>Set Measurement Bases</p>}
+      {/* <p style={{ width: '250px' }}>Click Set by Angles/Set by Axis to set an SG's basis by angles (θ, ϕ).</p> */}
       {experiment.map((sg, i) => (
         <AxisStepper key={i} index={i} sg={sg} setExperiment={setExperiment} disabled={controlsLocked || (expMode.build !== 0)} resetDataCollection={resetDataCollection} />
       ))}
@@ -246,14 +335,20 @@ export default function App() {
   // Panel 1 state
   const [displayBools, setDisplayBools] = useState({
     gridOn: true,             // Displaying the grid
-    previewPaths: false       // For previewing particle paths
+    previewPaths: true       // For previewing particle paths
   });
   const [histDisplayBools, setHistDisplayBools] = useState({
     showPercentages: 2,    // 0 = counts only, 1 = percentages only, 2 = both
     showTheory: false,
     showLegend: true,
     showTotal: true,
-    showErrorBars: false
+    showErrorBars: false,
+    // Not quite a display toggle like the rest of these -- it's which detector
+    // (as { sgIndex, arm }, or null) the mouse is currently over a bar for
+    // in the histogram, shared with LabPanel so it can highlight that PC.
+    // Folded in here rather than a separate useState to avoid threading yet
+    // another prop pair through both components.
+    hoveredDetector: null
   });
   // build = 0 for normal operation, 1 for placing a particle counter, 2 for placing
   // a beam block, -1 for deleting stuff
@@ -268,13 +363,7 @@ export default function App() {
   // advanced toggles that SG's basis control between the X/Y/Z stepper and
   // raw theta/phi textboxes -- a display preference, not a physics value
   // Start with one apparatus already in place
-  const [experiment, setExperiment] = useState([{ basis: [0, 0], up: null, down: null, advanced: false }]);
-
-  // Below COMPACT_MAX_WIDTH_PX or COMPACT_MAX_ASPECT_RATIO, "Build Experiment"
-  // and "Set Measurement Bases" collapse into one tab-switched group instead
-  // of two permanent ones -- compactTab tracks which of the two is showing.
-  const isCompact = useMediaQuery(COMPACT_QUERY);
-  const [compactTab, setCompactTab] = useState('build'); // 'build' | 'bases'
+  const [experiment, setExperiment] = useState([{ basis: [0, 0], up: 'bb', down: 'bb', advanced: false }]);
 
   // For getting tab visibility and pausing animation as appropriate
   // Tracks whether this tab is the active one, so both particle production
@@ -296,6 +385,22 @@ export default function App() {
   const streamTimerRef = useRef(null);
 
   const controlsLocked = particleCount > 0;
+  
+  // Latched only by handleStartPause, when it refuses to start because
+  // getStartError found a problem -- LabPanel renders whatever this holds
+  // as the on-canvas warning. Every render, recheckStartError narrows or
+  // clears it against the live experiment (never escalates it to a
+  // *different* problem -- see that function's comment), and if that comes
+  // out different from what's currently latched, the state is corrected
+  // right here before this render commits. This is the standard React
+  // pattern for keeping derived state in sync without an effect: it only
+  // fires when the two actually disagree, so it settles in one extra pass
+  // rather than looping.
+  const [startError, setStartError] = useState(null);
+  const liveStartError = recheckStartError(startError, experiment);
+  if (liveStartError !== startError) {
+    setStartError(liveStartError);
+  }
 
   // Any setup change (add/remove an SG, place/remove a PC or BB, change a
   // basis) invalidates whatever's been collected so far -- called
@@ -321,48 +426,16 @@ export default function App() {
     resetDataCollection();
   };
 
-  // Checks the last SG's arms before data collection starts; if either is
-  // still open (would let particles fly off unmeasured), confirms with the
-  // user, then either plugs the gap with beam blocks or backs out. Returns
-  // the up-to-date experiment to spawn against, or null if the user
-  // cancelled -- setExperiment is async, so a caller that needs to spawn
-  // immediately after this can't just re-read the `experiment` closure.
-  const ensureTerminatedThenGetExperiment = () => {
-    if (experiment.length === 0) return experiment;
-
-    const lastIndex = experiment.length - 1;
-    const lastSG = experiment[lastIndex];
-    const openArms = [];
-    if (lastSG.up === null) openArms.push('up');
-    if (lastSG.down === null) openArms.push('down');
-    if (openArms.length === 0) return experiment;
-
-    const plural = openArms.length > 1;
-    const message =
-      `The ${openArms.join(' and ')} ${plural ? 'paths are' : 'path is'} unterminated on the last ` +
-      `Stern-Gerlach apparatus -- particles could fly off without ever being measured.\n\n` +
-      `Click OK to place a beam block ${plural ? 'at those locations' : 'there'} and start ` +
-      `data collection, or Cancel to go back and place something yourself first.`;
-    if (!window.confirm(message)) return null;
-
-    const nextExperiment = experiment.map((sg, i) => (i !== lastIndex ? sg : {
-      ...sg,
-      up: sg.up === null ? 'bb' : sg.up,
-      down: sg.down === null ? 'bb' : sg.down,
-    }));
-    setExperiment(nextExperiment);
-    resetDataCollection();
-    return nextExperiment;
-  };
-
   const handleStartPause = () => {
     const startingNow = expMode.dc === 'single' || !expMode.running;
-    let experimentToSpawnFrom = experiment;
 
     if (startingNow) {
-      const result = ensureTerminatedThenGetExperiment();
-      if (result === null) return; // cancelled -- don't start anything
-      experimentToSpawnFrom = result;
+      const error = getStartError(experiment);
+      if (error) {
+        setStartError(error); // LabPanel shows this on-canvas; user must fix the setup themselves
+        return;
+      }
+      setStartError(null);
     }
 
     setExpMode((prev) => ({
@@ -371,7 +444,7 @@ export default function App() {
       running: prev.dc === 'single' ? prev.running : !prev.running,
     }));
     if (expMode.dc === 'single') {
-      labPanelRef.current?.spawnParticle(experimentToSpawnFrom);
+      labPanelRef.current?.spawnParticle();
     }
   };
 
@@ -425,54 +498,36 @@ export default function App() {
           resetToken={resetToken}
           resetDataCollection={resetDataCollection}
           tabVisible={tabVisible}
+          startError={liveStartError}
+          hoveredDetector={histDisplayBools.hoveredDetector}
         />
       </div>
 
       {/* Right Sidebar */}
       <aside className="control-bar">
         <div className="control-bar-content">
-          {isCompact ? (
-            /* Narrow/squarish screens: "Build Experiment" and "Set Measurement
-              Bases" collapse into one group that's always the width of the
-              (wider) Build Experiment content -- both panes are kept mounted
-              and stacked via CSS Grid, with only the active one visible, so
-              switching tabs never changes the group's width or height. */
-            <div className="control-bar-group compact-combined-group">
-              <div className="compact-tab-header">
-                <h3 style={{ margin: 0, fontWeight: 'bold' }} title={compactTab === 'build' ? 'Build Experiment' : 'Set Measurement Bases'}>{compactTab === 'build' ? 'Build Experiment' : 'Set Measurement Bases'}</h3>
-                <button
-                  type="button"
-                  className="tab-switch-button"
-                  onClick={() => setCompactTab((t) => (t === 'build' ? 'bases' : 'build'))}
-                >
-                  {compactTab === 'build' ? 'Set Measurement Bases' : 'Build Experiment'} ▸
-                </button>
-              </div>
-              <div className="compact-tab-stack">
-                <div className={`compact-tab-pane ${compactTab === 'build' ? '' : 'compact-tab-hidden'}`}>
-                  <BuildExperimentPanel addSternGerlach={addSternGerlach} expMode={expMode} setExpMode={setExpMode} controlsLocked={controlsLocked} displayBools={displayBools} setDisplayBools={setDisplayBools} showHeader={false} />
-                </div>
-                <div className={`compact-tab-pane ${compactTab === 'bases' ? '' : 'compact-tab-hidden'}`}>
-                  <SetMeasurementBasesPanel experiment={experiment} setExperiment={setExperiment} controlsLocked={controlsLocked} expMode={expMode} resetDataCollection={resetDataCollection} showHeader={false} />
-                </div>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="control-bar-group">
-                <BuildExperimentPanel addSternGerlach={addSternGerlach} expMode={expMode} setExpMode={setExpMode} controlsLocked={controlsLocked} displayBools={displayBools} setDisplayBools={setDisplayBools} />
-              </div>
-              <div className="control-bar-group">
-                <SetMeasurementBasesPanel experiment={experiment} setExperiment={setExperiment} controlsLocked={controlsLocked} expMode={expMode} resetDataCollection={resetDataCollection} />
-              </div>
-            </>
-          )}
+          <div className="control-bar-group setup-experiment-group">
+            <SetUpExperimentPanel
+              experiment={experiment}
+              setExperiment={setExperiment}
+              addSternGerlach={addSternGerlach}
+              expMode={expMode}
+              setExpMode={setExpMode}
+              controlsLocked={controlsLocked}
+              displayBools={displayBools}
+              setDisplayBools={setDisplayBools}
+              resetDataCollection={resetDataCollection}
+            />
+          </div>
           {/* Data Collection Controls */}
           <div className="control-bar-group">
             <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Data Collection Controls</h3>
-            <div style = {{ padding: '2px', display: 'flex', flexDirection: 'row', gap: '20px' }}>
-              <label><input type="radio" name="DCmode" value="single" checked={expMode.dc === 'single'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} disabled={expMode.build !== 0} />One at a time</label>
-              <label><input type="radio" name="DCmode" value="stream" checked={expMode.dc === 'stream'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} disabled={expMode.build !== 0} />Continuous</label>
+            <div style = {{ display: 'flex', flexDirection: 'row', gap: '10px', alignItems: 'center' }}>
+              <p style={{ fontSize: '14px', fontWeight: '500' }}>Mode:</p>
+              <div style = {{ padding: '2px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <label><input type="radio" name="DCmode" value="single" checked={expMode.dc === 'single'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} disabled={expMode.build !== 0} />One at a time</label>
+                <label><input type="radio" name="DCmode" value="stream" checked={expMode.dc === 'stream'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} disabled={expMode.build !== 0} />Continuous</label>
+              </div>
             </div>
             <div className="control-group" style={{ marginTop: '0.5em' }}>
               <SliderPlusTextboxControl
@@ -481,7 +536,7 @@ export default function App() {
                 onChangeNum={(val) => {setExpMode({ ...expMode, rate: val });}}
                 min={0.0}
                 max={100}
-                step={0.1}
+                step={1.0}
                 disabled={(expMode.build !== 0) || (expMode.dc === 'single')}
               />
             </div>
@@ -497,13 +552,16 @@ export default function App() {
             </button>
           </div>
           {/* Histogram canvas area */}
-          <div className="control-bar-group" style={{ flexDirection: 'row', flex: '1 1 auto', gap: '10px', minWidth: '0' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <h3 style={{ padding: '6px 0px 4px 0px' }}>Chart Options</h3>
-              <div style = {{ padding: '2px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label><input type="radio" name="barLabelMode" value={0} disabled={expMode.build !== 0} checked={histDisplayBools.showPercentages === 0} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) });}} />Counts</label>
-                <label><input type="radio" name="barLabelMode" value={1} disabled={expMode.build !== 0} checked={histDisplayBools.showPercentages === 1} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) });}} />Percentages</label>
-                <label><input type="radio" name="barLabelMode" value={2} disabled={expMode.build !== 0} checked={histDisplayBools.showPercentages === 2} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) });}} />Both</label>
+          <div className="control-bar-group" style={{ flexDirection: 'row', flex: '1 1 auto', gap: '10px', minWidth: histDisplayBools.showLegend ? '650px' : '450px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <h3 style={{ padding: '0px 0px 4px 0px' }}>Chart Options</h3>
+              <div style = {{ padding: '0px', display: 'flex', flexDirection: 'row', gap: '3px', alignItems: 'center' }}>
+                <p style={{ padding: '0px 4px 0 0', fontSize: '14px', fontWeight: '500' }}>Show:</p>
+                <div style = {{ padding: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <label><input type="radio" name="barLabelMode" value={0} disabled={expMode.build !== 0} checked={histDisplayBools.showPercentages === 0} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) });}} />Counts</label>
+                  <label><input type="radio" name="barLabelMode" value={1} disabled={expMode.build !== 0} checked={histDisplayBools.showPercentages === 1} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) });}} />Percentages</label>
+                  <label><input type="radio" name="barLabelMode" value={2} disabled={expMode.build !== 0} checked={histDisplayBools.showPercentages === 2} onChange={(event) => {setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) });}} />Both</label>
+                </div>
               </div>
               <label style={{ padding: '0px 0 0 0' }}>
                 <input type="checkbox" disabled={expMode.build !== 0} checked={histDisplayBools.showErrorBars} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showErrorBars: e.target.checked })} />
@@ -521,10 +579,11 @@ export default function App() {
                 <input type="checkbox" disabled={expMode.build !== 0} checked={histDisplayBools.showTheory} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showTheory: e.target.checked })} />
                 Theoretical probabilities
               </label>
+              <label style={{ padding: '4px 0 0 0', fontWeight: '500', width: '220px' }}>Right-click the plot to copy/save!</label>
             </div>
             <div className="histogram-panel">
               <div className="histogram-canvas-wrap">
-                <Histogram experiment={experiment} displayBools={histDisplayBools} />
+                <Histogram experiment={experiment} displayBools={histDisplayBools} setDisplayBools={setHistDisplayBools} />
               </div>
             </div>
           </div>

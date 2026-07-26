@@ -1,6 +1,7 @@
-import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { upEigenstate, downEigenstate, applyT, sampleOvenState, cAbs2 } from './physics';
 import { PC_COLORS } from './colors';
+import { arrowWidth, drawArrow } from './canvasArrow';
 import sgImage from './assets/SG.png';
 import pcImage from './assets/PC.png';
 import bbImage from './assets/BB.png';
@@ -23,13 +24,28 @@ const SG_OUTPUT_DOWN = 158*(SG_HEIGHT/225);
 // PC image dimensions and specs for use throughout
 const PC_HEIGHT = 50;
 const PC_WIDTH = 100;
-const PC_INPUT = PC_HEIGHT/2;
-const PC_COLOR_DOT_X = 340*(PC_WIDTH/400);
-const PC_COLOR_DOT_R = 40*(PC_WIDTH/400);
+//const PC_INPUT = PC_HEIGHT/2;
+// Identifying color stripe -- runs the PC's whole short (vertical)
+// dimension, in place of the small dot that used to sit here, so the color
+// that ties this detector to its histogram bar is hard to miss while
+// placing it. Kept at the old dot's x and diameter; the source image is
+// fully opaque across that band top to bottom, so a full-height rect never
+// overhangs the body's rounded corners.
+const PC_STRIPE_CENTER_X = 330*(PC_WIDTH/400);
+const PC_STRIPE_WIDTH = 50*(PC_WIDTH/400);
+const PC_STRIPE_ALPHA = 0.5;
 const PC_TEXT_CENTER_X = 190*(PC_WIDTH/400);
+// The white label plate spans y 93..166 of the source image's 200px
+// height: the running count sits centered in it, and the SG/arm label goes
+// in the clear space above it (centered between the body top and y=93).
+const PC_COUNT_CENTER_Y = 132*(PC_HEIGHT/200) - PC_HEIGHT/2;
+const PC_LABEL_CENTER_Y = 50*(PC_HEIGHT/200) - PC_HEIGHT/2;
+const PC_HIGHLIGHT_PADDING = 6;
+const PC_HIGHLIGHT_LINE_WIDTH = 3;
 const BB_HEIGHT = 50;
 const BB_WIDTH = 9;
-const BB_INPUT = BB_HEIGHT/2;
+//const BB_INPUT = BB_HEIGHT/2;
+
 // Path specs for particles
 // In path constrained by SG spacing and geometry. The arc must satisfy two
 // constraints at once -- horizontal run R*sin(angle) = D and vertical rise
@@ -42,8 +58,11 @@ const IN_PATH_ARC_RADIUS = Math.abs(SG_SPACING - SG_WIDTH)/Math.sin(IN_PATH_ARC_
 // Out path not constrained, radius and angle chosen for aesthetics
 const OUT_PATH_ARC_RADIUS = 150;
 const OUT_PATH_ARC_ANGLE = 0.7; // rad
-// Snap radius for UI
-const SNAP_RADIUS = 50;  // px — how close the cursor must be to snap
+
+// For placement and deletion snapping and finding -- shared by delete-mode's
+// target highlight and build-mode's site circles, so hitbox size always
+// matches the circle actually drawn on screen.
+const SITE_MARGIN = 1.3; // multiplier on half-the-longest-dimension
 
 // Particle animation specs -- all tunable
 const PARTICLE_START_X = OVEN_X0 + OVEN_WIDTH;     // x-value where particles first appear
@@ -53,6 +72,10 @@ const BEAM_TRANSVERSE_WIDTH = 14;  // px, full spread of the (uniform) beam jitt
 const PARTICLE_RADIUS = 4;
 const PARTICLE_COLOR = '#3498db';  // same blue as .control-bar-button etc.
 const ESCAPE_RUN_LENGTH = 1200;    // px of straight travel for a particle that exits the chain unmeasured
+
+const ERROR_TEXT_MAX_WIDTH = 200;  // px -- how far the wrapped warning text may run horizontally
+const ERROR_TEXT_LINE_HEIGHT = 18; // px between wrapped lines
+const ERROR_TEXT_GAP = 14;         // px between a warning circle's edge and its text
 
 const SUB_LABELS = "₁₂₃₄₅₆₇₈₉";
 function getSGLabel(angles, id) {
@@ -74,6 +97,9 @@ function useImage(src) {
 
   useEffect(() => {
     let cancelled = false;
+    // There's a lint error here, but the dependency, src, is static, so 
+    // the setting won't cause the re-render that's warned about
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoaded(false);
     imgRef.current = null;
 
@@ -91,6 +117,15 @@ function useImage(src) {
   }, [src]);
 
   return [imgRef, loaded];
+}
+// The five images (oven, ovenOff, sg, pc, bb) load independently and in no
+// guaranteed order -- ctx.drawImage throws a TypeError, uncaught all the
+// way up through React (no error boundary here), if handed a ref whose
+// image hasn't loaded yet (imgRef.current is still null). Every drawImage
+// call needs to check *its own* image's readiness, not some other image's,
+// or a slow/unlucky load order crashes the whole canvas until reload.
+function imageReady(imgRef) {
+  return imgRef.current !== null && imgRef.current.complete;
 }
 
 // This is the fundemantal function of the first part of the animation pipeline!!!
@@ -147,6 +182,17 @@ function getNextColorId(experiment) {
   return null; // more PCs placed at once than the palette has colors
 }
 
+// Dimensions of an already-placed component -- 'bb' is stored as a bare
+// string, a placed particle counter as { type: 'pc', ... }.
+function getComponentDims(component) {
+  return component === 'bb' ? { width: BB_WIDTH, height: BB_HEIGHT } : { width: PC_WIDTH, height: PC_HEIGHT };
+}
+
+// Dimensions of whatever build mode is currently about to place.
+function getNewComponentDims(buildMode) {
+  return buildMode === 1 ? { width: PC_WIDTH, height: PC_HEIGHT } : { width: BB_WIDTH, height: BB_HEIGHT };
+}
+
 // Mouse behavior handlers for placing new components
 // The anchor point (input edge, matching where drawImage's local origin sits)
 // and rotation angle for a given SG's up/down output site.
@@ -177,9 +223,6 @@ function getPlacementSiteCenter(site, width) {
     y: site.y + (width / 2) * Math.sin(site.angle),
   };
 }
-
-// For placement and deletion snapping and finding
-const DELETE_MARGIN = 1.3; // multiplier on half-the-longest-dimension, for all delete hitboxes/highlights
 
 function getSGX0(sgIndex) {
   return SG_START_X + sgIndex * SG_SPACING;
@@ -294,24 +337,51 @@ function buildAnimationPath(experiment, axis, sampled) {
   return { segments, terminal };
 }
 
-// Placement only — unchanged from before, only considers empty arm sites.
-function findNearestPlacementSite(mouseX, mouseY, experiment, axis, width) {
-  let closest = null;
-  let closestDist = SNAP_RADIUS;
+// Every site the currently-selected build-mode component could legally go --
+// empty arms, plus occupied arms it's allowed to replace (anything can
+// replace a BB; only a BB may replace a PC, since silently overwriting a PC
+// would also silently discard its collected counts). Each candidate's
+// center/radius are sized to whatever's already there, or to the new
+// component's own size if the site is empty -- shared by the nearest-site
+// snap logic below and by drawScene's site-circle highlight, so the two
+// always agree with each other.
+function getPlacementCandidates(experiment, axis, buildMode) {
+  const newDims = getNewComponentDims(buildMode);
+  const candidates = [];
 
   experiment.forEach((sg, sgIndex) => {
     ['up', 'down'].forEach((arm) => {
-      if (sg[arm] !== null) return;
-
-      const site = getPlacementSite(sgIndex, arm, axis);
-      const center = getPlacementSiteCenter(site, width);
-      const dist = Math.hypot(mouseX - center.x, mouseY - center.y);
-
-      if (dist < closestDist) {
-        closestDist = dist;
-        closest = { sgIndex, arm, site };
+      const existing = sg[arm];
+      if (existing !== null) {
+        if (existing.type === 'pc' && buildMode === 1) return;
+        if (existing === 'bb' && buildMode === 2) return;
       }
+
+      const dims = existing === null ? newDims : getComponentDims(existing);
+      const site = getPlacementSite(sgIndex, arm, axis);
+      const center = getPlacementSiteCenter(site, dims.width);
+      const radius = (Math.max(dims.width, dims.height) / 2) * SITE_MARGIN;
+
+      candidates.push({ sgIndex, arm, site, center, radius });
     });
+  });
+
+  return candidates;
+}
+
+// Nearest candidate site within its own circle -- each site's snap radius
+// is exactly the radius of the circle drawn there (see getPlacementCandidates),
+// so a big existing component is easier to hit than an empty site would be.
+function findNearestPlacementSite(mouseX, mouseY, experiment, axis, buildMode) {
+  let closest = null;
+  let closestDist = Infinity;
+
+  getPlacementCandidates(experiment, axis, buildMode).forEach((candidate) => {
+    const dist = Math.hypot(mouseX - candidate.center.x, mouseY - candidate.center.y);
+    if (dist < candidate.radius && dist < closestDist) {
+      closestDist = dist;
+      closest = candidate;
+    }
   });
 
   return closest;
@@ -326,7 +396,7 @@ function findNearestDeletable(mouseX, mouseY, experiment, axis) {
   experiment.forEach((sg, sgIndex) => {
     // The SG apparatus body itself
     const sgCenter = getSGCenter(sgIndex, axis);
-    const sgRadius = (Math.max(SG_WIDTH, SG_HEIGHT) / 2) * DELETE_MARGIN;
+    const sgRadius = (Math.max(SG_WIDTH, SG_HEIGHT) / 2) * SITE_MARGIN;
     const sgDist = Math.hypot(mouseX - sgCenter.x, mouseY - sgCenter.y);
 
     if (sgDist < sgRadius && sgDist < closestDist) {
@@ -342,7 +412,7 @@ function findNearestDeletable(mouseX, mouseY, experiment, axis) {
       const height = sg[arm].type === 'pc' ? PC_HEIGHT : BB_HEIGHT;
       const site = getPlacementSite(sgIndex, arm, axis);
       const center = getPlacementSiteCenter(site, width);
-      const radius = (Math.max(width, height) / 2) * DELETE_MARGIN;
+      const radius = (Math.max(width, height) / 2) * SITE_MARGIN;
       const dist = Math.hypot(mouseX - center.x, mouseY - center.y);
 
       if (dist < radius && dist < closestDist) {
@@ -369,8 +439,7 @@ function getPreviewExperiment(experiment, expMode, mousePos, axis) {
   if (!mousePos) return null;
 
   if (expMode.build === 1 || expMode.build === 2) {
-    const width = expMode.build === 1 ? PC_WIDTH : BB_WIDTH;
-    const snapped = findNearestPlacementSite(mousePos.x, mousePos.y, experiment, axis, width);
+    const snapped = findNearestPlacementSite(mousePos.x, mousePos.y, experiment, axis, expMode.build);
     if (!snapped) return null;
     const next = [...experiment];
     const placed = expMode.build === 1 ? { type: 'pc', data: 0, colorId: null } : 'bb';
@@ -389,14 +458,50 @@ function getPreviewExperiment(experiment, expMode, mousePos, axis) {
   return null;
 }
 
+// --- Start-validation warning -----------------------------------------
+// Wraps `text` into lines no wider than ERROR_TEXT_MAX_WIDTH (in the
+// context's current font), breaking on whitespace -- keeps the on-canvas
+// error explanation from running far off to the side of the panel.
+function wrapText(ctx, text, maxWidth) {
+  const words = text.split(' ');
+  const lines = [];
+  let current = '';
+
+  words.forEach((word) => {
+    const candidate = current ? `${current} ${word}` : word;
+    if (current && ctx.measureText(candidate).width > maxWidth) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+  });
+  if (current) lines.push(current);
+
+  return lines;
+}
+
+// Draws `text`, left-justified and word-wrapped to ERROR_TEXT_MAX_WIDTH, as
+// a block vertically centered on yCenter -- so a warning's text always
+// reads as "pointing at" the same height regardless of how many lines it
+// wraps to. Caller is expected to have already set ctx.fillStyle.
+function drawWrappedText(ctx, text, x, yCenter) {
+  ctx.font = '18px Arial';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+
+  const lines = wrapText(ctx, text, ERROR_TEXT_MAX_WIDTH);
+  const startY = yCenter - ((lines.length - 1) * ERROR_TEXT_LINE_HEIGHT) / 2;
+  lines.forEach((line, i) => ctx.fillText(line, x, startY + i * ERROR_TEXT_LINE_HEIGHT));
+}
+
 const LabPanel = forwardRef(function LabPanel(
-  { experiment, setExperiment, expMode, setExpMode, displayBools, setParticleCount, resetToken, resetDataCollection, tabVisible },
+  { experiment, setExperiment, expMode, setExpMode, displayBools, setParticleCount, resetToken, resetDataCollection, tabVisible, startError, hoveredDetector },
   ref
 ) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
-  const [offset, setOffset] = useState({ x: 0, y: 0 }); // Used for mouse dragging events
   const [axis, setAxis] = useState(300); // y-coordinate of halfway down the canvas; determines position of all user-created devices
   // These refs hold the SG and PC images for all time, using the loading hook
   const [ovenImageRef, ovenImageLoaded] = useImage(ovenImage);
@@ -491,8 +596,22 @@ const LabPanel = forwardRef(function LabPanel(
       ctx.drawImage(ovenOffImageRef.current, OVEN_X0, axis - OVEN_HEIGHT / 2, OVEN_WIDTH, OVEN_HEIGHT);
     }
 
+    // Build mode's snap target, computed once up front so both the SG loop
+    // below (which needs to skip drawing whatever's really occupying the
+    // snapped site) and the site-circle overlay after it agree on the same
+    // site.
+    const buildSnappedSite = (expMode.build === 1 || expMode.build === 2) && mousePos
+      ? findNearestPlacementSite(mousePos.x, mousePos.y, experiment, axis, expMode.build)
+      : null;
+
+    // Whichever image the three build-mode overlay blocks below actually
+    // draw -- pc in PC mode, bb in BB mode -- so each can check readiness
+    // of the one it needs instead of always checking pcImageRef regardless
+    // of mode (the bug: in BB mode that let a not-yet-loaded bbImageRef
+    // through and crashed on drawImage).
+    const activeComponentImageRef = expMode.build === 1 ? pcImageRef : bbImageRef;
     // Draw the SGs, one copy of the ref image each, plus the basis labels
-    if (sgImageRef.current && sgImageRef.current.complete) {
+    if (imageReady(sgImageRef) && imageReady(pcImageRef) && imageReady(bbImageRef)) {
       if (displayBools.previewPaths) {
         // While hovering a valid placement/removal target, show the *old*
         // path (still real until the click actually lands) in light gray
@@ -522,72 +641,140 @@ const LabPanel = forwardRef(function LabPanel(
         ctx.textBaseline = 'middle';
         ctx.fillText(getSGLabel(sg.basis, i), x0+62, axis);
 
-        // Draw SGs and BBs as needed
+        // Draw whatever's really placed on each arm -- except the site
+        // currently snapped to in build mode, whose occupant (if any) is
+        // about to be replaced, so the new component is drawn there instead
+        // by the overlay below.
         ['up', 'down'].forEach((arm) => {
-          // If we're not in a preview mode and there's no component here, don't draw anything
-          if (expMode.build < 1 && sg[arm] === null) return;
-          // We're drawing SOMETHING
+          if (sg[arm] === null) return;
+          if (buildSnappedSite && buildSnappedSite.sgIndex === i && buildSnappedSite.arm === arm) return;
+
           const site = getPlacementSite(i, arm, axis);
           ctx.save();
           ctx.translate(site.x, site.y);
           ctx.rotate(site.angle);
-          if (sg[arm] !== null) {
-            if (sg[arm].type === 'pc') {
-              ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT);
-              if (sg[arm].colorId !== null) {
-                ctx.beginPath();
-                ctx.arc(PC_COLOR_DOT_X, 0, PC_COLOR_DOT_R, 0, Math.PI * 2);
-                ctx.fillStyle = PC_COLORS[sg[arm].colorId];
-                ctx.fill();
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 1.5;
-                ctx.stroke();
-              }
-              if (sg[arm].data !== null) {
-                ctx.fillStyle = '#303030';
-                ctx.font = '12px Arial';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(sg[arm].data, PC_TEXT_CENTER_X, 0);
-              }
-            } else {
-              ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
+          if (sg[arm].type === 'pc') {
+            ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT);
+            if (sg[arm].colorId !== null) {
+              ctx.save();
+              ctx.globalAlpha = PC_STRIPE_ALPHA;
+              ctx.fillStyle = PC_COLORS[sg[arm].colorId];
+              ctx.fillRect(PC_STRIPE_CENTER_X - PC_STRIPE_WIDTH / 2, -PC_HEIGHT / 2, PC_STRIPE_WIDTH, PC_HEIGHT);
+              ctx.restore();
+            }
+            // Same "SG1<arrow>" wording the histogram puts under each bar,
+            // so the detector reads identically in both places without the
+            // student having to match colors through the legend. The arrow
+            // itself is a filled path (drawArrow), not a Unicode glyph --
+            // see canvasArrow.js for why.
+            ctx.fillStyle = '#666';
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            const pcLabelText = `SG${i + 1}`;
+            const pcArrowSize = 11;
+            const pcArrowGap = 3;
+            const pcLabelTextWidth = ctx.measureText(pcLabelText).width;
+            const pcLabelWidth = pcLabelTextWidth + pcArrowGap + arrowWidth(pcArrowSize);
+            const pcLabelX0 = PC_TEXT_CENTER_X - pcLabelWidth / 2;
+            ctx.fillText(pcLabelText, pcLabelX0, PC_LABEL_CENTER_Y);
+            drawArrow(
+              ctx,
+              pcLabelX0 + pcLabelTextWidth + pcArrowGap + arrowWidth(pcArrowSize) / 2,
+              PC_LABEL_CENTER_Y,
+              pcArrowSize,
+              arm === 'up' ? 'up' : 'down'
+            );
+            if (sg[arm].data !== null) {
+              ctx.fillStyle = sg[arm].colorId !== null ? PC_COLORS[sg[arm].colorId] : '#303030';
+              ctx.font = '12px Arial';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(sg[arm].data, PC_TEXT_CENTER_X, PC_COUNT_CENTER_Y);
+            }
+            if (hoveredDetector && hoveredDetector.sgIndex === i && hoveredDetector.arm === arm && sg[arm].colorId !== null) {
+              ctx.strokeStyle = PC_COLORS[sg[arm].colorId];
+              ctx.lineWidth = PC_HIGHLIGHT_LINE_WIDTH;
+              ctx.strokeRect(
+                -PC_HIGHLIGHT_PADDING,
+                -PC_HEIGHT / 2 - PC_HIGHLIGHT_PADDING,
+                PC_WIDTH + PC_HIGHLIGHT_PADDING * 2,
+                PC_HEIGHT + PC_HIGHLIGHT_PADDING * 2
+              );
             }
           } else {
-            // If we've reached this point, we're previewing sites
-            ctx.globalAlpha = 0.5;
-            expMode.build === 1 ? ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
-            ctx.globalAlpha = 1.0;
+            ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
           }
           ctx.restore();
         });
       });
     }
 
-    // If we're in a placement mode, draw an image of the thing being placed to drag along the cursor
-    if (expMode.build > 0 && mousePos && pcImageRef.current && pcImageRef.current.complete) {
-      const snapped = findNearestPlacementSite(mousePos.x, mousePos.y, experiment, axis, expMode.build === 1 ? PC_WIDTH : BB_WIDTH);
-
-      if (snapped) {
-        const center = getPlacementSiteCenter(snapped.site, expMode.build === 1 ? PC_WIDTH : BB_WIDTH);
-        ctx.beginPath();
-        ctx.arc(
-          center.x, center.y,
-          expMode.build === 1 ? Math.max(PC_WIDTH, PC_HEIGHT) / 2 * 1.3 : Math.max(BB_WIDTH, BB_HEIGHT) / 2 * 1.3,
-          0, Math.PI * 2);
-        ctx.strokeStyle = '#2ecc71';
+    // Build mode: highlight every site the new component could legally go --
+    // one circle per site, sized to whatever's already there (or to the new
+    // component itself, if the site is empty) -- plus a half-opacity preview
+    // of the new component at sites that don't have anything on them yet.
+    // Drawn unconditionally whenever build mode is active, not just once the
+    // cursor happens to be over the canvas, so the sites are visible the
+    // instant build mode is entered. Left in place for every site except the
+    // one currently snapped to below, which gets its own green circle and
+    // full-opacity component instead -- drawing both there would double up.
+    if (expMode.build > 0 && imageReady(activeComponentImageRef)) {
+      getPlacementCandidates(experiment, axis, expMode.build).forEach((candidate) => {
+        if (buildSnappedSite && candidate.sgIndex === buildSnappedSite.sgIndex && candidate.arm === buildSnappedSite.arm) return;
+        ctx.strokeStyle = '#f39c12';
         ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(candidate.center.x, candidate.center.y, candidate.radius, 0, Math.PI * 2);
         ctx.stroke();
 
-        ctx.save();
-        ctx.translate(snapped.site.x, snapped.site.y);
-        ctx.rotate(snapped.site.angle);
-        expMode.build === 1 ? ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
-        ctx.restore();
-      } else {
-        expMode.build === 1 ? ctx.drawImage(pcImageRef.current, mousePos.x - PC_WIDTH / 2, mousePos.y - PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, mousePos.x - BB_WIDTH / 2, mousePos.y - BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
-      }
+        if (experiment[candidate.sgIndex][candidate.arm] === null) {
+          ctx.save();
+          ctx.translate(candidate.site.x, candidate.site.y);
+          ctx.rotate(candidate.site.angle);
+          ctx.globalAlpha = 0.5;
+          expMode.build === 1
+            ? ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT)
+            : ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
+          ctx.globalAlpha = 1.0;
+          ctx.restore();
+        }
+      });
     }
+    // Build mode: cursor has snapped to a site -- on top of the candidate
+    // circles/previews above, show a green circle (always sized to the new
+    // component, not whatever it's replacing) around that one site, and
+    // draw the new component there at full opacity, standing in for
+    // whatever's really occupying it (skipped above, in the SG loop).
+    if (expMode.build > 0 && buildSnappedSite && imageReady(activeComponentImageRef)) {
+      const newDims = getNewComponentDims(expMode.build);
+      const center = getPlacementSiteCenter(buildSnappedSite.site, newDims.width);
+
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, (Math.max(newDims.width, newDims.height) / 2) * SITE_MARGIN, 0, Math.PI * 2);
+      ctx.strokeStyle = '#2ecc71';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.save();
+      ctx.translate(buildSnappedSite.site.x, buildSnappedSite.site.y);
+      ctx.rotate(buildSnappedSite.site.angle);
+      expMode.build === 1 ? ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT) : ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
+      ctx.restore();
+    }
+    // Build mode: not snapped anywhere -- follow the cursor with a
+    // half-opacity, unrotated preview of the new component, same as the
+    // pre-replacement UI's drag-along ghost. Once the cursor snaps to a
+    // site (block above), this stops -- the docked full-opacity component
+    // there is the only preview shown.
+    if (expMode.build > 0 && mousePos && !buildSnappedSite && imageReady(activeComponentImageRef)) {
+      ctx.globalAlpha = 0.5;
+      expMode.build === 1
+        ? ctx.drawImage(pcImageRef.current, mousePos.x - PC_WIDTH / 2, mousePos.y - PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT)
+        : ctx.drawImage(bbImageRef.current, mousePos.x - BB_WIDTH / 2, mousePos.y - BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
+      ctx.globalAlpha = 1.0;
+    }
+
     // Hovering over an existing component in delete mode
     if (expMode.build === -1 && mousePos) {
       const target = findNearestDeletable(mousePos.x, mousePos.y, experiment, axis);
@@ -609,13 +796,52 @@ const LabPanel = forwardRef(function LabPanel(
             const site = getPlacementSite(target.sgIndex, arm, axis);
             const armCenter = getPlacementSiteCenter(site, width);
             ctx.beginPath();
-            ctx.arc(armCenter.x, armCenter.y, (Math.max(width, height) / 2) * DELETE_MARGIN, 0, Math.PI * 2);
+            ctx.arc(armCenter.x, armCenter.y, (Math.max(width, height) / 2) * SITE_MARGIN, 0, Math.PI * 2);
             ctx.stroke();
           });
         }
       }
     }
-  }, [experiment, expMode, displayBools, mousePos, axis, canvasDims]);
+    
+    // Start-validation warning: bright red circle(s) around whatever's
+    // missing -- the not-yet-existing first SG, or each open arm on the
+    // last one -- with its own left-justified, word-wrapped explanation
+    // vertically centered on that circle (not on `axis` -- an open "up" and
+    // open "down" arm each get their own message at their own height, not
+    // one message shared between the two). Only ever set by App in
+    // response to an actual Make One Particle/Start press (see the
+    // startError prop), and only ever cleared or narrowed by App from
+    // there -- never re-derived from scratch -- so fixing one problem can't
+    // eagerly reveal a different one; see recheckStartError. Drawn last so
+    // it always sits on top of any build-mode overlay underneath.
+    if (startError) {
+      const sites = startError.kind === 'noSG'
+        ? [{
+            center: getSGCenter(0, axis),
+            radius: (Math.max(SG_WIDTH, SG_HEIGHT) / 2) * SITE_MARGIN,
+            message: 'Add a Stern-Gerlach apparatus before starting.',
+          }]
+        : startError.openArms.map((arm) => {
+            const site = getPlacementSite(startError.sgIndex, arm, axis);
+            const center = getPlacementSiteCenter(site, PC_WIDTH);
+            return {
+              center,
+              radius: (Math.max(PC_WIDTH, PC_HEIGHT) / 2) * SITE_MARGIN,
+              message: `The ${arm} path is unterminated -- add a particle counter or beam block here before starting.`,
+            };
+          });
+
+      ctx.strokeStyle = '#ff0000';
+      ctx.fillStyle = '#ff0000';
+      ctx.lineWidth = 3;
+      sites.forEach(({ center, radius, message }) => {
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        drawWrappedText(ctx, message, center.x + radius + ERROR_TEXT_GAP, center.y);
+      });
+    }
+  }, [experiment, expMode, displayBools, mousePos, axis, canvasDims, startError, hoveredDetector, bbImageRef, pcImageRef, ovenImageRef, ovenOffImageRef, sgImageRef]);
 
   const drawParticles = useCallback((ctx) => {
     ctx.fillStyle = PARTICLE_COLOR;
@@ -730,16 +956,10 @@ const LabPanel = forwardRef(function LabPanel(
     }
   }, [tabVisible]);
 
-  // `experimentOverride` lets a caller that just synchronously updated
-  // `experiment` (e.g. auto-inserting a beam block right before starting)
-  // spawn against the fresh value immediately, since setExperiment is
-  // async and this component's own `experiment` prop won't reflect it
-  // until the next render.
-  const spawnParticle = (experimentOverride) => {
-    const exp = experimentOverride ?? experiment;
-    if (exp.length === 0) return; // nothing to simulate
-    const sampled = samplePath(exp);
-    const path = buildAnimationPath(exp, axis, sampled);
+  const spawnParticle = () => {
+    if (experiment.length === 0) return; // nothing to simulate
+    const sampled = samplePath(experiment);
+    const path = buildAnimationPath(experiment, axis, sampled);
     particlesRef.current = [...particlesRef.current, { ...path, segmentIndex: 0, segmentElapsed: 0 }];
     setParticleCount(particlesRef.current.length);
     // The loop only advances itself while already running (see tickRef
@@ -767,7 +987,7 @@ const LabPanel = forwardRef(function LabPanel(
     const canvas = canvasRef.current;
     if (!canvas) return;
     drawScene(canvas.getContext('2d'));
-  }, [experiment, expMode, ovenImageLoaded, ovenOffImageLoaded, sgImageLoaded, pcImageLoaded, mousePos, axis, canvasDims, displayBools, drawScene]);
+  }, [experiment, expMode, ovenImageLoaded, ovenOffImageLoaded, sgImageLoaded, pcImageLoaded, bbImageLoaded, mousePos, axis, canvasDims, displayBools, startError, drawScene]);
 
   // Mouse handlers
   const handleClick = (e) => {
@@ -792,11 +1012,12 @@ const LabPanel = forwardRef(function LabPanel(
           return next;
         });
       }
+      setExpMode({ ...expMode, build: 0 });
       resetDataCollection(); // deleting a component is a setup change
       return;
     }
 
-    const snapped = findNearestPlacementSite(mouseX, mouseY, experiment, axis, expMode.build === 1 ? PC_WIDTH : BB_WIDTH);
+    const snapped = findNearestPlacementSite(mouseX, mouseY, experiment, axis, expMode.build);
     if (!snapped) return;
 
     const { sgIndex, arm } = snapped;
@@ -810,6 +1031,7 @@ const LabPanel = forwardRef(function LabPanel(
       }
       return next;
     });
+    setExpMode({ ...expMode, build: 0 });
     resetDataCollection(); // placing a component is a setup change
   };
 
@@ -837,7 +1059,6 @@ const LabPanel = forwardRef(function LabPanel(
         ref={canvasRef}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
-        onMouseUp={handleClick}
         onClick={handleClick}
         style={{
           display: 'block',
