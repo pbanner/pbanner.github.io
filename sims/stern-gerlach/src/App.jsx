@@ -342,7 +342,13 @@ export default function App() {
     showTheory: false,
     showLegend: true,
     showTotal: true,
-    showErrorBars: false
+    showErrorBars: false,
+    // Not quite a display toggle like the rest of these -- it's which detector
+    // (as { sgIndex, arm }, or null) the mouse is currently over a bar for
+    // in the histogram, shared with LabPanel so it can highlight that PC.
+    // Folded in here rather than a separate useState to avoid threading yet
+    // another prop pair through both components.
+    hoveredDetector: null
   });
   // build = 0 for normal operation, 1 for placing a particle counter, 2 for placing
   // a beam block, -1 for deleting stuff
@@ -493,6 +499,7 @@ export default function App() {
           resetDataCollection={resetDataCollection}
           tabVisible={tabVisible}
           startError={liveStartError}
+          hoveredDetector={histDisplayBools.hoveredDetector}
         />
       </div>
 
@@ -576,7 +583,7 @@ export default function App() {
             </div>
             <div className="histogram-panel">
               <div className="histogram-canvas-wrap">
-                <Histogram experiment={experiment} displayBools={histDisplayBools} />
+                <Histogram experiment={experiment} displayBools={histDisplayBools} setDisplayBools={setHistDisplayBools} />
               </div>
             </div>
           </div>

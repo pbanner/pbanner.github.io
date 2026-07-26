@@ -40,6 +40,8 @@ const PC_TEXT_CENTER_X = 190*(PC_WIDTH/400);
 // in the clear space above it (centered between the body top and y=93).
 const PC_COUNT_CENTER_Y = 132*(PC_HEIGHT/200) - PC_HEIGHT/2;
 const PC_LABEL_CENTER_Y = 50*(PC_HEIGHT/200) - PC_HEIGHT/2;
+const PC_HIGHLIGHT_PADDING = 6;
+const PC_HIGHLIGHT_LINE_WIDTH = 3;
 const BB_HEIGHT = 50;
 const BB_WIDTH = 9;
 //const BB_INPUT = BB_HEIGHT/2;
@@ -494,7 +496,7 @@ function drawWrappedText(ctx, text, x, yCenter) {
 }
 
 const LabPanel = forwardRef(function LabPanel(
-  { experiment, setExperiment, expMode, setExpMode, displayBools, setParticleCount, resetToken, resetDataCollection, tabVisible, startError },
+  { experiment, setExperiment, expMode, setExpMode, displayBools, setParticleCount, resetToken, resetDataCollection, tabVisible, startError, hoveredDetector },
   ref
 ) {
   const canvasRef = useRef(null);
@@ -690,6 +692,16 @@ const LabPanel = forwardRef(function LabPanel(
               ctx.textBaseline = 'middle';
               ctx.fillText(sg[arm].data, PC_TEXT_CENTER_X, PC_COUNT_CENTER_Y);
             }
+            if (hoveredDetector && hoveredDetector.sgIndex === i && hoveredDetector.arm === arm && sg[arm].colorId !== null) {
+              ctx.strokeStyle = PC_COLORS[sg[arm].colorId];
+              ctx.lineWidth = PC_HIGHLIGHT_LINE_WIDTH;
+              ctx.strokeRect(
+                -PC_HIGHLIGHT_PADDING,
+                -PC_HEIGHT / 2 - PC_HIGHLIGHT_PADDING,
+                PC_WIDTH + PC_HIGHLIGHT_PADDING * 2,
+                PC_HEIGHT + PC_HIGHLIGHT_PADDING * 2
+              );
+            }
           } else {
             ctx.drawImage(bbImageRef.current, 0, -BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
           }
@@ -829,7 +841,7 @@ const LabPanel = forwardRef(function LabPanel(
         drawWrappedText(ctx, message, center.x + radius + ERROR_TEXT_GAP, center.y);
       });
     }
-  }, [experiment, expMode, displayBools, mousePos, axis, canvasDims, startError, bbImageRef, pcImageRef, ovenImageRef, ovenOffImageRef, sgImageRef]);
+  }, [experiment, expMode, displayBools, mousePos, axis, canvasDims, startError, hoveredDetector, bbImageRef, pcImageRef, ovenImageRef, ovenOffImageRef, sgImageRef]);
 
   const drawParticles = useCallback((ctx) => {
     ctx.fillStyle = PARTICLE_COLOR;

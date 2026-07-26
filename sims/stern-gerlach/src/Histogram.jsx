@@ -34,6 +34,8 @@ const THEORY_LINE_OVERHANG = 6; // extra px each side beyond the bar's own width
 const LOUPE_DIAMETER = 200;  // css px, the magnifier's own on-screen size
 const LOUPE_ZOOM = 10;        // how much the loupe magnifies the chart underneath the cursor
 const LOUPE_INK_SCALE = 1 / LOUPE_ZOOM * 2.0; // shrinks line widths/font sizes before the zoom transform blows them back up, so they render at their normal apparent size instead of getting magnified too
+const HOVER_BORDER_COLOR = '#000000';
+const HOVER_BORDER_WIDTH = 2.5;
 
 // Every PC currently placed in the experiment, in a stable left-to-right
 // order (by SG index, then up before down) -- this is what turns into one
@@ -69,7 +71,7 @@ function niceTicks(minTop, targetCount) {
   return ticks;
 }
 
-export default function Histogram({ experiment, displayBools }) {
+export default function Histogram({ experiment, displayBools, setDisplayBools }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [canvasDims, setCanvasDims] = useState({ width: 300, height: 200 });
@@ -81,6 +83,12 @@ export default function Histogram({ experiment, displayBools }) {
   // loupe is currently centered on -- a ref, not state, since mousemove
   // fires far too often to push through React's render cycle.
   const cursorPosRef = useRef(null);
+
+  // Each bar's own hit-box (in the same CSS-pixel space as canvasDims),
+  // refreshed every main-canvas draw -- a ref, not state, since it's read
+  // only from the mousemove hit-test below, not something the render needs
+  // to react to itself.
+  const barRectsRef = useRef([]);
 
   // Resize -- same devicePixelRatio handling as LabPanel's canvas (see the
   // comment there for why), but using a ResizeObserver rather than a
@@ -225,6 +233,9 @@ export default function Histogram({ experiment, displayBools }) {
     ctx.fillText('Counts', 0, 0);
     ctx.restore();
 
+    // For interactive hovering
+    const isMainDraw = inkScale === 1;
+    if (isMainDraw) barRectsRef.current = [];
     // Bars, one per detector, growing up from the x-axis, colored to match
     // that detector's own identifying dot. Bars belonging to the same SG
     // sit flush against each other with no gap; a gap is inserted only
@@ -256,6 +267,18 @@ export default function Histogram({ experiment, displayBools }) {
 
         ctx.fillStyle = PC_COLORS[d.colorId] ?? '#999999';
         ctx.fillRect(barX, barY, barWidth, barHeight);
+        // For bordering on the bar if hovered over it
+        if (isMainDraw) {
+          barRectsRef.current.push({ sgIndex: d.sgIndex, arm: d.arm, x: barX, y: barY, width: barWidth, height: barHeight });
+        }
+        const isHovered = displayBools.hoveredDetector
+          && displayBools.hoveredDetector.sgIndex === d.sgIndex
+          && displayBools.hoveredDetector.arm === d.arm;
+        if (isHovered) {
+          ctx.strokeStyle = HOVER_BORDER_COLOR;
+          ctx.lineWidth = HOVER_BORDER_WIDTH * inkScale;
+          ctx.strokeRect(barX, barY, barWidth, barHeight);
+        }
 
         // Draw the theory reference lines
         if (theoryOn && dataTotal > 0) {
@@ -440,6 +463,47 @@ export default function Histogram({ experiment, displayBools }) {
     loupeCanvas.style.width = `${LOUPE_DIAMETER}px`;
     loupeCanvas.style.height = `${LOUPE_DIAMETER}px`;
   }, [magnifierOn]);
+
+  // Independent of the magnifier -- always tracks the cursor to see if it's
+  // over a bar, and if so, shares that detector with LabPanel (via
+  // displayBools.hoveredDetector) so it can highlight the matching PC. Only
+  // calls setDisplayBools when the hovered detector actually changes, not
+  // on every mousemove, since the vast majority of moves land on the same
+  // bar (or the same empty space) as the previous one.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    let lastKey = null;
+    const keyOf = (d) => (d ? `${d.sgIndex}-${d.arm}` : null);
+
+    const handleMouseMove = (e) => {
+      if (magnifierOn) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const hit = barRectsRef.current.find(
+        (r) => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height
+      );
+      const next = hit ? { sgIndex: hit.sgIndex, arm: hit.arm } : null;
+      const nextKey = keyOf(next);
+      if (nextKey === lastKey) return;
+      lastKey = nextKey;
+      setDisplayBools((prev) => ({ ...prev, hoveredDetector: next }));
+    };
+    const handleMouseLeave = () => {
+      if (magnifierOn) return;
+      if (lastKey === null) return;
+      lastKey = null;
+      setDisplayBools((prev) => ({ ...prev, hoveredDetector: null }));
+    };
+
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mouseleave', handleMouseLeave);
+    return () => {
+      canvas.removeEventListener('mousemove', handleMouseMove);
+      canvas.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  }, [setDisplayBools, magnifierOn]);
 
   // Tracks the cursor over the main canvas while the magnifier is active,
   // positioning the loupe (via direct style mutation, not React state --
