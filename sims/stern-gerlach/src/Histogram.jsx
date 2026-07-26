@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { theoreticalProbabilities } from './physics';
 import { PC_COLORS } from './colors';
+import { arrowWidth, drawArrow } from './canvasArrow';
 
 // Plot layout -- all tunable
 const PADDING_TOP = 25;
@@ -322,12 +323,27 @@ export default function Histogram({ experiment, displayBools }) {
         const barLabelXOffset = (!showBothActual || !needsOffset) ? 0 : (sameSgAsPrev ? labelOffsetMagnitude : -labelOffsetMagnitude);
         ctx.fillText(barLabel, barX + barWidth / 2 + barLabelXOffset, barY - 4 - (drawErrorBars ? errOffset : 0));
 
-        // Detector label below the bar, in the same style as the axis's own tick labels
+        // Detector label below the bar, in the same style as the axis's own
+        // tick labels. The direction arrow is drawn as a filled path
+        // (drawArrow), not a Unicode glyph -- see canvasArrow.js for why.
         ctx.fillStyle = TICK_LABEL_COLOR;
-        ctx.font = `12px Arial`;
-        ctx.textAlign = 'center';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
-        ctx.fillText(`SG${d.sgIndex + 1}` + (d.arm == 'up' ? '🠉' : '🠋'), slotCenter, plotY1 + 6);
+        const detectorLabelText = `SG${d.sgIndex + 1}`;
+        const detectorArrowSize = 11;
+        const detectorArrowGap = 3;
+        const detectorTextWidth = ctx.measureText(detectorLabelText).width;
+        const detectorLabelWidth = detectorTextWidth + detectorArrowGap + arrowWidth(detectorArrowSize);
+        const detectorLabelX0 = slotCenter - detectorLabelWidth / 2;
+        ctx.fillText(detectorLabelText, detectorLabelX0, plotY1 + 6);
+        drawArrow(
+          ctx,
+          detectorLabelX0 + detectorTextWidth + detectorArrowGap + arrowWidth(detectorArrowSize) / 2,
+          plotY1 + 6 + detectorArrowSize / 2,
+          detectorArrowSize,
+          d.arm === 'up' ? 'up' : 'down'
+        );
       });
     }
 

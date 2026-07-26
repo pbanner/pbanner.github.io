@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { upEigenstate, downEigenstate, applyT, sampleOvenState, cAbs2 } from './physics';
 import { PC_COLORS } from './colors';
+import { arrowWidth, drawArrow } from './canvasArrow';
 import sgImage from './assets/SG.png';
 import pcImage from './assets/PC.png';
 import bbImage from './assets/BB.png';
@@ -659,14 +660,29 @@ const LabPanel = forwardRef(function LabPanel(
               ctx.fillRect(PC_STRIPE_CENTER_X - PC_STRIPE_WIDTH / 2, -PC_HEIGHT / 2, PC_STRIPE_WIDTH, PC_HEIGHT);
               ctx.restore();
             }
-            // Same "SG1🠉" wording the histogram puts under each bar, so the
-            // detector reads identically in both places without the student
-            // having to match colors through the legend.
+            // Same "SG1<arrow>" wording the histogram puts under each bar,
+            // so the detector reads identically in both places without the
+            // student having to match colors through the legend. The arrow
+            // itself is a filled path (drawArrow), not a Unicode glyph --
+            // see canvasArrow.js for why.
             ctx.fillStyle = '#666';
             ctx.font = 'bold 12px Arial';
-            ctx.textAlign = 'center';
+            ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
-            ctx.fillText(`SG${i + 1}` + (arm === 'up' ? '🠉' : '🠋'), PC_TEXT_CENTER_X, PC_LABEL_CENTER_Y);
+            const pcLabelText = `SG${i + 1}`;
+            const pcArrowSize = 11;
+            const pcArrowGap = 3;
+            const pcLabelTextWidth = ctx.measureText(pcLabelText).width;
+            const pcLabelWidth = pcLabelTextWidth + pcArrowGap + arrowWidth(pcArrowSize);
+            const pcLabelX0 = PC_TEXT_CENTER_X - pcLabelWidth / 2;
+            ctx.fillText(pcLabelText, pcLabelX0, PC_LABEL_CENTER_Y);
+            drawArrow(
+              ctx,
+              pcLabelX0 + pcLabelTextWidth + pcArrowGap + arrowWidth(pcArrowSize) / 2,
+              PC_LABEL_CENTER_Y,
+              pcArrowSize,
+              arm === 'up' ? 'up' : 'down'
+            );
             if (sg[arm].data !== null) {
               ctx.fillStyle = sg[arm].colorId !== null ? PC_COLORS[sg[arm].colorId] : '#303030';
               ctx.font = '12px Arial';
