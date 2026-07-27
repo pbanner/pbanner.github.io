@@ -514,7 +514,8 @@ function drawWrappedText(ctx, text, x, yCenter) {
 // drawScene, built the same way Histogram.jsx builds its own so the two
 // never disagree) plus a percentage readout below it. Called from inside
 // the same translate/rotate frame the PC image itself draws in.
-function drawTheoryBar(ctx, pc, sgIndex, arm, prob) {
+// drawMode = 1 means draw the theory bar and percent label; = 2 means draw a big ?
+function drawTheoryBar(ctx, pc, sgIndex, arm, prob, drawMode) {
   const color = pc.colorId !== null ? PC_COLORS[pc.colorId] : '#999999';
 
   // Border around whole card
@@ -526,22 +527,31 @@ function drawTheoryBar(ctx, pc, sgIndex, arm, prob) {
   ctx.fill();
   ctx.stroke();
 
-  // Theory label at top
-  ctx.fillStyle = color;
-  ctx.font = 'bold 16px Arial';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const labelText = `${(prob * 100).toFixed(1)}%`;
-  const labelTextWidth = ctx.measureText(labelText).width;
-  const labelX0 = PC_ALT_TEXT_CENTER_X;
-  ctx.fillText(labelText, labelX0, PC_LABEL_CENTER_Y+6);
+  if (drawMode === 1) {
+    // Theory label at top
+    ctx.fillStyle = color;
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const labelText = `${(prob * 100).toFixed(1)}%`;
+    const labelTextWidth = ctx.measureText(labelText).width;
+    const labelX0 = PC_ALT_TEXT_CENTER_X;
+    ctx.fillText(labelText, labelX0, PC_LABEL_CENTER_Y+6);
 
-  // Theory bar
-  ctx.strokeStyle = '#303030';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(THEORY_BAR_X0, THEORY_BAR_Y0, THEORY_BAR_WIDTH, THEORY_BAR_HEIGHT);
-  ctx.fillStyle = color;
-  ctx.fillRect(THEORY_BAR_X0, THEORY_BAR_Y0, THEORY_BAR_WIDTH * prob, THEORY_BAR_HEIGHT);
+    // Theory bar
+    ctx.strokeStyle = '#303030';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(THEORY_BAR_X0, THEORY_BAR_Y0, THEORY_BAR_WIDTH, THEORY_BAR_HEIGHT);
+    ctx.fillStyle = color;
+    ctx.fillRect(THEORY_BAR_X0, THEORY_BAR_Y0, THEORY_BAR_WIDTH * prob, THEORY_BAR_HEIGHT);
+  } else if (drawMode === 2) {
+    // ? label
+    ctx.fillStyle = color;
+    ctx.font = '48px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('?', PC_WIDTH/2, PC_HEIGHT*(THEORY_BAR_CARD_MULTIPLIER-1)/1.2);
+  }
 }
 
 const LabPanel = forwardRef(function LabPanel(
@@ -717,9 +727,9 @@ const LabPanel = forwardRef(function LabPanel(
           ctx.translate(site.x, site.y);
           ctx.rotate(site.angle);
           if (sg[arm].type === 'pc') {
-            if (displayBools.theoryScreenshotToggle) {
+            if (displayBools.theoryScreenshotToggle !== 0) {
               const prob = theoryMap.get(`${i}-${arm}`) ?? 0;
-              drawTheoryBar(ctx, sg[arm], i, arm, prob);
+              drawTheoryBar(ctx, sg[arm], i, arm, prob, displayBools.theoryScreenshotToggle);
             } else {
               ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT);
               if (sg[arm].colorId !== null) {

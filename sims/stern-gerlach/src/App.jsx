@@ -342,7 +342,9 @@ export default function App() {
   const [displayBools, setDisplayBools] = useState({
     gridOn: true,             // Displaying the grid
     previewPaths: true,       // For previewing particle paths
-    theoryScreenshotToggle: false  // Shift+P: swap each on-canvas particle counter's running count for a theoretical-probability bar (see LabPanel)
+    // theoryScreenshotToggle = 0 is normal mode; 1 = show probabilities; 2 = show question marks
+    // Activate 1 via Shift+P, 2 via Shift+Q
+    theoryScreenshotToggle: 0
   });
   const [histDisplayBools, setHistDisplayBools] = useState({
     showPercentages: 2,    // 0 = counts only, 1 = percentages only, 2 = both
@@ -474,8 +476,12 @@ export default function App() {
   // since setDisplayBools already reads the latest value itself.
   useEffect(() => {
     const onKeyDown = (e) => {
-      if (e.code !== 'KeyP' || !e.shiftKey) return;
-      setDisplayBools((prev) => ({ ...prev, theoryScreenshotToggle: !prev.theoryScreenshotToggle }));
+      if (!e.shiftKey) return;
+      if (e.code === 'KeyP') {
+        setDisplayBools((prev) => ({ ...prev, theoryScreenshotToggle: prev.theoryScreenshotToggle !== 1 ? 1 : 0 }));
+      } else if (e.code === 'KeyQ') {
+        setDisplayBools((prev) => ({ ...prev, theoryScreenshotToggle: prev.theoryScreenshotToggle !== 2 ? 2 : 0 }));
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
