@@ -335,7 +335,8 @@ export default function App() {
   // Panel 1 state
   const [displayBools, setDisplayBools] = useState({
     gridOn: true,             // Displaying the grid
-    previewPaths: true       // For previewing particle paths
+    previewPaths: true,       // For previewing particle paths
+    theoryScreenshotToggle: false  // Shift+P: swap each on-canvas particle counter's running count for a theoretical-probability bar (see LabPanel)
   });
   const [histDisplayBools, setHistDisplayBools] = useState({
     showPercentages: 2,    // 0 = counts only, 1 = percentages only, 2 = both
@@ -455,6 +456,20 @@ export default function App() {
     const onKeyDown = (e) => {
       if (e.key !== 'Escape') return;
       setExpMode((prev) => (prev.build === 0 ? prev : { ...prev, build: 0 }));
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  // Shift+P toggles theoryScreenshotToggle -- swaps every on-canvas particle
+  // counter between its normal image+running-count display and a bar
+  // showing its exact theoretical hit probability (LabPanel does the actual
+  // drawing). Registered once, same pattern as the Escape listener above,
+  // since setDisplayBools already reads the latest value itself.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.code !== 'KeyP' || !e.shiftKey) return;
+      setDisplayBools((prev) => ({ ...prev, theoryScreenshotToggle: !prev.theoryScreenshotToggle }));
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);

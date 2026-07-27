@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { upEigenstate, downEigenstate, applyT, sampleOvenState, cAbs2 } from './physics';
+import { upEigenstate, downEigenstate, applyT, sampleOvenState, cAbs2, theoreticalProbabilities } from './physics';
 import { PC_COLORS } from './colors';
 import { arrowWidth, drawArrow } from './canvasArrow';
 import sgImage from './assets/SG.png';
@@ -35,6 +35,7 @@ const PC_STRIPE_CENTER_X = 330*(PC_WIDTH/400);
 const PC_STRIPE_WIDTH = 50*(PC_WIDTH/400);
 const PC_STRIPE_ALPHA = 0.5;
 const PC_TEXT_CENTER_X = 190*(PC_WIDTH/400);
+const PC_ALT_TEXT_CENTER_X = 200*(PC_WIDTH/400);
 // The white label plate spans y 93..166 of the source image's 200px
 // height: the running count sits centered in it, and the SG/arm label goes
 // in the clear space above it (centered between the body top and y=93).
@@ -45,6 +46,17 @@ const PC_HIGHLIGHT_LINE_WIDTH = 3;
 const BB_HEIGHT = 50;
 const BB_WIDTH = 9;
 //const BB_INPUT = BB_HEIGHT/2;
+
+// Theory-probability bar meter (theoryScreenshotToggle, Shift+P in App) --
+// drawn in place of a placed particle counter's image+running-count, in the
+// same PC_WIDTH x PC_HEIGHT footprint so no placement/site geometry has to
+// change to support it.
+const THEORY_BAR_CARD_MULTIPLIER = 1.2;  // The factor by which the card is larger than the PC footprint
+const THEORY_BAR_HEIGHT = 16;
+const THEORY_BAR_MARGIN = 10;
+const THEORY_BAR_X0 = THEORY_BAR_MARGIN;
+const THEORY_BAR_WIDTH = PC_WIDTH - 2 * THEORY_BAR_MARGIN;
+const THEORY_BAR_Y0 = PC_HEIGHT*((1 - THEORY_BAR_CARD_MULTIPLIER) + 0.5) - THEORY_BAR_HEIGHT/2;
 
 // Path specs for particles
 // In path constrained by SG spacing and geometry. The arc must satisfy two
@@ -495,6 +507,43 @@ function drawWrappedText(ctx, text, x, yCenter) {
   lines.forEach((line, i) => ctx.fillText(line, x, startY + i * ERROR_TEXT_LINE_HEIGHT));
 }
 
+// Renders one bar meter: a card the same size as the PC image, the "SGn↑/↓"
+// identifier in the same spot the normal PC label uses, an empty meter
+// outline, and a fill scaled to `prob` (already the exact, renormalized
+// theoretical probability for this one detector -- see theoryMap in
+// drawScene, built the same way Histogram.jsx builds its own so the two
+// never disagree) plus a percentage readout below it. Called from inside
+// the same translate/rotate frame the PC image itself draws in.
+function drawTheoryBar(ctx, pc, sgIndex, arm, prob) {
+  const color = pc.colorId !== null ? PC_COLORS[pc.colorId] : '#999999';
+
+  // Border around whole card
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#303030';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT*THEORY_BAR_CARD_MULTIPLIER, 6);
+  ctx.fill();
+  ctx.stroke();
+
+  // Theory label at top
+  ctx.fillStyle = color;
+  ctx.font = 'bold 16px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const labelText = `${(prob * 100).toFixed(1)}%`;
+  const labelTextWidth = ctx.measureText(labelText).width;
+  const labelX0 = PC_ALT_TEXT_CENTER_X;
+  ctx.fillText(labelText, labelX0, PC_LABEL_CENTER_Y+6);
+
+  // Theory bar
+  ctx.strokeStyle = '#303030';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(THEORY_BAR_X0, THEORY_BAR_Y0, THEORY_BAR_WIDTH, THEORY_BAR_HEIGHT);
+  ctx.fillStyle = color;
+  ctx.fillRect(THEORY_BAR_X0, THEORY_BAR_Y0, THEORY_BAR_WIDTH * prob, THEORY_BAR_HEIGHT);
+}
+
 const LabPanel = forwardRef(function LabPanel(
   { experiment, setExperiment, expMode, setExpMode, displayBools, setParticleCount, resetToken, resetDataCollection, tabVisible, startError, hoveredDetector },
   ref
@@ -610,6 +659,20 @@ const LabPanel = forwardRef(function LabPanel(
     // of mode (the bug: in BB mode that let a not-yet-loaded bbImageRef
     // through and crashed on drawImage).
     const activeComponentImageRef = expMode.build === 1 ? pcImageRef : bbImageRef;
+
+    // theoryScreenshotToggle (Shift+P): exact theoretical hit probability
+    // per placed PC, renormalized to sum to 1 across just the placed PCs --
+    // built the same way Histogram.jsx builds its own theory overlay, so
+    // the percentage shown here on the apparatus always matches the one the
+    // histogram would show.
+    const theoryMap = displayBools.theoryScreenshotToggle
+      ? (() => {
+          const theoryList = theoreticalProbabilities(experiment);
+          const theorySum = theoryList.reduce((s, t) => s + t.prob, 0);
+          return new Map(theoryList.map((t) => [`${t.sgIndex}-${t.arm}`, theorySum > 0 ? t.prob / theorySum : 0]));
+        })()
+      : null;
+
     // Draw the SGs, one copy of the ref image each, plus the basis labels
     if (imageReady(sgImageRef) && imageReady(pcImageRef) && imageReady(bbImageRef)) {
       if (displayBools.previewPaths) {
@@ -654,43 +717,49 @@ const LabPanel = forwardRef(function LabPanel(
           ctx.translate(site.x, site.y);
           ctx.rotate(site.angle);
           if (sg[arm].type === 'pc') {
-            ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT);
-            if (sg[arm].colorId !== null) {
-              ctx.save();
-              ctx.globalAlpha = PC_STRIPE_ALPHA;
-              ctx.fillStyle = PC_COLORS[sg[arm].colorId];
-              ctx.fillRect(PC_STRIPE_CENTER_X - PC_STRIPE_WIDTH / 2, -PC_HEIGHT / 2, PC_STRIPE_WIDTH, PC_HEIGHT);
-              ctx.restore();
-            }
-            // Same "SG1<arrow>" wording the histogram puts under each bar,
-            // so the detector reads identically in both places without the
-            // student having to match colors through the legend. The arrow
-            // itself is a filled path (drawArrow), not a Unicode glyph --
-            // see canvasArrow.js for why.
-            ctx.fillStyle = '#666';
-            ctx.font = 'bold 12px Arial';
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'middle';
-            const pcLabelText = `SG${i + 1}`;
-            const pcArrowSize = 11;
-            const pcArrowGap = 3;
-            const pcLabelTextWidth = ctx.measureText(pcLabelText).width;
-            const pcLabelWidth = pcLabelTextWidth + pcArrowGap + arrowWidth(pcArrowSize);
-            const pcLabelX0 = PC_TEXT_CENTER_X - pcLabelWidth / 2;
-            ctx.fillText(pcLabelText, pcLabelX0, PC_LABEL_CENTER_Y);
-            drawArrow(
-              ctx,
-              pcLabelX0 + pcLabelTextWidth + pcArrowGap + arrowWidth(pcArrowSize) / 2,
-              PC_LABEL_CENTER_Y,
-              pcArrowSize,
-              arm === 'up' ? 'up' : 'down'
-            );
-            if (sg[arm].data !== null) {
-              ctx.fillStyle = sg[arm].colorId !== null ? PC_COLORS[sg[arm].colorId] : '#303030';
-              ctx.font = '12px Arial';
-              ctx.textAlign = 'center';
+            if (displayBools.theoryScreenshotToggle) {
+              const prob = theoryMap.get(`${i}-${arm}`) ?? 0;
+              drawTheoryBar(ctx, sg[arm], i, arm, prob);
+            } else {
+              ctx.drawImage(pcImageRef.current, 0, -PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT);
+              if (sg[arm].colorId !== null) {
+                ctx.save();
+                ctx.globalAlpha = PC_STRIPE_ALPHA;
+                ctx.fillStyle = PC_COLORS[sg[arm].colorId];
+                ctx.fillRect(PC_STRIPE_CENTER_X - PC_STRIPE_WIDTH / 2, -PC_HEIGHT / 2, PC_STRIPE_WIDTH, PC_HEIGHT);
+                ctx.restore();
+              }
+              // Same "SG1<arrow>" wording the histogram puts under each bar,
+              // so the detector reads identically in both places without the
+              // student having to match colors through the legend. The arrow
+              // itself is a filled path (drawArrow), not a Unicode glyph --
+              // see canvasArrow.js for why.
+              ctx.fillStyle = '#666';
+              ctx.font = 'bold 12px Arial';
+              ctx.textAlign = 'left';
               ctx.textBaseline = 'middle';
-              ctx.fillText(sg[arm].data, PC_TEXT_CENTER_X, PC_COUNT_CENTER_Y);
+              const pcLabelText = `SG${i + 1}`;
+              const pcArrowSize = 11;
+              const pcArrowGap = 3;
+              const pcLabelTextWidth = ctx.measureText(pcLabelText).width;
+              const pcLabelWidth = pcLabelTextWidth + pcArrowGap + arrowWidth(pcArrowSize);
+              const pcLabelX0 = PC_TEXT_CENTER_X - pcLabelWidth / 2;
+              ctx.fillText(pcLabelText, pcLabelX0, PC_LABEL_CENTER_Y);
+              drawArrow(
+                ctx,
+                pcLabelX0 + pcLabelTextWidth + pcArrowGap + arrowWidth(pcArrowSize) / 2,
+                PC_LABEL_CENTER_Y,
+                pcArrowSize,
+                arm === 'up' ? 'up' : 'down'
+              );
+              // Data text
+              if (sg[arm].data !== null) {
+                ctx.fillStyle = sg[arm].colorId !== null ? PC_COLORS[sg[arm].colorId] : '#303030';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(sg[arm].data, PC_TEXT_CENTER_X, PC_COUNT_CENTER_Y);
+              }
             }
             if (hoveredDetector && hoveredDetector.sgIndex === i && hoveredDetector.arm === arm && sg[arm].colorId !== null) {
               ctx.strokeStyle = PC_COLORS[sg[arm].colorId];
