@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://pbanner.github.io/</loc>
+  </url>
+  <url>
+    <loc>https://pbanner.github.io/teaching-overview.html</loc>
+  </url>
+  <url>
+    <loc>https://pbanner.github.io/teaching-sims-landing.html</loc>
+  </url>
+  <url>
+    <loc>https://pbanner.github.io/research-education.html</loc>
+  </url>
+  <url>
+    <loc>https://pbanner.github.io/research-quantum-networks.html</loc>
+  </url>
+  <url>
+    <loc>https://pbanner.github.io/sims/flat-mirrors/dist/</loc>
+  </url>
+  <url>
+    <loc>https://pbanner.github.io/sims/polarization/dist/</loc>
+  </url>
+  <url>
+    <loc>https://pbanner.github.io/sims/stern-gerlach/dist/</loc>
+  </url>
+</urlset>
