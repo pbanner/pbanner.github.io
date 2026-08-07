@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useMemo, useState } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
 import ThickArrowHelper from './ThickArrowHelper.jsx';
 import { ketWidth, drawKet } from './ket.js';
@@ -271,6 +271,28 @@ function TimeDrivenArrow({ simTimeRef, getDirection, getLength, length, color, h
     <ThickArrowHelper ref={arrowRef} dir={new THREE.Vector3(1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={length} color={color} headLength={headLength} headWidth={headWidth} shaftWidth={shaftWidth} />
   );
 }
+// A line through the origin along getDirection(t), extended to +/- extent
+// -- lets you see where the field points even when its arrow is too short
+// (or zero-length) to read visually. Reads the shared simTimeRef, same as
+// TimeDrivenArrow, and updates the same way ThickArrowHelper's own shaft
+// does internally, so it can move every frame once the field becomes
+// time-dependent without a React re-render.
+function TimeDrivenAxisLine({ simTimeRef, getDirection, extent, color = 'gray', lineWidth = 1.5 }) {
+  const lineRef = useRef();
+  useFrame(() => {
+    const { x, y, z } = getDirection(simTimeRef.current);
+    const dir = blochToThree(x, y, z);
+    const p0 = dir.clone().multiplyScalar(-extent);
+    const p1 = dir.clone().multiplyScalar(extent);
+    const line = lineRef.current;
+    if (!line) return;
+    line.geometry.setPositions([p0.x, p0.y, p0.z, p1.x, p1.y, p1.z]);
+    line.computeLineDistances?.();
+  });
+  return (
+    <Line ref={lineRef} points={[[0, 0, 0], [0, 0, 0.001]]} color={color} dashed dashSize={0.06} gapSize={0.05} lineWidth={lineWidth} />
+  );
+}
 
 // Owns the one simulation clock everything time-dependent reads from:
 // simTime, a ref incremented here once per frame and never written
@@ -321,6 +343,11 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
         length={field.mag}
         color={0x0066cc} headLength={0.12} headWidth={0.08} shaftWidth={5.0}
       />
+      <TimeDrivenAxisLine
+        simTimeRef={simTimeRef}
+        getDirection={(t) => unitVectorFromAngles(field.theta, field.phi)}
+        extent={SPHERE_AXIS_EXTENT} color={0x0066cc}
+      />
     </>
   );
 }
@@ -342,6 +369,15 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
   const meridianXZ = useMemo(() => graticuleRing('y'), []);
   const meridianYZ = useMemo(() => graticuleRing('x'), []);
 
+  function CameraLight() {
+    const lightRef = useRef();
+    const { camera } = useThree(); // from '@react-three/fiber'
+    useFrame(() => {
+      lightRef.current?.position.copy(camera.position);
+    });
+    return <directionalLight ref={lightRef} intensity={30.0} />;
+  }
+
   return (
     // position: 'relative' + the button's position: 'absolute' below keeps
     // the button entirely out of the surrounding flex layout -- it overlays
@@ -351,10 +387,14 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
       <Canvas camera={{ position: SPHERE_INITIAL_CAMERA_POSITION, fov: 35 }} style={{ width: '100%', height: '100%' }}>
         {controlBools.showSphere ? 
           (
-          <mesh>
-            <sphereGeometry args={[1, 32, 32]} />
-            <meshBasicMaterial color="gray" transparent opacity={0.25} side={THREE.DoubleSide} depthWrite={false} />
-          </mesh>
+          <>
+            <ambientLight intensity={5.0} />
+            <CameraLight />
+            <mesh>
+              <sphereGeometry args={[1, 32, 32]} />
+              <meshStandardMaterial color="gray" transparent opacity={0.25} side={THREE.FrontSide} depthWrite={false} roughness={0.5} metalness={1.00} />
+            </mesh>
+          </>
           ) : 
           (null)
         }
