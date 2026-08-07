@@ -11,6 +11,8 @@ const SPHERE_INITIAL_CAMERA_POSITION = [3.6, 2.4, -3.6];
 const SPHERE_INITIAL_CAMERA_TARGET = [0, 0.32, 0];
 const SPHERE_AXIS_EXTENT = 1.3;  // Helps determine how far axis arrows and axis labels are drawn beyond the sphere itself
 
+const FIELD_MAGNITUDE_DISPLAY_FACTOR = 0.2;
+
 /********** UI components and helpers **********/
 
 // Unicode glyphs (▶ ⏸ ⌂) bake their own, font-dependent vertical padding
@@ -258,11 +260,12 @@ function KetLabel({ sign, axis, position, size = 0.20 }) {
 // clock, so nothing can drift out of sync -- important once the field
 // becomes genuinely time-dependent and its arrow, the spin arrow, and
 // (eventually) a rotating-frame view all need to reflect the same instant.
-function TimeDrivenArrow({ simTimeRef, getDirection, length, color, headLength, headWidth, shaftWidth }) {
+function TimeDrivenArrow({ simTimeRef, getDirection, getLength, length, color, headLength, headWidth, shaftWidth }) {
   const arrowRef = useRef();
   useFrame(() => {
     const { x, y, z } = getDirection(simTimeRef.current);
     arrowRef.current?.setDirection(blochToThree(x, y, z));
+    if (getLength) arrowRef.current?.setLength(getLength(simTimeRef.current), headLength, headWidth);
   });
   return (
     <ThickArrowHelper ref={arrowRef} dir={new THREE.Vector3(1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={length} color={color} headLength={headLength} headWidth={headWidth} shaftWidth={shaftWidth} />
@@ -300,6 +303,7 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
 
   return (
     <>
+      {/* Spin arrow */}
       <TimeDrivenArrow
         simTimeRef={simTimeRef}
         getDirection={(t) => {
@@ -309,10 +313,13 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
         }}
         length={1} color={0xcc0000} headLength={0.12} headWidth={0.08} shaftWidth={5.0}
       />
+      {/* B-field arrow + line */}
       <TimeDrivenArrow
         simTimeRef={simTimeRef}
         getDirection={(t) => unitVectorFromAngles(field.theta, field.phi)}
-        length={1} color={0x0066cc} headLength={0.12} headWidth={0.08} shaftWidth={5.0}
+        getLength={(t) => field.mag*FIELD_MAGNITUDE_DISPLAY_FACTOR}
+        length={field.mag}
+        color={0x0066cc} headLength={0.12} headWidth={0.08} shaftWidth={5.0}
       />
     </>
   );
@@ -483,7 +490,7 @@ export default function App() {
                   onChangeNum={(val) => {setInitialSpinState({ ...initialSpinState, theta: val*Math.PI/180 })}}
                   min={0.0}
                   max={180.0}
-                  step={0.01}
+                  step={1.0}
                 />
                 <SliderPlusTextboxControl
                   label="φ (degrees)"
@@ -491,7 +498,7 @@ export default function App() {
                   onChangeNum={(val) => {setInitialSpinState({ ...initialSpinState, phi: val*Math.PI/180 })}}
                   min={-180.0}
                   max={180.0}
-                  step={0.01}
+                  step={1.0}
                 />
               </div>
 
@@ -506,7 +513,7 @@ export default function App() {
                   onChangeNum={(val) => {updateFieldComponent(0, { theta: parseFloat(val*Math.PI/180) })}}
                   min={0.0}
                   max={180.0}
-                  step={0.01}
+                  step={1.0}
                 />
                 <SliderPlusTextboxControl
                   label="φ (degrees)"
@@ -514,7 +521,15 @@ export default function App() {
                   onChangeNum={(val) => {updateFieldComponent(0, { phi: parseFloat(val*Math.PI/180) })}}
                   min={-180.0}
                   max={180.0}
-                  step={0.01}
+                  step={1.0}
+                />
+                <SliderPlusTextboxControl
+                  label="|B|"
+                  valueNum={(magneticField[0].mag).toFixed(1)}
+                  onChangeNum={(val) => {updateFieldComponent(0, { mag: parseFloat(val) })}}
+                  min={0.0}
+                  max={10.0}
+                  step={0.1}
                 />
               </div>
 
