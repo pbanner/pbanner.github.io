@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
 import ThickArrowHelper from './ThickArrowHelper.jsx';
+import { ketWidth, drawKet } from './ket.js';
 import * as THREE from 'three';
 import './App.css';
 
@@ -9,6 +10,42 @@ import './App.css';
 const SPHERE_INITIAL_CAMERA_POSITION = [3.6, 2.4, -3.6];
 const SPHERE_INITIAL_CAMERA_TARGET = [0, 0.32, 0];
 const SPHERE_AXIS_EXTENT = 1.3;  // Helps determine how far axis arrows and axis labels are drawn beyond the sphere itself
+
+/********** UI components and helpers **********/
+
+// For rendering a label, slider, AND textbox all at once
+function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step, disabled = false }) {
+  return (
+    <div className="control-group">
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <label style={{ margin: '0em 0em' }}>{label}</label> {/*: {valueNum.toFixed(1)}*/}
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={valueNum}
+          onChange={(e) => onChangeNum(parseFloat(e.target.value))}
+          style={{ flex: 1 }}
+          disabled={disabled}
+        />
+        <input
+          type="number"
+          min={min}
+          max={max}
+          step={step}
+          value={valueNum}
+          onChange={(e) => {
+            const v = parseFloat(e.target.value);
+            if (!Number.isNaN(v)) onChangeNum(v);
+          }}
+          style={{ width: '70px', padding: '2px' }}
+          disabled={disabled}
+        />
+      </div>
+    </div>
+  );
+}
 
 /************************************************
 *
@@ -104,6 +141,53 @@ function AxisLabel({ text, position, size = 0.28 }) {
     </sprite>
   );
 }
+// Same idea as makeTextSpriteTexture, but for a pole/axis label like
+// "|+>_z": the ket itself is drawn as vector shapes (see ket.js) rather
+// than text, so its vertical alignment can't drift with whatever font
+// "sans-serif" resolves to. Only the axis subscript is real text.
+function makeKetSpriteTexture(sign, axis, { color = '#333333', sizePx = 64 } = {}) {
+  const supersample = 4;
+  const ketSize = sizePx * supersample;
+  const subPx = ketSize * 0.5;
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.font = `bold ${subPx}px sans-serif`;
+  const subWidth = ctx.measureText(axis).width;
+
+  const gap = ketSize * -0.06;
+  const padding = ketSize * 0.25;
+  const kWidth = ketWidth(ketSize);
+  const totalWidth = kWidth + gap + subWidth;
+
+  canvas.width = Math.ceil(totalWidth + padding * 2);
+  canvas.height = Math.ceil(ketSize * 1.3);
+
+  ctx.fillStyle = color;
+  const startX = (canvas.width - totalWidth) / 2;
+  const midY = canvas.height / 2;
+
+  drawKet(ctx, startX, midY, ketSize, sign);
+
+  ctx.font = `bold ${subPx}px sans-serif`;
+  ctx.textBaseline = 'middle';
+  ctx.fillText(axis, startX + kWidth + gap, midY + ketSize * 0.4);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.needsUpdate = true;
+  return { texture, aspect: canvas.width / canvas.height };
+}
+
+function KetLabel({ sign, axis, position, size = 0.20 }) {
+  const { texture, aspect } = useMemo(() => makeKetSpriteTexture(sign, axis), [sign, axis]);
+  return (
+    <sprite position={position} scale={[size * aspect, size, 1]}>
+      <spriteMaterial map={texture} transparent depthWrite={false} />
+    </sprite>
+  );
+}
 
 // For the sake of reducing overhead on updates that happen every frame
 // (like animations), ThickArrowHelper has an ref/imperative handle structure
@@ -111,18 +195,18 @@ function AxisLabel({ text, position, size = 0.28 }) {
 // the overhead of the whole React re-render cycle. 
 // So for arrows that need updating every frame, we directly attach a useFrame
 // callback that reaches in and modifies the direction directly.
-function SpinExpectationArrow({ theta, phi }) {
+function MovingArrow({ theta, phi, length, color, headLength, headWidth, shaftWidth }) {
   const arrowRef = useRef();
   useFrame(() => {
     const { x, y, z } = blochVectorFromState(theta, phi);
     arrowRef.current?.setDirection(blochToThree(x, y, z));
   });
   return (
-    <ThickArrowHelper ref={arrowRef} dir={new THREE.Vector3(1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={1} color={0xcc0000} headLength={0.20} headWidth={0.12} shaftWidth={3.0} />
+    <ThickArrowHelper ref={arrowRef} dir={new THREE.Vector3(1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={length} color={color} headLength={headLength} headWidth={headWidth} shaftWidth={shaftWidth} />
   );
 }
 
-function BlochSphere({ theta, phi }) {
+function BlochSphere({ spinState, magneticField }) {
   const controlsRef = useRef();
   // Can't use controls.reset(), since target0/position0 get captured before
   // drei applies the `target` prop below, so reset() would snap to the wrong
@@ -155,19 +239,21 @@ function BlochSphere({ theta, phi }) {
         <Line points={meridianXZ} color="gray" lineWidth={1} dashed dashSize={0.06} gapSize={0.05} />
         <Line points={meridianYZ} color="gray" lineWidth={1} dashed dashSize={0.06} gapSize={0.05} />
 
-        <ThickArrowHelper dir={blochToThree(1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.15} headWidth={0.07} shaftWidth={1.5} />
-        <ThickArrowHelper dir={blochToThree(0, 1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.15} headWidth={0.07} shaftWidth={1.5} />
-        <ThickArrowHelper dir={blochToThree(0, 0, 1)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.15} headWidth={0.07} shaftWidth={1.5} />
+        <ThickArrowHelper dir={blochToThree(1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
+        <ThickArrowHelper dir={blochToThree(0, 1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
+        <ThickArrowHelper dir={blochToThree(0, 0, 1)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
 
-        <AxisLabel text="X" position={blochToThree(SPHERE_AXIS_EXTENT + 0.2, 0, 0).toArray()} />
-        <AxisLabel text="Y" position={blochToThree(0, SPHERE_AXIS_EXTENT + 0.2, 0).toArray()} />
-        <AxisLabel text="Z" position={blochToThree(0, 0, SPHERE_AXIS_EXTENT + 0.2).toArray()} />
+        <KetLabel sign="+" axis="x" position={blochToThree(SPHERE_AXIS_EXTENT + 0.2, 0, 0).toArray()} />
+        <KetLabel sign="-" axis="x" position={blochToThree(-(SPHERE_AXIS_EXTENT + 0.2), 0, 0).toArray()} />
+        <KetLabel sign="+" axis="y" position={blochToThree(0, SPHERE_AXIS_EXTENT + 0.2, 0).toArray()} />
+        <KetLabel sign="-" axis="y" position={blochToThree(0, -(SPHERE_AXIS_EXTENT + 0.2), 0).toArray()} />
+        <KetLabel sign="+" axis="z" position={blochToThree(0, 0, SPHERE_AXIS_EXTENT + 0.2).toArray()} />
+        <KetLabel sign="-" axis="z" position={blochToThree(0, 0, -(SPHERE_AXIS_EXTENT + 0.2)).toArray()} />
 
-        {/* Computational-basis kets at the poles: theta=0 (+z, "spin up") and theta=pi (-z, "spin down") */}
-        <AxisLabel text="|0⟩" position={blochToThree(0, 0, 1.15).toArray()} size={0.22} />
-        <AxisLabel text="|1⟩" position={blochToThree(0, 0, -1.15).toArray()} size={0.22} />
-
-        <SpinExpectationArrow theta={theta} phi={phi} />
+        {/* For the spin state */}
+        <MovingArrow theta={spinState.theta} phi={spinState.phi} length={1} color={0xcc0000} headLength={0.12} headWidth={0.08} shaftWidth={5.0} />
+        {/* For the B-field */}
+        <MovingArrow theta={magneticField[0].theta} phi={magneticField[0].phi} length={1} color={0x0066cc} headLength={0.12} headWidth={0.08} shaftWidth={5.0} />
 
         <OrbitControls ref={controlsRef} target={SPHERE_INITIAL_CAMERA_TARGET} />
       </Canvas>
@@ -204,15 +290,26 @@ export default function App() {
   });
   // Spin state at t = 0, set by two angles
   const [initialSpinState, setInitialSpinState] = useState({ theta: 0, phi: 0 });
-  // Every element of this array should have a theta, phi, magnitude, and omega specifying it
-  const [magneticField, setMagneticField] = useState([{ mag: 0, theta: 0, phi: 0, omega: 0 }]);
+  // Every element of this array should have a theta, phi, magnitude, omega, and phase (at t=0) specifying it
+  const [magneticField, setMagneticField] = useState([{ mag: 0, theta: 0, phi: 0, omega: 0, phase: 0 }]);
+
+  // For setting just one property of one component of a magnetic field
+  // Usage example: updateFieldComponent(0, { theta: parseFloat(e.target.value) })
+  function updateFieldComponent(index, patch) {
+    setMagneticField(prev => prev.map((c, i) => (i === index ? { ...c, ...patch } : c)));
+  }
+  // For adding and removing components of a magnetic field
+  const addFieldComponent = () =>
+    setMagneticField(prev => [...prev, { mag: 1, theta: 0, phi: 0, omega: 0 }]);
+  const removeFieldComponent = (index) =>
+    setMagneticField(prev => prev.filter((_, i) => i !== index));
 
   return (
     <div className="app-layout">
       {/* Main Canvas Area */}
       <div className="canvas-area">
         {/*<SpherePanel controlBools={controlBools} />*/}
-        <BlochSphere theta={initialSpinState.theta} phi={initialSpinState.phi} />
+        <BlochSphere spinState={initialSpinState} magneticField={magneticField} />
       </div>
 
       {/* Right Sidebar */}
@@ -220,24 +317,52 @@ export default function App() {
         <div className="sidebar-content">
           <div className="panel-controls">
             <div>
-              <h3>Instructions and Controls</h3>
-              <p>Drag the object or eye around and watch if and where a virtual image is visible!
-              If desired, right-click in the simulation area to save an image of the current setup.
-              Rotate the mirror and explore other controls below!</p>
-
-              <div className="control-group" style={{ marginTop: '1.0em', marginBottom: '1.5em' }}>
-                <label style={{ justifyContent: 'center' }}>Mirror angle: {(magneticField[0].theta * 180 / Math.PI).toFixed(1)}°</label>
-                <input
-                  type="range"
-                  min={-Math.PI}
-                  max={Math.PI}
-                  step="0.01"
-                  value={magneticField[0].theta}
-                  onChange={(e) => setMagneticField([{ mag: 0, theta: e.target.value, phi: 0, omega: 0 }])}
-                  style={{ width: '100%' }}
+              <h3>Spin State at t = 0</h3>
+              <div className="control-group">
+                <SliderPlusTextboxControl
+                  label="θ (degrees)"
+                  valueNum={(initialSpinState.theta * 180 / Math.PI).toFixed(1)}
+                  onChangeNum={(val) => {setInitialSpinState({ ...initialSpinState, theta: val*Math.PI/180 })}}
+                  min={0.0}
+                  max={180.0}
+                  step={0.01}
+                />
+                <SliderPlusTextboxControl
+                  label="φ (degrees)"
+                  valueNum={(initialSpinState.phi * 180 / Math.PI).toFixed(1)}
+                  onChangeNum={(val) => {setInitialSpinState({ ...initialSpinState, phi: val*Math.PI/180 })}}
+                  min={-180.0}
+                  max={180.0}
+                  step={0.01}
                 />
               </div>
 
+              <hr className="sidebar-divider" />
+              
+              <h3>Magnetic Field</h3>
+
+              <div className="control-group">
+                <SliderPlusTextboxControl
+                  label="θ (degrees)"
+                  valueNum={(magneticField[0].theta * 180 / Math.PI).toFixed(1)}
+                  onChangeNum={(val) => {updateFieldComponent(0, { theta: parseFloat(val*Math.PI/180) })}}
+                  min={0.0}
+                  max={180.0}
+                  step={0.01}
+                />
+                <SliderPlusTextboxControl
+                  label="φ (degrees)"
+                  valueNum={(magneticField[0].phi * 180 / Math.PI).toFixed(1)}
+                  onChangeNum={(val) => {updateFieldComponent(0, { phi: parseFloat(val*Math.PI/180) })}}
+                  min={-180.0}
+                  max={180.0}
+                  step={0.01}
+                />
+              </div>
+
+              <hr className="sidebar-divider" />
+
+              <h3>Display Options</h3>
               <div className="control-group" style={{ marginTop: '1.0em' }}>
                 <button className={`control-button ${controlBools.showSphere ? 'active' : ''}`} onClick={() => setControlBools({ ...controlBools, showSphere: !controlBools.showSphere })}>
                   {controlBools.showSphere ? 'Hide sphere' : 'Show sphere'}
