@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import './App.css';
 
 /********** Constants and initial values **********/
-const SPHERE_INITIAL_CAMERA_POSITION = [3.3, 2.4, 3.6];
+const SPHERE_INITIAL_CAMERA_POSITION = [3.6, 2.4, -3.6];
 const SPHERE_INITIAL_CAMERA_TARGET = [0, 0.32, 0];
 const SPHERE_AXIS_EXTENT = 1.3;  // Helps determine how far axis arrows and axis labels are drawn beyond the sphere itself
 
