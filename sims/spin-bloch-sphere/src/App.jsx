@@ -13,6 +13,28 @@ const SPHERE_AXIS_EXTENT = 1.3;  // Helps determine how far axis arrows and axis
 
 /********** UI components and helpers **********/
 
+// Unicode glyphs (▶ ⏸ ⌂) bake their own, font-dependent vertical padding
+// into the glyph box, so flexbox centering lines up the boxes but not the
+// visible ink — hence the icon-vs-text misalignment. Drawing the icons
+// ourselves as SVG paths sidesteps that: there's no hidden glyph metrics,
+// so `alignItems: 'center'` centers exactly what's visible.
+function PlayIcon({ size = '0.9em' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style={{ display: 'block' }}>
+      <path d="M4 2l10 6-10 6z" />
+    </svg>
+  );
+}
+
+function PauseIcon({ size = '0.9em' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style={{ display: 'block' }}>
+      <rect x="3" y="2" width="4" height="12" />
+      <rect x="9" y="2" width="4" height="12" />
+    </svg>
+  );
+}
+
 // For rendering a label, slider, AND textbox all at once
 function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step, disabled = false }) {
   return (
@@ -206,7 +228,7 @@ function MovingArrow({ theta, phi, length, color, headLength, headWidth, shaftWi
   );
 }
 
-function BlochSphere({ spinState, magneticField }) {
+function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, setTimeSec }) {
   const controlsRef = useRef();
   // Can't use controls.reset(), since target0/position0 get captured before
   // drei applies the `target` prop below, so reset() would snap to the wrong
@@ -258,6 +280,15 @@ function BlochSphere({ spinState, magneticField }) {
         <OrbitControls ref={controlsRef} target={SPHERE_INITIAL_CAMERA_TARGET} />
       </Canvas>
 
+      <div className="overlay-controls" style={{ position: 'absolute', top: '10px', right: '10px', justifyContent: 'center', textAlign: 'center' }}>
+        <h3>Time Controls</h3>
+        <label>Time: {timeSec.toFixed(1)} sec</label>
+        <button className="control-button" onClick={() => setPaused((p) => !p)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', margin: 0, fontSize: '1.0rem' }}>
+          {paused ? <PlayIcon /> : <PauseIcon />}
+          {paused ? 'Start' : 'Pause'}
+        </button>
+      </div>
+
       <button
         className="control-button"
         onClick={resetView}
@@ -292,6 +323,10 @@ export default function App() {
   const [initialSpinState, setInitialSpinState] = useState({ theta: 0, phi: 0 });
   // Every element of this array should have a theta, phi, magnitude, omega, and phase (at t=0) specifying it
   const [magneticField, setMagneticField] = useState([{ mag: 0, theta: 0, phi: 0, omega: 0, phase: 0 }]);
+  // Pausing the animation
+  const [paused, setPaused] = useState(true);
+  // Time variable
+  const [timeSec, setTimeSec] = useState(0);
 
   // For setting just one property of one component of a magnetic field
   // Usage example: updateFieldComponent(0, { theta: parseFloat(e.target.value) })
@@ -309,7 +344,11 @@ export default function App() {
       {/* Main Canvas Area */}
       <div className="canvas-area">
         {/*<SpherePanel controlBools={controlBools} />*/}
-        <BlochSphere spinState={initialSpinState} magneticField={magneticField} />
+        <BlochSphere 
+          spinState={initialSpinState} magneticField={magneticField}
+          paused={paused} setPaused={setPaused}
+          timeSec={timeSec} setTimeSec={setTimeSec}
+        />
       </div>
 
       {/* Right Sidebar */}
