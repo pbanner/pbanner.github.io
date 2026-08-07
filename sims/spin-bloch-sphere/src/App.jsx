@@ -283,13 +283,12 @@ function TimeDrivenArrow({ simTimeRef, getDirection, length, color, headLength, 
 // The sidebar's numeric time readout is real React state, but throttled to
 // ~10 updates/sec rather than pushed every frame -- a human-readable
 // number doesn't need 60 updates/sec the way the arrows' geometry does.
-function SimulationScene({ spinState, magneticField, paused, onTimeUpdate }) {
-  const simTime = useRef(0);
+function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTimeRef, speedFactor }) {
   const lastReportedSec = useRef(-1);
 
   useFrame((state, delta) => {
-    if (!paused) simTime.current += delta;
-    const t = simTime.current;
+    if (!paused) simTimeRef.current += speedFactor * delta;
+    const t = simTimeRef.current;
     const rounded = Math.floor(t * 10) / 10;
     if (rounded !== lastReportedSec.current) {
       lastReportedSec.current = rounded;
@@ -302,7 +301,7 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate }) {
   return (
     <>
       <TimeDrivenArrow
-        simTimeRef={simTime}
+        simTimeRef={simTimeRef}
         getDirection={(t) => {
           const s0 = unitVectorFromAngles(spinState.theta, spinState.phi);
           const bHat = unitVectorFromAngles(field.theta, field.phi);
@@ -311,7 +310,7 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate }) {
         length={1} color={0xcc0000} headLength={0.12} headWidth={0.08} shaftWidth={5.0}
       />
       <TimeDrivenArrow
-        simTimeRef={simTime}
+        simTimeRef={simTimeRef}
         getDirection={(t) => unitVectorFromAngles(field.theta, field.phi)}
         length={1} color={0x0066cc} headLength={0.12} headWidth={0.08} shaftWidth={5.0}
       />
@@ -319,7 +318,7 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate }) {
   );
 }
 
-function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, setTimeSec }) {
+function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, setTimeSec, simTimeRef, speedFactor, setSpeedFactor, controlBools }) {
   const controlsRef = useRef();
   // Can't use controls.reset(), since target0/position0 get captured before
   // drei applies the `target` prop below, so reset() would snap to the wrong
@@ -343,18 +342,26 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
     // affect the heading/canvas alignment above it.
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <Canvas camera={{ position: SPHERE_INITIAL_CAMERA_POSITION, fov: 35 }} style={{ width: '100%', height: '100%' }}>
-        <mesh>
-          <sphereGeometry args={[1, 32, 32]} />
-          <meshBasicMaterial color="gray" transparent opacity={0.25} side={THREE.DoubleSide} depthWrite={false} />
-        </mesh>
+        {controlBools.showSphere ? 
+          (
+          <mesh>
+            <sphereGeometry args={[1, 32, 32]} />
+            <meshBasicMaterial color="gray" transparent opacity={0.25} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
+          ) : 
+          (null)
+        }
 
-        <Line points={equatorXY} color="gray" lineWidth={1} dashed dashSize={0.06} gapSize={0.05} />
-        <Line points={meridianXZ} color="gray" lineWidth={1} dashed dashSize={0.06} gapSize={0.05} />
-        <Line points={meridianYZ} color="gray" lineWidth={1} dashed dashSize={0.06} gapSize={0.05} />
+        <Line points={equatorXY} color="gray" lineWidth={controlBools.showSphere ? 1 : 0} dashed dashSize={0.06} gapSize={0.05} />
+        <Line points={meridianXZ} color="gray" lineWidth={controlBools.showSphere ? 0 : 0} dashed dashSize={0.06} gapSize={0.05} />
+        <Line points={meridianYZ} color="gray" lineWidth={controlBools.showSphere ? 0 : 0} dashed dashSize={0.06} gapSize={0.05} />
 
         <ThickArrowHelper dir={blochToThree(1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
         <ThickArrowHelper dir={blochToThree(0, 1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
         <ThickArrowHelper dir={blochToThree(0, 0, 1)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
+        <ThickArrowHelper dir={blochToThree(-1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
+        <ThickArrowHelper dir={blochToThree(0, -1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
+        <ThickArrowHelper dir={blochToThree(0, 0, -1)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
 
         <KetLabel sign="+" axis="x" position={blochToThree(SPHERE_AXIS_EXTENT + 0.2, 0, 0).toArray()} />
         <KetLabel sign="-" axis="x" position={blochToThree(-(SPHERE_AXIS_EXTENT + 0.2), 0, 0).toArray()} />
@@ -363,18 +370,36 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
         <KetLabel sign="+" axis="z" position={blochToThree(0, 0, SPHERE_AXIS_EXTENT + 0.2).toArray()} />
         <KetLabel sign="-" axis="z" position={blochToThree(0, 0, -(SPHERE_AXIS_EXTENT + 0.2)).toArray()} />
 
-        <SimulationScene spinState={spinState} magneticField={magneticField} paused={paused} onTimeUpdate={setTimeSec} />
+        <SimulationScene
+          spinState={spinState} magneticField={magneticField}
+          paused={paused} onTimeUpdate={setTimeSec}
+          simTimeRef={simTimeRef} speedFactor={speedFactor}
+        />
 
         <OrbitControls ref={controlsRef} target={SPHERE_INITIAL_CAMERA_TARGET} />
       </Canvas>
 
-      <div className="overlay-controls" style={{ position: 'absolute', top: '10px', right: '10px', justifyContent: 'center', textAlign: 'center' }}>
+      <div className="overlay-controls" style={{ position: 'absolute', top: '10px', right: '10px' }}>
         <h3>Time Controls</h3>
         <label>Time: {timeSec.toFixed(1)} sec</label>
-        <button className="control-button" onClick={() => setPaused((p) => !p)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', margin: 0, fontSize: '1.0rem' }}>
-          {paused ? <PlayIcon /> : <PauseIcon />}
-          {paused ? 'Start' : 'Pause'}
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'row' }}>
+          <button className="control-button" onClick={() => setPaused((p) => !p)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', margin: 0, fontSize: '1.0rem', width: '100px' }}>
+            {paused ? <PlayIcon /> : <PauseIcon />}
+            {paused ? 'Start' : 'Pause'}
+          </button>
+          <button className="control-button" onClick={() => { simTimeRef.current = 0; }} style={{ marginLeft: '6px', padding: '6px 14px', fontSize: '1.0rem', width: '100px' }}>
+            Reset
+          </button>
+        </div>
+        <div className="control-group" style={{ marginTop: '8px' }}>
+          <label>Speed: {speedFactor.toFixed(1)}×</label>
+          <input
+            type="range" min={0.1} max={5} step={0.1}
+            value={speedFactor}
+            onChange={(e) => setSpeedFactor(parseFloat(e.target.value))}
+            style={{ width: '100%' }}
+          />
+        </div>
       </div>
 
       <button
@@ -415,6 +440,9 @@ export default function App() {
   const [paused, setPaused] = useState(true);
   // Time variable
   const [timeSec, setTimeSec] = useState(0);
+  const simTime = useRef(0);
+  // Animation speed factor
+  const [speedFactor, setSpeedFactor] = useState(1);
 
   // For setting just one property of one component of a magnetic field
   // Usage example: updateFieldComponent(0, { theta: parseFloat(e.target.value) })
@@ -432,10 +460,13 @@ export default function App() {
       {/* Main Canvas Area */}
       <div className="canvas-area">
         {/*<SpherePanel controlBools={controlBools} />*/}
-        <BlochSphere 
+        <BlochSphere
           spinState={initialSpinState} magneticField={magneticField}
           paused={paused} setPaused={setPaused}
           timeSec={timeSec} setTimeSec={setTimeSec}
+          simTimeRef={simTime}
+          speedFactor={speedFactor} setSpeedFactor={setSpeedFactor}
+          controlBools={controlBools}
         />
       </div>
 
@@ -490,10 +521,11 @@ export default function App() {
               <hr className="sidebar-divider" />
 
               <h3>Display Options</h3>
-              <div className="control-group" style={{ marginTop: '1.0em' }}>
-                <button className={`control-button ${controlBools.showSphere ? 'active' : ''}`} onClick={() => setControlBools({ ...controlBools, showSphere: !controlBools.showSphere })}>
-                  {controlBools.showSphere ? 'Hide sphere' : 'Show sphere'}
-                </button>
+              <div className="control-group">
+                <label style={{ margin: '0 0 4px 0' }}>
+                  <input type="checkbox" checked={controlBools.showSphere} onChange={(e) => setControlBools({ ...controlBools, showSphere: e.target.checked })} />
+                  Show sphere
+                </label>
               </div>
 
               <div className="control-group" style={{ marginTop: '1.0em' }}>
