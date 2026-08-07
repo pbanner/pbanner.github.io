@@ -293,6 +293,65 @@ function TimeDrivenAxisLine({ simTimeRef, getDirection, extent, color = 'gray', 
     <Line ref={lineRef} points={[[0, 0, 0], [0, 0, 0.001]]} color={color} dashed dashSize={0.06} gapSize={0.05} lineWidth={lineWidth} />
   );
 }
+// Traces the spin's path across the sphere surface over simulated time.
+// Points accumulate in a plain array and the whole array is re-handed to
+// the <Line> via setPositions whenever a new point is sampled -- simple,
+// and plenty fast at the point counts a classroom demo will ever reach. A
+// preallocated, drawRange-based buffer would only earn its complexity for
+// a much longer-running or denser trace than this needs.
+//
+// New points are sampled at a fixed *simulated*-time interval, not every
+// rendered frame -- sampling every frame would make the trace far denser
+// than needed for a smooth curve and would keep growing forever the
+// longer the tab stays open. Sampling by simulated time (rather than
+// frame count or wall-clock time) also means the trace's visual density
+// doesn't change when the speed slider changes -- it reflects how much of
+// the trajectory has been traversed, not how long you've been watching.
+const TRACE_SAMPLE_INTERVAL = 0.05; // seconds of simulated time between points
+const TRACE_MAX_POINTS = 4000;      // safety cap for an unattended long-running tab
+
+function SpinTrace({ simTimeRef, getDirection, resetKey, color = 0xcc0000 }) {
+  const lineRef = useRef();
+  const points = useRef([]);
+  const lastSampleTime = useRef(-Infinity);
+
+  // Any change to the trajectory's defining parameters (resetKey) means
+  // the trace drawn so far describes a different, no-longer-current
+  // trajectory -- clear it rather than mixing stale segments from a
+  // previous setup in with new ones.
+  useEffect(() => {
+    points.current = [];
+    lastSampleTime.current = -Infinity;
+    lineRef.current?.geometry.setPositions([0, 0, 0, 0, 0, 0.001]);
+  }, [resetKey]);
+
+  useFrame(() => {
+    const t = simTimeRef.current;
+
+    // Time running backwards means the clock was just reset via the
+    // Reset button -- start the trace over rather than drawing a line
+    // back to wherever it left off.
+    if (t < lastSampleTime.current) {
+      points.current = [];
+      lastSampleTime.current = -Infinity;
+    }
+
+    if (t - lastSampleTime.current >= TRACE_SAMPLE_INTERVAL) {
+      const { x, y, z } = getDirection(t);
+      const p = blochToThree(x, y, z);
+      points.current.push(p.x, p.y, p.z);
+      if (points.current.length > TRACE_MAX_POINTS * 3) {
+        points.current.splice(0, points.current.length - TRACE_MAX_POINTS * 3);
+      }
+      lastSampleTime.current = t;
+      lineRef.current?.geometry.setPositions(points.current);
+    }
+  });
+
+  return (
+    <Line ref={lineRef} points={[[0, 0, 0], [0, 0, 0.001]]} color={color} lineWidth={2} transparent opacity={0.6} />
+  );
+}
 
 // Owns the one simulation clock everything time-dependent reads from:
 // simTime, a ref incremented here once per frame and never written
@@ -322,18 +381,20 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
   });
 
   const field = magneticField[0];
+  const getSpinDirection = (t) => {
+    const s0 = unitVectorFromAngles(spinState.theta, spinState.phi);
+    const bHat = unitVectorFromAngles(field.theta, field.phi);
+    return rotateAroundAxis(s0, bHat, -field.mag * t);
+  };
 
   return (
     <>
       {/* Spin arrow */}
-      <TimeDrivenArrow
+      <TimeDrivenArrow simTimeRef={simTimeRef} getDirection={getSpinDirection} length={1} color={0xcc0000} headLength={0.12} headWidth={0.08} shaftWidth={5.0} />
+      <SpinTrace
         simTimeRef={simTimeRef}
-        getDirection={(t) => {
-          const s0 = unitVectorFromAngles(spinState.theta, spinState.phi);
-          const bHat = unitVectorFromAngles(field.theta, field.phi);
-          return rotateAroundAxis(s0, bHat, -field.mag * t);
-        }}
-        length={1} color={0xcc0000} headLength={0.12} headWidth={0.08} shaftWidth={5.0}
+        getDirection={getSpinDirection}
+        resetKey={`${spinState.theta}|${spinState.phi}|${field.theta}|${field.phi}|${field.mag}`}
       />
       {/* B-field arrow + line */}
       <TimeDrivenArrow
