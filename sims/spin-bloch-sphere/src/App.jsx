@@ -71,6 +71,48 @@ function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step
 
 /************************************************
 *
+* Physics helpers
+*
+************************************************/
+
+// Standard physics spherical-to-Cartesian unit vector: theta measured from
+// +z, phi azimuthal from +x toward +y. blochVectorFromState below is this
+// same formula with a state-vector-specific meaning attached to theta/phi;
+// this generic version is what the magnetic field's direction uses instead,
+// since a field direction is just "which way it points," with no
+// probability-amplitude meaning behind theta/phi.
+function unitVectorFromAngles(theta, phi) {
+  return {
+    x: Math.sin(theta) * Math.cos(phi),
+    y: Math.sin(theta) * Math.sin(phi),
+    z: Math.cos(theta),
+  };
+}
+
+// Rotates the physics-space unit vector v by `angle` radians (right-hand
+// rule) about the unit vector `axis` -- Rodrigues' rotation formula. Used
+// below to advance the spin's precession by its exact closed-form solution
+// for a *static* field, rather than numerically stepping an ODE -- a static
+// field's precession is a constant-rate rotation, so there's no
+// approximation error to worry about computing it directly from elapsed
+// time instead of integrating forward frame by frame.
+function rotateAroundAxis(v, axis, angle) {
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+  const dot = v.x * axis.x + v.y * axis.y + v.z * axis.z;
+  const cross = {
+    x: axis.y * v.z - axis.z * v.y,
+    y: axis.z * v.x - axis.x * v.z,
+    z: axis.x * v.y - axis.y * v.x,
+  };
+  return {
+    x: v.x * cos + cross.x * sin + axis.x * dot * (1 - cos),
+    y: v.y * cos + cross.y * sin + axis.y * dot * (1 - cos),
+    z: v.z * cos + cross.z * sin + axis.z * dot * (1 - cos),
+  };
+}
+
+/************************************************
+*
 * Helpers for sphere drawing
 *
 ************************************************/
@@ -87,18 +129,8 @@ function blochToThree(x, y, z) {
   return new THREE.Vector3(x, z, -y);
 }
 
-// Bloch-vector coordinates for a pure spin-1/2 state, parametrized the
-// standard way: |psi> = cos(theta/2)|0> + e^{i phi} sin(theta/2)|1>, with
-// theta in [0, pi] measured from the +z axis and phi in [0, 2*pi) measured
-// azimuthally from +x toward +y. (x, y, z) below are the spin/Pauli
-// expectation values <sigma_x>, <sigma_y>, <sigma_z> -- equivalently
-// 2<Sx>/hbar etc. -- which automatically land on the unit sphere for any
-// pure state. 
 function blochVectorFromState(theta, phi) {
-  const x = Math.sin(theta) * Math.cos(phi);
-  const y = Math.sin(theta) * Math.sin(phi);
-  const z = Math.cos(theta);
-  return { x, y, z };
+  return unitVectorFromAngles(theta, phi);
 }
 
 // AI taught me a new word: a "graticule" is a set of intersecting lines on a
@@ -217,14 +249,73 @@ function KetLabel({ sign, axis, position, size = 0.20 }) {
 // the overhead of the whole React re-render cycle. 
 // So for arrows that need updating every frame, we directly attach a useFrame
 // callback that reaches in and modifies the direction directly.
-function MovingArrow({ theta, phi, length, color, headLength, headWidth, shaftWidth }) {
+// A ThickArrowHelper whose direction is recomputed every frame from
+// getDirection(t), where t is read from a shared simulation-time ref. This
+// replaces having two separate arrow components (one static, one
+// precessing) with one: a static field is just a getDirection that ignores
+// t, a precessing spin is a getDirection that uses it. Every
+// TimeDrivenArrow reads the *same* simTimeRef rather than keeping its own
+// clock, so nothing can drift out of sync -- important once the field
+// becomes genuinely time-dependent and its arrow, the spin arrow, and
+// (eventually) a rotating-frame view all need to reflect the same instant.
+function TimeDrivenArrow({ simTimeRef, getDirection, length, color, headLength, headWidth, shaftWidth }) {
   const arrowRef = useRef();
   useFrame(() => {
-    const { x, y, z } = blochVectorFromState(theta, phi);
+    const { x, y, z } = getDirection(simTimeRef.current);
     arrowRef.current?.setDirection(blochToThree(x, y, z));
   });
   return (
     <ThickArrowHelper ref={arrowRef} dir={new THREE.Vector3(1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={length} color={color} headLength={headLength} headWidth={headWidth} shaftWidth={shaftWidth} />
+  );
+}
+
+// Owns the one simulation clock everything time-dependent reads from:
+// simTime, a ref incremented here once per frame and never written
+// anywhere else. Living inside the Canvas tree as a single component is
+// what makes it shareable -- a ref created here can be handed to any
+// number of sibling components as an ordinary prop, and they'll all read
+// the exact same mutable box every frame. This is also where the rotating-
+// frame view will eventually hook in: a <group> wrapping the graticule and
+// axis arrows, rotated each frame from this same simTime, so the field,
+// the spin, and the frame itself can never disagree about what instant
+// they're each showing.
+//
+// The sidebar's numeric time readout is real React state, but throttled to
+// ~10 updates/sec rather than pushed every frame -- a human-readable
+// number doesn't need 60 updates/sec the way the arrows' geometry does.
+function SimulationScene({ spinState, magneticField, paused, onTimeUpdate }) {
+  const simTime = useRef(0);
+  const lastReportedSec = useRef(-1);
+
+  useFrame((state, delta) => {
+    if (!paused) simTime.current += delta;
+    const t = simTime.current;
+    const rounded = Math.floor(t * 10) / 10;
+    if (rounded !== lastReportedSec.current) {
+      lastReportedSec.current = rounded;
+      onTimeUpdate(rounded);
+    }
+  });
+
+  const field = magneticField[0];
+
+  return (
+    <>
+      <TimeDrivenArrow
+        simTimeRef={simTime}
+        getDirection={(t) => {
+          const s0 = unitVectorFromAngles(spinState.theta, spinState.phi);
+          const bHat = unitVectorFromAngles(field.theta, field.phi);
+          return rotateAroundAxis(s0, bHat, -field.mag * t);
+        }}
+        length={1} color={0xcc0000} headLength={0.12} headWidth={0.08} shaftWidth={5.0}
+      />
+      <TimeDrivenArrow
+        simTimeRef={simTime}
+        getDirection={(t) => unitVectorFromAngles(field.theta, field.phi)}
+        length={1} color={0x0066cc} headLength={0.12} headWidth={0.08} shaftWidth={5.0}
+      />
+    </>
   );
 }
 
@@ -272,10 +363,7 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
         <KetLabel sign="+" axis="z" position={blochToThree(0, 0, SPHERE_AXIS_EXTENT + 0.2).toArray()} />
         <KetLabel sign="-" axis="z" position={blochToThree(0, 0, -(SPHERE_AXIS_EXTENT + 0.2)).toArray()} />
 
-        {/* For the spin state */}
-        <MovingArrow theta={spinState.theta} phi={spinState.phi} length={1} color={0xcc0000} headLength={0.12} headWidth={0.08} shaftWidth={5.0} />
-        {/* For the B-field */}
-        <MovingArrow theta={magneticField[0].theta} phi={magneticField[0].phi} length={1} color={0x0066cc} headLength={0.12} headWidth={0.08} shaftWidth={5.0} />
+        <SimulationScene spinState={spinState} magneticField={magneticField} paused={paused} onTimeUpdate={setTimeSec} />
 
         <OrbitControls ref={controlsRef} target={SPHERE_INITIAL_CAMERA_TARGET} />
       </Canvas>
@@ -322,7 +410,7 @@ export default function App() {
   // Spin state at t = 0, set by two angles
   const [initialSpinState, setInitialSpinState] = useState({ theta: 0, phi: 0 });
   // Every element of this array should have a theta, phi, magnitude, omega, and phase (at t=0) specifying it
-  const [magneticField, setMagneticField] = useState([{ mag: 0, theta: 0, phi: 0, omega: 0, phase: 0 }]);
+  const [magneticField, setMagneticField] = useState([{ mag: 1, theta: 0, phi: 0, omega: 0, phase: 0 }]);
   // Pausing the animation
   const [paused, setPaused] = useState(true);
   // Time variable
