@@ -8,6 +8,7 @@ import './App.css';
 /********** Constants and initial values **********/
 const SPHERE_INITIAL_CAMERA_POSITION = [3.3, 2.4, 3.6];
 const SPHERE_INITIAL_CAMERA_TARGET = [0, 0.32, 0];
+const SPHERE_AXIS_EXTENT = 1.3;  // Helps determine how far axis arrows and axis labels are drawn beyond the sphere itself
 
 /************************************************
 *
@@ -97,14 +98,7 @@ function AxisLabel({ text, position, size = 0.28 }) {
 
 // The state arrow's direction depends on theta/phi, but ThickArrowHelper only
 // re-syncs when its imperative setDirection/setLength handle is called --
-// passing a new `dir` prop alone won't move it (same reasoning as Axes()
-// being static vs. FieldVectors driving its arrows imperatively). It has to
-// be done with useFrame from *inside* the Canvas tree, not a useLayoutEffect
-// in the component that renders the <Canvas>: R3F mounts a Canvas's children
-// through its own reconciler on its own schedule, decoupled from the outer
-// DOM tree's commit -- a useLayoutEffect up there fires before the arrow
-// ref even exists yet, silently no-ops, and (since theta/phi may not change
-// again) never gets a second chance.
+// passing a new `dir` prop alone won't move it. 
 function PoincareStateArrow({ theta, phi }) {
   const arrowRef = useRef();
   useFrame(() => {
@@ -116,13 +110,10 @@ function PoincareStateArrow({ theta, phi }) {
   );
 }
 
-const SPHERE_AXIS_EXTENT = 1.3;
-
 function PoincareSphere({ theta, phi }) {
   const controlsRef = useRef();
-  // Same reasoning as the wave animation's Home View button: not
-  // controls.reset(), since target0/position0 get captured before drei
-  // applies the `target` prop below, so reset() would snap to the wrong
+  // Can't use controls.reset(), since target0/position0 get captured before
+  // drei applies the `target` prop below, so reset() would snap to the wrong
   // point. Set both explicitly instead.
   const resetView = () => {
     const controls = controlsRef.current;
@@ -170,13 +161,13 @@ function PoincareSphere({ theta, phi }) {
         onClick={resetView}
         style={{
           position: 'absolute',
-          bottom: '6px',
-          left: '6px',
-          width: '46px',
-          height: '46px',
+          bottom: '10px',
+          right: '10px',
+          width: '60px',
+          height: '60px',
           padding: '2px',
           margin: 0,
-          fontSize: '0.62rem',
+          fontSize: '0.8rem',
           lineHeight: 1.15,
           display: 'flex',
           alignItems: 'center',
@@ -189,130 +180,6 @@ function PoincareSphere({ theta, phi }) {
     </div>
   );
 }
-
-/********** Main panel and App functions **********/
-
-// export function SpherePanel({ controlBools }) {
-//   const canvasRef = useRef(null);
-//   const containerRef = useRef(null);
-//   const [circle, setCircle] = useState({ x: 300, y: 200, radius: 8 });
-//   const [draggingCircle, setDraggingCircle] = useState(false);
-//   const [offset, setOffset] = useState({ x: 0, y: 0 });
-//   const [circleColor, setCircleColor] = useState(false);
-//   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
-
-//   // Resize canvas to fill container
-//   useEffect(() => {
-//     const canvas = canvasRef.current;
-//     const container = containerRef.current;
-//     if (!canvas || !container) return;
-
-//     const resizeCanvas = () => {
-//       const newWidth = container.clientWidth;
-//       const newHeight = container.clientHeight;
-//       canvas.width = newWidth;
-//       canvas.height = newHeight;
-//       setCanvasDims({ width: newWidth, height: newHeight }); // Trigger redraw
-//     };
-
-//     resizeCanvas();
-//     window.addEventListener('resize', resizeCanvas);
-//     return () => window.removeEventListener('resize', resizeCanvas);
-//   }, []);
-
-//   // Drawing
-//   useEffect(() => {
-//     const canvas = canvasRef.current;
-//     if (!canvas) return;
-
-//     const ctx = canvas.getContext('2d');
-
-//     // Clear canvas
-//     ctx.fillStyle = '#ffffff';
-//     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-//     // Draw grid
-//     ctx.strokeStyle = '#e0e0e0';
-//     ctx.lineWidth = 1;
-//     for (let i = 0; i <= canvas.width; i += 50) {
-//       ctx.beginPath();
-//       ctx.moveTo(i, 0);
-//       ctx.lineTo(i, canvas.height);
-//       ctx.stroke();
-//     }
-//     for (let i = 0; i <= canvas.height; i += 50) {
-//       ctx.beginPath();
-//       ctx.moveTo(0, i);
-//       ctx.lineTo(canvas.width, i);
-//       ctx.stroke();
-//     }
-
-//     // Draw circle
-//     ctx.fillStyle = circleColor ? '#e74c3c' : '#39db34';
-//     ctx.beginPath();
-//     ctx.arc(circle.x, circle.y, circle.radius, 0, Math.PI * 2);
-//     ctx.fill();
-
-//     // Draw circle outline
-//     ctx.strokeStyle = circleColor ? '#c0392b' : '#2bb929';
-//     ctx.lineWidth = 2;
-//     ctx.stroke();
-//   }, [circle, circleColor, canvasDims, controlBools]);
-
-//   // Mouse handlers
-//   const handleMouseDown = (e) => {
-//     const canvas = canvasRef.current;
-//     const rect = canvas.getBoundingClientRect();
-//     const mouseX = e.clientX - rect.left;
-//     const mouseY = e.clientY - rect.top;
-
-//     const dist = Math.sqrt((mouseX - circle.x) ** 2 + (mouseY - circle.y) ** 2);
-
-//     if (dist < circle.radius + 5) {
-//       setDraggingCircle(true);
-//       setOffset({
-//         x: mouseX - circle.x,
-//         y: mouseY - circle.y,
-//       });
-//     }
-//   };
-
-//   const handleMouseMove = (e) => {
-//     if (!draggingCircle) return;
-
-//     const canvas = canvasRef.current;
-//     const rect = canvas.getBoundingClientRect();
-//     const mouseX = e.clientX - rect.left;
-//     const mouseY = e.clientY - rect.top;
-
-//     setCircle({
-//       ...circle,
-//       x: Math.max(circle.radius, Math.min(canvas.width - circle.radius, mouseX - offset.x)),
-//       y: Math.max(circle.radius, Math.min(canvas.height - circle.radius, mouseY - offset.y)),
-//     });
-//   };
-
-//   const handleMouseUp = () => {
-//     setDraggingCircle(false);
-//   };
-
-//   return (
-//     <div ref={containerRef} style={{ width: '100%', height: '100%' }}>
-//       <canvas
-//         ref={canvasRef}
-//         onMouseDown={handleMouseDown}
-//         onMouseMove={handleMouseMove}
-//         onMouseUp={handleMouseUp}
-//         onMouseLeave={handleMouseUp}
-//         style={{
-//           cursor: draggingCircle ? 'grabbing' : 'grab',
-//           display: 'block',
-//           touchAction: 'none',
-//         }}
-//       />
-//     </div>
-//   );
-// }
 
 export default function App() {
   const [controlBools, setControlBools] = useState({
