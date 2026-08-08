@@ -593,13 +593,16 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
 
 export default function App() {
   const [controlBools, setControlBools] = useState({
-    showSphere: true,             // Displaying the sphere
+    frameRotating: false,
+    showSphere: true,
     showSpinTrace: true    
   });
   // Spin state at t = 0, set by two angles
   const [initialSpinState, setInitialSpinState] = useState({ theta: 0, phi: 0 });
   // Every element of this array should have a theta, phi, magnitude, omega, and phase (at t=0) specifying it
   const [magneticField, setMagneticField] = useState({ mag0: 1, theta0: 0, phi0: 0, mag1: 0, omega1: 0, phase1: 0, rotatingComponent: false });
+  // Rotating frame properties
+  const [rotatingFrame, setRotatingFrame] = useState(0); // The value is the rad/s omega of the rotating frame
   // Pausing the animation
   const [paused, setPaused] = useState(true);
   // Time variable
@@ -696,6 +699,26 @@ export default function App() {
                     />
                   </div>
                 )}
+              </div>
+
+              <hr className="sidebar-divider" />
+
+              <h3>Rotating Frame</h3>
+              <div className="control-group">
+                <label>
+                  <input type="checkbox" checked={controlBools.frameRotating} onChange={(e) => setControlBools({ ...controlBools, frameRotating: e.target.checked })} />
+                  Enable rotating frame
+                </label>
+                <label>
+                  <input type="checkbox" checked={controlBools.frameRotating} onChange={(e) => setControlBools({ ...controlBools, frameRotating: e.target.checked })} />
+                  Lock rotation to B-field
+                </label>
+                <SliderPlusTextboxControl
+                  label="Frame ω (rad/s)"
+                  valueNum={rotatingFrame.toFixed(1)}
+                  onChangeNum={(val) => setRotatingFrame(val)}
+                  min={-10.0} max={10.0} step={0.1}
+                />
               </div>
 
               <hr className="sidebar-divider" />
