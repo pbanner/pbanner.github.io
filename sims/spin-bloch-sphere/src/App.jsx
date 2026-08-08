@@ -44,7 +44,7 @@ function PauseIcon({ size = '0.9em' }) {
 function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step, disabled = false }) {
   return (
     <div className="control-group">
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
         <label style={{ margin: '0em 0em' }}>{label}</label> {/*: {valueNum.toFixed(1)}*/}
         <input
           type="range"
@@ -495,7 +495,7 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
             Reset
           </button>
         </div>
-        <div className="control-group" style={{ marginTop: '8px' }}>
+        <div className="control-group" style={{ margin: '8px 0px' }}>
           <label>Speed: {speedFactor.toFixed(1)}×</label>
           <input
             type="range" min={0.1} max={5} step={0.1}
@@ -551,6 +551,7 @@ export default function App() {
   // For setting just one property of one component of a magnetic field
   // Usage example: updateFieldComponent(0, { theta: parseFloat(e.target.value) })
   function updateFieldComponent(index, patch) {
+    simTime.current = 0;
     setMagneticField(prev => prev.map((c, i) => (i === index ? { ...c, ...patch } : c)));
   }
   // For adding and removing components of a magnetic field
@@ -621,7 +622,7 @@ export default function App() {
                   step={1.0}
                 />
                 <SliderPlusTextboxControl
-                  label="|B|"
+                  label="Magnitude"
                   valueNum={(magneticField[0].mag).toFixed(1)}
                   onChangeNum={(val) => {updateFieldComponent(0, { mag: parseFloat(val) })}}
                   min={0.0}
