@@ -313,14 +313,9 @@ function TimeDrivenAxisLine({ simTimeRef, getDirection, extent, color = 'gray', 
 const TRACE_SAMPLE_INTERVAL = 0.05; // seconds of simulated time between points
 const TRACE_MAX_POINTS = 4000;      // safety cap for an unattended long-running tab
 
-function SpinTrace({ simTimeRef, getDirection, resetKey, color = 0xcc0000 }) {
+function SpinTrace({ simTimeRef, getDirection, color = 0xcc0000 }) {
   const [tracePoints, setTracePoints] = useState([]);
   const lastSampleTime = useRef(-Infinity);
-
-  useEffect(() => {
-    lastSampleTime.current = -Infinity;
-    setTracePoints([]);
-  }, [resetKey]);
 
   useFrame(() => {
     const t = simTimeRef.current;
@@ -390,7 +385,6 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
       <SpinTrace
         simTimeRef={simTimeRef}
         getDirection={getSpinDirection}
-        resetKey={`${spinState.theta}|${spinState.phi}|${field.theta}|${field.phi}|${field.mag}`}
       />
       {/* B-field arrow + line */}
       <TimeDrivenArrow
