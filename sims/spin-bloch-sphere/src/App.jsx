@@ -74,6 +74,39 @@ function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step
   );
 }
 
+function getFieldComponentArrows(mode, field, spinState) {
+  switch (mode) {
+    case 'xyz':
+      return [
+        { color: 0xff9900, getDirection: (t) => { const b = fieldDirectionAt(field, t); return { x: b.x, y: 0, z: 0 }; } },
+        { color: 0x33cc33, getDirection: (t) => { const b = fieldDirectionAt(field, t); return { x: 0, y: b.y, z: 0 }; } },
+        { color: 0x9933ff, getDirection: (t) => { const b = fieldDirectionAt(field, t); return { x: 0, y: 0, z: b.z }; } },
+      ];
+    case 'staticAxis': {
+      const n = unitVectorFromAngles(field.theta0, field.phi0);
+      return [
+        { color: 0xff9900, getDirection: (t) => projectParallelPerp(fieldDirectionAt(field, t), n).parallel },
+        { color: 0x9933ff, getDirection: (t) => projectParallelPerp(fieldDirectionAt(field, t), n).perp },
+      ];
+    }
+    case 'spin':
+      return [
+        { color: 0xff9900, getDirection: (t) => projectParallelPerp(fieldDirectionAt(field, t), evolveSpin(spinState, field, t)).parallel },
+        { color: 0x9933ff, getDirection: (t) => projectParallelPerp(fieldDirectionAt(field, t), evolveSpin(spinState, field, t)).perp },
+      ];
+    case 'staticRotating':
+      return [
+        { color: 0xff9900, getDirection: (t) => fieldPartsAt(field, t).staticPart },
+        { color: 0x9933ff, getDirection: (t) => fieldPartsAt(field, t).rotatingPart },
+      ];
+    case 'effectiveField':
+      return [{ color: 0x00cccc, getDirection: () => effectiveField(field) }];
+    case 'none':
+    default:
+      return [];
+  }
+}
+
 /************************************************
 *
 * Physics helpers
@@ -135,6 +168,55 @@ function transverseBasis(n) {
   return { e1, e2 };
 }
 
+// The field's static and rotating pieces, computed separately -- shared by
+// fieldDirectionAt (which just sums them) and the "static/rotating parts"
+// component display, so there's one definition instead of two.
+function fieldPartsAt(field, t) {
+  const n = unitVectorFromAngles(field.theta0, field.phi0);
+  const { e1, e2 } = transverseBasis(n);
+  const Phi = field.omega1 * t + field.phase1;
+  const staticPart = { x: field.mag0 * n.x, y: field.mag0 * n.y, z: field.mag0 * n.z };
+  const rotatingPart = {
+    x: field.mag1 * (Math.cos(Phi) * e1.x + Math.sin(Phi) * e2.x),
+    y: field.mag1 * (Math.cos(Phi) * e1.y + Math.sin(Phi) * e2.y),
+    z: field.mag1 * (Math.cos(Phi) * e1.z + Math.sin(Phi) * e2.z),
+  };
+  return { staticPart, rotatingPart };
+}
+
+function fieldDirectionAt(field, t) {
+  const { staticPart, rotatingPart } = fieldPartsAt(field, t);
+  return { x: staticPart.x + rotatingPart.x, y: staticPart.y + rotatingPart.y, z: staticPart.z + rotatingPart.z };
+}
+
+function fieldMagnitudeAt(field, t) {
+  const { x, y, z } = fieldDirectionAt(field, t);
+  return Math.sqrt(x * x + y * y + z * z);
+}
+
+// The time-independent effective field in the frame co-rotating with the
+// drive -- the exact beff evolveSpin already precesses the spin about.
+// Pulled out on its own so the "Effective field" component display shows
+// literally the object the physics is built from, not a re-derived copy.
+function effectiveField(field) {
+  const n = unitVectorFromAngles(field.theta0, field.phi0);
+  const { e1 } = transverseBasis(n);
+  return {
+    x: (field.mag0 - field.omega1) * n.x + field.mag1 * e1.x,
+    y: (field.mag0 - field.omega1) * n.y + field.mag1 * e1.y,
+    z: (field.mag0 - field.omega1) * n.z + field.mag1 * e1.z,
+  };
+}
+
+function dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+
+function projectParallelPerp(v, axisUnit) {
+  const d = dot(v, axisUnit);
+  const parallel = { x: axisUnit.x * d, y: axisUnit.y * d, z: axisUnit.z * d };
+  const perp = { x: v.x - parallel.x, y: v.y - parallel.y, z: v.z - parallel.z };
+  return { parallel, perp };
+}
+
 // Exact solution for a static field plus one transverse-rotating
 // component sharing the static field's axis: transform into the frame
 // co-rotating with the drive (field looks static there), precess about
@@ -144,11 +226,7 @@ function evolveSpin(spinState, field, t) {
   const { e1 } = transverseBasis(n);
   const Phi = field.omega1 * t + field.phase1;
 
-  const beff = {
-    x: (field.mag0 - field.omega1) * n.x + field.mag1 * e1.x,
-    y: (field.mag0 - field.omega1) * n.y + field.mag1 * e1.y,
-    z: (field.mag0 - field.omega1) * n.z + field.mag1 * e1.z,
-  };
+  const beff = effectiveField(field);
   const omegaEff = Math.sqrt(beff.x ** 2 + beff.y ** 2 + beff.z ** 2);
 
   const s0 = unitVectorFromAngles(spinState.theta, spinState.phi);
@@ -158,24 +236,6 @@ function evolveSpin(spinState, field, t) {
     : rotateAroundAxis(intoRotatingFrame, normalize(beff), -omegaEff * t);
 
   return rotateAroundAxis(precessed, n, Phi);
-}
-
-// The actual (magnitude-carrying) lab-frame field vector at time t -- used
-// for the field arrow's direction/length and the axis line's direction.
-function fieldDirectionAt(field, t) {
-  const n = unitVectorFromAngles(field.theta0, field.phi0);
-  const { e1, e2 } = transverseBasis(n);
-  const Phi = field.omega1 * t + field.phase1;
-  return {
-    x: field.mag0 * n.x + field.mag1 * (Math.cos(Phi) * e1.x + Math.sin(Phi) * e2.x),
-    y: field.mag0 * n.y + field.mag1 * (Math.cos(Phi) * e1.y + Math.sin(Phi) * e2.y),
-    z: field.mag0 * n.z + field.mag1 * (Math.cos(Phi) * e1.z + Math.sin(Phi) * e2.z),
-  };
-}
-
-function fieldMagnitudeAt(field, t) {
-  const { x, y, z } = fieldDirectionAt(field, t);
-  return Math.sqrt(x * x + y * y + z * z);
 }
 
 /************************************************
@@ -425,7 +485,7 @@ function SpinTrace({ simTimeRef, getDirection, speedFactor, resetKey, color = 0x
 // The sidebar's numeric time readout is real React state, but throttled to
 // ~10 updates/sec rather than pushed every frame -- a human-readable
 // number doesn't need 60 updates/sec the way the arrows' geometry does.
-function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTimeRef, speedFactor, controlBools, frameAxis, frameOmega }) {
+function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTimeRef, speedFactor, componentsMode, controlBools, frameAxis, frameOmega }) {
   const lastReportedSec = useRef(-1);
 
   useFrame((state, delta) => {
@@ -451,6 +511,7 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
 
   const getSpinDirection = applyFrame((t) => evolveSpin(spinState, field, t));
   const getFieldDirection = applyFrame((t) => fieldDirectionAt(field, t));
+  const componentArrows = getFieldComponentArrows(componentsMode, field, spinState);
 
   // One canonical key, used both to reset the clock and to tell
   // SpinTrace to clear, since neither can rely on t itself changing:
@@ -474,6 +535,20 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
         color={0x0066cc} headLength={0.12} headWidth={0.08} shaftWidth={5.0}
       />
       <TimeDrivenAxisLine simTimeRef={simTimeRef} getDirection={(t) => normalize(getFieldDirection(t))} extent={SPHERE_AXIS_EXTENT} />
+      {componentArrows.map((c, i) => (
+        <TimeDrivenArrow
+          key={i}
+          simTimeRef={simTimeRef}
+          getDirection={applyFrame(c.getDirection)}
+          getLength={(t) => {
+            const v = c.getDirection(t);
+            return Math.sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2) * FIELD_MAGNITUDE_DISPLAY_FACTOR;
+          }}
+          length={1}
+          color={c.color}
+          headLength={0.10} headWidth={0.06} shaftWidth={3.5}
+        />
+      ))}
     </>
   );
 }
@@ -500,7 +575,7 @@ function RotatingFrameBackdrop({ simTimeRef, axis, omega, active, children }) {
   return <group ref={groupRef}>{children}</group>;
 }
 
-function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, setTimeSec, simTimeRef, speedFactor, setSpeedFactor, controlBools, rotatingFrame }) {
+function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, setTimeSec, simTimeRef, speedFactor, setSpeedFactor, componentsMode, controlBools, rotatingFrame }) {
   const controlsRef = useRef();
   // Can't use controls.reset(), since target0/position0 get captured before
   // drei applies the `target` prop below, so reset() would snap to the wrong
@@ -575,8 +650,8 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
           spinState={spinState} magneticField={magneticField}
           paused={paused} onTimeUpdate={setTimeSec}
           simTimeRef={simTimeRef} speedFactor={speedFactor}
+          componentsMode={componentsMode} controlBools={controlBools}
           frameAxis={frameAxisPhysics} frameOmega={frameOmega}
-          controlBools={controlBools}
         />
 
         <OrbitControls ref={controlsRef} target={SPHERE_INITIAL_CAMERA_TARGET} />
@@ -643,6 +718,8 @@ export default function App() {
   const [magneticField, setMagneticField] = useState({ mag0: 1, theta0: 0, phi0: 0, mag1: 0, omega1: 0, phase1: 0, rotatingComponent: false });
   // Rotating frame properties
   const [rotatingFrame, setRotatingFrame] = useState(0); // The value is the rad/s omega of the rotating frame
+  // For viewing components of the field
+  const [componentsMode, setComponentsMode] = useState('none');
   // Pausing the animation
   const [paused, setPaused] = useState(true);
   // Time variable
@@ -783,6 +860,17 @@ export default function App() {
                   <input type="checkbox" checked={controlBools.showSpinTrace} onChange={(e) => setControlBools({ ...controlBools, showSpinTrace: e.target.checked })} />
                   Show path of spin vector
                 </label>
+              </div>
+              <div className="control-group">
+                <label>Components</label>
+                <select value={componentsMode} onChange={(e) => setComponentsMode(e.target.value)}>
+                  <option value="none">None</option>
+                  <option value="xyz">X / Y / Z</option>
+                  <option value="staticAxis">Relative to static axis</option>
+                  <option value="spin">Relative to spin</option>
+                  <option value="staticRotating">Static / rotating parts</option>
+                  <option value="effectiveField">Effective field (rotating frame)</option>
+                </select>
               </div>
 
               {/*
