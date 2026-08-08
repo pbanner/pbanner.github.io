@@ -420,7 +420,7 @@ function SpinTrace({ simTimeRef, getDirection, speedFactor, color = 0xcc0000, vi
 // The sidebar's numeric time readout is real React state, but throttled to
 // ~10 updates/sec rather than pushed every frame -- a human-readable
 // number doesn't need 60 updates/sec the way the arrows' geometry does.
-function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTimeRef, speedFactor, controlBools }) {
+function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTimeRef, speedFactor, controlBools, frameAxis, frameOmega }) {
   const lastReportedSec = useRef(-1);
 
   useFrame((state, delta) => {
@@ -438,20 +438,19 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
     mag1: magneticField.rotatingComponent ? magneticField.mag1 : 0,
   };
 
-  const getSpinDirection = (t) => evolveSpin(spinState, field, t);
-  const getFieldDirection = (t) => fieldDirectionAt(field, t);
+  const applyFrame = (getDir) => (t) => {
+    const raw = getDir(t);
+    if (!controlBools.frameRotating) return raw;
+    return rotateAroundAxis(raw, frameAxis, frameOmega * t);
+  };
+
+  const getSpinDirection = applyFrame((t) => evolveSpin(spinState, field, t));
+  const getFieldDirection = applyFrame((t) => fieldDirectionAt(field, t));
 
   return (
     <>
-      {/* Spin arrow */}
       <TimeDrivenArrow simTimeRef={simTimeRef} getDirection={getSpinDirection} length={1} color={0xcc0000} headLength={0.12} headWidth={0.08} shaftWidth={5.0} />
-      <SpinTrace
-        simTimeRef={simTimeRef}
-        getDirection={getSpinDirection}
-        speedFactor={speedFactor}
-        visible={controlBools.showSpinTrace}
-      />
-      {/* B-field arrow + line */}
+      <SpinTrace simTimeRef={simTimeRef} getDirection={getSpinDirection} speedFactor={speedFactor} visible={controlBools.showSpinTrace} />
       <TimeDrivenArrow
         simTimeRef={simTimeRef}
         getDirection={getFieldDirection}
@@ -459,11 +458,7 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
         length={field.mag0}
         color={0x0066cc} headLength={0.12} headWidth={0.08} shaftWidth={5.0}
       />
-      <TimeDrivenAxisLine
-        simTimeRef={simTimeRef}
-        getDirection={(t) => normalize(fieldDirectionAt(field, t))}
-        extent={SPHERE_AXIS_EXTENT}
-      />
+      <TimeDrivenAxisLine simTimeRef={simTimeRef} getDirection={(t) => normalize(getFieldDirection(t))} extent={SPHERE_AXIS_EXTENT} />
     </>
   );
 }
@@ -485,7 +480,7 @@ function RotatingFrameBackdrop({ simTimeRef, axis, omega, active, children }) {
       group.quaternion.identity();
       return;
     }
-    group.quaternion.setFromAxisAngle(axis, -omega * simTimeRef.current);
+    group.quaternion.setFromAxisAngle(axis, omega * simTimeRef.current);
   });
   return <group ref={groupRef}>{children}</group>;
 }
@@ -516,8 +511,10 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
     return <directionalLight ref={lightRef} intensity={30.0} />;
   }
 
-  const staticAxisPhysics = unitVectorFromAngles(magneticField.theta0, magneticField.phi0);
-  const frameAxis = blochToThree(staticAxisPhysics.x, staticAxisPhysics.y, staticAxisPhysics.z);
+  //const staticAxisPhysics = unitVectorFromAngles(magneticField.theta0, magneticField.phi0);
+  //const frameAxis = blochToThree(staticAxisPhysics.x, staticAxisPhysics.y, staticAxisPhysics.z);
+  const frameAxisPhysics = unitVectorFromAngles(magneticField.theta0, magneticField.phi0);
+  const frameAxisThree = blochToThree(frameAxisPhysics.x, frameAxisPhysics.y, frameAxisPhysics.z);
   const frameOmega = controlBools.frameLocked
     ? (magneticField.rotatingComponent ? -magneticField.omega1 : magneticField.mag0)
     : rotatingFrame;
@@ -532,7 +529,7 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
         <ambientLight intensity={5.0} />
         <CameraLight />
 
-        <RotatingFrameBackdrop simTimeRef={simTimeRef} axis={frameAxis} omega={frameOmega} active={controlBools.frameRotating}>
+        <RotatingFrameBackdrop simTimeRef={simTimeRef} axis={frameAxisThree} omega={frameOmega} active={controlBools.frameRotating}>
           {controlBools.showSphere && (
             <mesh>
               <sphereGeometry args={[1, 32, 32]} />
@@ -563,6 +560,7 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
           spinState={spinState} magneticField={magneticField}
           paused={paused} onTimeUpdate={setTimeSec}
           simTimeRef={simTimeRef} speedFactor={speedFactor}
+          frameAxis={frameAxisPhysics} frameOmega={frameOmega}
           controlBools={controlBools}
         />
 
