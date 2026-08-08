@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
 import ThickArrowHelper from './ThickArrowHelper.jsx';
 import { ketWidth, drawKet } from './ket.js';
+import Histogram from './Histogram.jsx';
 import * as THREE from 'three';
 import './App.css';
 
@@ -61,6 +62,25 @@ function rotateAroundAxis(v, axis, angle) {
 function magnitude(v) { return Math.sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2); }
 
 function dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+
+// The field actually driving the evolution -- the rotating component only
+// contributes once explicitly enabled, otherwise its magnitude is masked to
+// zero. Shared by the live animation (SimulationScene) and the data-
+// collection trial math below, so the two can't silently diverge on what
+// "the field in effect" means.
+function activeField(field) {
+  return { ...field, mag1: field.rotatingComponent ? field.mag1 : 0 };
+}
+
+// The "+1" eigenstate direction for a measurement along a given axis.
+function axisUnitVector(axis) {
+  switch (axis) {
+    case 'x': return { x: 1, y: 0, z: 0 };
+    case 'y': return { x: 0, y: 1, z: 0 };
+    case 'z':
+    default: return { x: 0, y: 0, z: 1 };
+  }
+}
 
 function projectParallelPerp(v, axisUnit) {
   const d = dot(v, axisUnit);
@@ -568,7 +588,7 @@ function SpinTrace({ simTimeRef, getDirection, speedFactor, resetKey, color = 0x
 // The sidebar's numeric time readout is real React state, but throttled to
 // ~10 updates/sec rather than pushed every frame -- a human-readable
 // number doesn't need 60 updates/sec the way the arrows' geometry does.
-function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTimeRef, speedFactor, componentsMode, controlBools, frameAxis, frameOmega }) {
+function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTimeRef, speedFactor, componentsMode, controlBools, frameAxis, frameOmega, collapsedDirection, trialToken }) {
   const lastReportedSec = useRef(-1);
 
   useFrame((state, delta) => {
@@ -581,10 +601,7 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
     }
   });
 
-  const field = {
-    ...magneticField,
-    mag1: magneticField.rotatingComponent ? magneticField.mag1 : 0,
-  };
+  const field = activeField(magneticField);
 
   // The rotating component's phase-zero transverse axis, carried forward
   // incrementally each time theta0/phi0 change (see advanceTransverseBasis)
@@ -605,14 +622,18 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
     return rotateAroundAxis(raw, frameAxis, frameOmega * t);
   };
 
-  const getSpinDirection = applyFrame((t) => evolveSpin(spinState, field, t, basisRef));
+  // Once a measurement has collapsed the state, the spin arrow holds at the
+  // outcome pole rather than continuing to reflect evolveSpin -- a real
+  // projective measurement snaps to the measured eigenstate regardless of
+  // where the precession had it an instant before.
+  const getSpinDirection = applyFrame((t) => collapsedDirection ?? evolveSpin(spinState, field, t));
   const getFieldDirection = applyFrame((t) => fieldDirectionAt(field, t, basisRef));
   const componentArrows = getFieldComponentArrows(componentsMode, field, spinState, basisRef);
 
   const componentLength = (c, t) => magnitude(c.getDirection(t)) * FIELD_MAGNITUDE_DISPLAY_FACTOR;
   const showSimpleConnectors = componentsMode !== 'none' && componentsMode !== 'effectiveField' && componentsMode !== 'xyz';
 
-  const resetKey = `${spinState.theta}|${spinState.phi}|${magneticField.mag0}|${magneticField.theta0}|${magneticField.phi0}|${magneticField.mag1}|${magneticField.omega1}|${magneticField.phase1}|${magneticField.rotatingComponent}|${frameOmega}|${controlBools.frameRotating}`;
+  const resetKey = `${spinState.theta}|${spinState.phi}|${magneticField.mag0}|${magneticField.theta0}|${magneticField.phi0}|${magneticField.mag1}|${magneticField.omega1}|${magneticField.phase1}|${magneticField.rotatingComponent}|${frameOmega}|${controlBools.frameRotating}|${trialToken}`;
 
   useLayoutEffect(() => {
     simTimeRef.current = 0;
@@ -684,7 +705,7 @@ function RotatingFrameBackdrop({ simTimeRef, axis, omega, active, children }) {
   return <group ref={groupRef}>{children}</group>;
 }
 
-function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, setTimeSec, simTimeRef, speedFactor, setSpeedFactor, componentsMode, controlBools, rotatingFrame }) {
+function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, setTimeSec, simTimeRef, speedFactor, setSpeedFactor, componentsMode, controlBools, rotatingFrame, dc }) {
   const controlsRef = useRef();
   // Can't use controls.reset(), since target0/position0 get captured before
   // drei applies the `target` prop below, so reset() would snap to the wrong
@@ -761,32 +782,132 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
           simTimeRef={simTimeRef} speedFactor={speedFactor}
           componentsMode={componentsMode} controlBools={controlBools}
           frameAxis={frameAxisPhysics} frameOmega={frameOmega}
+          collapsedDirection={dc.collapsedDirection} trialToken={dc.trialToken}
         />
 
         <OrbitControls ref={controlsRef} target={SPHERE_INITIAL_CAMERA_TARGET} />
       </Canvas>
 
-      <div className="overlay-controls" style={{ position: 'absolute', top: '10px', right: '10px' }}>
-        <h3>Time Controls</h3>
-        <label>Time: {timeSec.toFixed(1)} sec</label>
-        <div style={{ display: 'flex', flexDirection: 'row' }}>
-          <button className="control-button" onClick={() => setPaused((p) => !p)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', margin: 0, fontSize: '1.0rem', width: '100px' }}>
-            {paused ? <PlayIcon /> : <PauseIcon />}
-            {paused ? 'Start' : 'Pause'}
-          </button>
-          <button className="control-button" onClick={() => { simTimeRef.current = 0; }} style={{ marginLeft: '6px', padding: '6px 14px', fontSize: '1.0rem', width: '100px' }}>
-            Reset
-          </button>
+      <div style={{ position: 'absolute', top: '10px', right: '10px', display: 'flex', flexDirection: 'column', gap: '10px', width: '230px' }}>
+        <div className="overlay-controls">
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: 0, fontWeight: 600 }}>
+            <input type="checkbox" checked={dc.mode} onChange={(e) => dc.setMode(e.target.checked)} />
+            Data collection mode
+          </label>
+
+          <hr className="sidebar-divider" style={{ margin: '2px 0' }} />
+
+          <h3 style={{ marginTop: 0 }}>Time Controls</h3>
+
+          {!dc.mode ? (
+            <>
+              <label>Time: {timeSec.toFixed(1)} sec</label>
+              <div style={{ display: 'flex', flexDirection: 'row' }}>
+                <button className="control-button" onClick={() => setPaused((p) => !p)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', margin: 0, fontSize: '1.0rem', width: '100px' }}>
+                  {paused ? <PlayIcon /> : <PauseIcon />}
+                  {paused ? 'Start' : 'Pause'}
+                </button>
+                <button className="control-button" onClick={() => { simTimeRef.current = 0; }} style={{ marginLeft: '6px', padding: '6px 14px', fontSize: '1.0rem', width: '100px' }}>
+                  Reset
+                </button>
+              </div>
+              <div className="control-group" style={{ margin: '8px 0px' }}>
+                <label>Speed: {speedFactor.toFixed(1)}×</label>
+                <input
+                  type="range" min={0.1} max={2.0} step={0.1}
+                  value={speedFactor}
+                  onChange={(e) => setSpeedFactor(parseFloat(e.target.value))}
+                  style={{ width: '100%' }}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="control-group" style={{ gap: '4px' }}>
+                <label style={{ margin: 0 }}>Measurement axis:</label>
+                <div style={{ display: 'flex', flexDirection: 'row', gap: '6px' }}>
+                  {['x', 'y', 'z'].map((axis) => (
+                    <button
+                      key={axis}
+                      className={`control-button ${dc.axis === axis ? 'active' : ''}`}
+                      onClick={() => dc.setAxis(axis)}
+                      disabled={dc.phase === 'running'}
+                      style={{ flex: 1, margin: 0 }}
+                    >
+                      {axis.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="control-group" style={{ margin: '8px 0px' }}>
+                <label>Evolve for: {dc.duration.toFixed(1)} sec</label>
+                <input
+                  type="range" min={0.1} max={20.0} step={0.1}
+                  value={dc.duration}
+                  onChange={(e) => dc.setDuration(parseFloat(e.target.value))}
+                  disabled={dc.phase === 'running'}
+                  style={{ width: '100%' }}
+                />
+              </div>
+
+              <label>
+                Time: {timeSec.toFixed(1)} / {dc.duration.toFixed(1)} sec
+                {dc.phase === 'collapsed' ? ' (measured)' : ''}
+              </label>
+
+              {dc.phase === 'collapsed' ? (
+                <button className="control-button" onClick={dc.onRePrepare} style={{ margin: '4px 0px' }}>
+                  Re-prepare
+                </button>
+              ) : (
+                <button
+                  className="control-button"
+                  onClick={dc.onRunTrial}
+                  disabled={dc.phase === 'running'}
+                  style={{ margin: '4px 0px' }}
+                >
+                  {dc.phase === 'running' ? 'Running…' : 'Run Trial'}
+                </button>
+              )}
+
+              <div className="control-group" style={{ gap: '4px' }}>
+                <label style={{ margin: 0 }}>Batch trials:</label>
+                <div style={{ display: 'flex', flexDirection: 'row', gap: '6px', alignItems: 'center' }}>
+                  <input
+                    type="number" min={1} max={10000} step={1}
+                    value={dc.batchSize}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      if (!Number.isNaN(v)) dc.setBatchSize(v);
+                    }}
+                    disabled={dc.phase === 'running'}
+                    style={{ width: '70px', padding: '4px' }}
+                  />
+                  <button
+                    className="control-button"
+                    onClick={dc.onRunBatch}
+                    disabled={dc.phase === 'running'}
+                    style={{ flex: 1, margin: 0 }}
+                  >
+                    Run Batch
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
-        <div className="control-group" style={{ margin: '8px 0px' }}>
-          <label>Speed: {speedFactor.toFixed(1)}×</label>
-          <input
-            type="range" min={0.1} max={2.0} step={0.1}
-            value={speedFactor}
-            onChange={(e) => setSpeedFactor(parseFloat(e.target.value))}
-            style={{ width: '100%' }}
+
+        {dc.mode && (
+          <Histogram
+            axisLabel={dc.axis.toUpperCase()}
+            counts={dc.histogram}
+            showTheory={dc.showTheory}
+            setShowTheory={dc.setShowTheory}
+            theoryProbPlus={dc.theoryProbPlus}
+            onClear={dc.onClearHistogram}
           />
-        </div>
+        )}
       </div>
 
       <button
@@ -837,15 +958,139 @@ export default function App() {
   // Animation speed factor
   const [speedFactor, setSpeedFactor] = useState(1);
 
+  /********** Data collection mode **********/
+  const [dcModeOn, setDcModeOn] = useState(false);
+  const [measurementAxis, setMeasurementAxis] = useState('z');
+  const [trialDuration, setTrialDuration] = useState(2.0);
+  const [batchSize, setBatchSize] = useState(100);
+  // 'ready' -- vector sits at the initial state, waiting for Run Trial.
+  // 'running' -- animating toward trialDuration.
+  // 'collapsed' -- a measurement was made; the vector holds at the outcome
+  // pole until Re-prepare snaps it back to the initial state.
+  const [trialPhase, setTrialPhase] = useState('ready');
+  const [collapsedDirection, setCollapsedDirection] = useState(null);
+  // Bumped on every Run Trial / Re-prepare so SimulationScene's resetKey
+  // picks it up and clears the sphere trace between trials, even when
+  // neither the prepared state nor the field itself changed.
+  const [trialToken, setTrialToken] = useState(0);
+  const [histogram, setHistogram] = useState({ plus: 0, minus: 0 });
+  const [showTheory, setShowTheory] = useState(false);
+
+  // The exact Born-rule P(+axis) for the current preparation, field, axis,
+  // and evolution time -- computed once here rather than separately inside
+  // the trial-completion effect and the batch handler, so a single-shot
+  // trial, a batch run, and the histogram's theory line can never disagree
+  // with each other about what's being predicted.
+  const theoryProbPlus = useMemo(() => {
+    const finalVector = evolveSpin(initialSpinState, activeField(magneticField), trialDuration);
+    return (1 + dot(finalVector, axisUnitVector(measurementAxis))) / 2;
+  }, [initialSpinState, magneticField, measurementAxis, trialDuration]);
+
+  // Any change to what's actually being measured -- the prepared state, the
+  // field driving its evolution, which axis is measured, or how long it
+  // evolves before measurement -- makes previously collected counts refer
+  // to a different experiment, so each of the setters that can change one
+  // of those (below) also clears the trial bookkeeping right where the
+  // change happens, rather than mixing old and new counts together.
+  function resetTrialData() {
+    setHistogram({ plus: 0, minus: 0 });
+    setTrialPhase('ready');
+    setCollapsedDirection(null);
+  }
+
+  // Watches the (throttled, ~10Hz) time readout for a running trial to
+  // reach its target duration. The actual Born-rule probability used to
+  // draw the outcome comes from theoryProbPlus, evaluated at the exact
+  // nominal trialDuration -- not from whatever simTime happens to have
+  // reached when this effect fires -- so a little animation-frame jitter
+  // in when the trial is detected as "done" can't skew the physics.
+  useEffect(() => {
+    if (!dcModeOn || trialPhase !== 'running') return;
+    if (timeSec < trialDuration) return;
+
+    const axisVec = axisUnitVector(measurementAxis);
+    const outcome = Math.random() < theoryProbPlus ? 'plus' : 'minus';
+    const outcomeVec = outcome === 'plus' ? axisVec : { x: -axisVec.x, y: -axisVec.y, z: -axisVec.z };
+
+    simTime.current = trialDuration;
+    setPaused(true);
+    setCollapsedDirection(outcomeVec);
+    setHistogram((prev) => ({ ...prev, [outcome]: prev[outcome] + 1 }));
+    setTrialPhase('collapsed');
+  }, [timeSec, dcModeOn, trialPhase, trialDuration, measurementAxis, theoryProbPlus]);
+
+  function handleRunTrial() {
+    if (trialPhase !== 'ready') return;
+    simTime.current = 0;
+    setCollapsedDirection(null);
+    setTrialToken((t) => t + 1);
+    setTrialPhase('running');
+    setPaused(false);
+  }
+
+  function handleRePrepare() {
+    simTime.current = 0;
+    setCollapsedDirection(null);
+    setTrialToken((t) => t + 1);
+    setPaused(true);
+    setTrialPhase('ready');
+  }
+
+  function handleRunBatch() {
+    const n = Math.max(1, Math.round(batchSize));
+    let plusCount = 0;
+    for (let i = 0; i < n; i++) {
+      if (Math.random() < theoryProbPlus) plusCount++;
+    }
+    setHistogram((prev) => ({ plus: prev.plus + plusCount, minus: prev.minus + (n - plusCount) }));
+  }
+
+  function handleClearHistogram() {
+    setHistogram({ plus: 0, minus: 0 });
+  }
+
+  function handleSetMeasurementAxis(axis) {
+    setMeasurementAxis(axis);
+    resetTrialData();
+  }
+
+  function handleSetTrialDuration(duration) {
+    setTrialDuration(duration);
+    resetTrialData();
+  }
+
+  // Toggling the mode itself also snaps back to a clean, paused,
+  // initial-state view -- otherwise leaving the mode right after a
+  // collapse would strand the vector frozen at trialDuration instead of
+  // back at t = 0.
+  function handleSetDataCollectionMode(on) {
+    setDcModeOn(on);
+    resetTrialData();
+    setPaused(true);
+    simTime.current = 0;
+  }
+
+  const dc = {
+    mode: dcModeOn, setMode: handleSetDataCollectionMode,
+    axis: measurementAxis, setAxis: handleSetMeasurementAxis,
+    duration: trialDuration, setDuration: handleSetTrialDuration,
+    batchSize, setBatchSize,
+    phase: trialPhase,
+    collapsedDirection, trialToken,
+    histogram, showTheory, setShowTheory, theoryProbPlus,
+    onRunTrial: handleRunTrial, onRePrepare: handleRePrepare,
+    onRunBatch: handleRunBatch, onClearHistogram: handleClearHistogram,
+  };
+
   // For setting just one property of a magnetic field
   // Usage example: updateField({ theta: parseFloat(e.target.value) })
   function updateField(patch) {
-    //simTime.current = 0;
     setMagneticField(prev => ({ ...prev, ...patch }));
+    resetTrialData();
   }
   function updateSpinState(patch) {
-    //simTime.current = 0;
     setInitialSpinState(prev => ({ ...prev, ...patch }));
+    resetTrialData();
   }
 
   return (
@@ -861,6 +1106,7 @@ export default function App() {
           speedFactor={speedFactor} setSpeedFactor={setSpeedFactor}
           componentsMode={componentsMode}
           controlBools={controlBools} rotatingFrame={rotatingFrame}
+          dc={dc}
         />
       </div>
 
