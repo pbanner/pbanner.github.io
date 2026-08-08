@@ -375,37 +375,40 @@ function TimeDrivenAxisLine({ simTimeRef, getDirection, extent, color = 'gray', 
 const TRACE_SAMPLE_INTERVAL = 0.05; // seconds of simulated time between points
 const TRACE_MAX_POINTS = 4000;      // safety cap for an unattended long-running tab
 
-function SpinTrace({ simTimeRef, getDirection, speedFactor, color = 0xcc0000, visible = true }) {
+function SpinTrace({ simTimeRef, getDirection, speedFactor, resetKey, color = 0xcc0000, visible = true }) {
   const [tracePoints, setTracePoints] = useState([]);
   const lastSampleTime = useRef(-Infinity);
+
+  // Explicit signal, not inferred from t -- catches a reset even when t
+  // was already 0 and never numerically "went backward."
+  useLayoutEffect(() => {
+    lastSampleTime.current = -Infinity;
+    setTracePoints([]);
+  }, [resetKey]);
 
   useFrame(() => {
     const t = simTimeRef.current;
 
     if (t < lastSampleTime.current) {
-      console.log('trace CLEAR fired', { t, lastSampleTime: lastSampleTime.current });
       lastSampleTime.current = -Infinity;
       setTracePoints([]);
       return;
     }
 
-    if (t - lastSampleTime.current >= TRACE_SAMPLE_INTERVAL/Math.max(1.0, speedFactor)) {
+    if (t - lastSampleTime.current >= TRACE_SAMPLE_INTERVAL / Math.max(1.0, speedFactor)) {
       const { x, y, z } = getDirection(t);
       const p = blochToThree(x, y, z);
       lastSampleTime.current = t;
       setTracePoints((prev) => {
         const next = prev.length >= TRACE_MAX_POINTS ? prev.slice(1) : prev;
-        console.log('trace SAMPLE', { prevLength: prev.length, t, point: [p.x, p.y, p.z] });
         return [...next, [p.x, p.y, p.z]];
       });
     }
   });
 
-  if (tracePoints.length < 2) return null; // a line needs at least two points
+  if (tracePoints.length < 2) return null;
 
-  return (
-    <Line points={tracePoints} color={color} lineWidth={visible ? 2 : 0} transparent opacity={0.6} />
-  );
+  return <Line points={tracePoints} color={color} lineWidth={visible ? 2 : 0} transparent opacity={0.6} />;
 }
 
 // Owns the one simulation clock everything time-dependent reads from:
@@ -449,19 +452,20 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
   const getSpinDirection = applyFrame((t) => evolveSpin(spinState, field, t));
   const getFieldDirection = applyFrame((t) => fieldDirectionAt(field, t));
 
+  // One canonical key, used both to reset the clock and to tell
+  // SpinTrace to clear, since neither can rely on t itself changing:
+  // t may already be 0 when a parameter changes (e.g. before Start is ever
+  // pressed), and no comparison against a *previous* t can detect that.
+  const resetKey = `${spinState.theta}|${spinState.phi}|${magneticField.mag0}|${magneticField.theta0}|${magneticField.phi0}|${magneticField.mag1}|${magneticField.omega1}|${magneticField.phase1}|${magneticField.rotatingComponent}|${frameOmega}|${controlBools.frameRotating}`;
+
   useLayoutEffect(() => {
     simTimeRef.current = 0;
-  }, [
-    spinState.theta, spinState.phi,
-    magneticField.mag0, magneticField.theta0, magneticField.phi0,
-    magneticField.mag1, magneticField.omega1, magneticField.phase1, magneticField.rotatingComponent,
-    frameOmega, controlBools.frameRotating,
-  ]);
+  }, [resetKey]);
 
   return (
     <>
       <TimeDrivenArrow simTimeRef={simTimeRef} getDirection={getSpinDirection} length={1} color={0xcc0000} headLength={0.12} headWidth={0.08} shaftWidth={5.0} />
-      <SpinTrace simTimeRef={simTimeRef} getDirection={getSpinDirection} speedFactor={speedFactor} visible={controlBools.showSpinTrace} />
+      <SpinTrace simTimeRef={simTimeRef} getDirection={getSpinDirection} speedFactor={speedFactor} visible={controlBools.showSpinTrace} resetKey={resetKey} />
       <TimeDrivenArrow
         simTimeRef={simTimeRef}
         getDirection={getFieldDirection}
