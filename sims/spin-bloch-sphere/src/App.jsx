@@ -8,7 +8,7 @@ import './App.css';
 
 /********** Constants and initial values **********/
 const SPHERE_INITIAL_CAMERA_POSITION = [3.6, 2.4, -3.6];
-const SPHERE_INITIAL_CAMERA_TARGET = [0, 0.32, 0];
+const SPHERE_INITIAL_CAMERA_TARGET = [0, 0.15, 0];
 const SPHERE_AXIS_EXTENT = 1.3;  // Helps determine how far axis arrows and axis labels are drawn beyond the sphere itself
 
 const FIELD_MAGNITUDE_DISPLAY_FACTOR = 0.2;
@@ -933,8 +933,8 @@ export default function App() {
                   Show path of spin vector
                 </label>
               </div>
-              <div className="control-group">
-                <label>Components</label>
+              <div className="control-group" style={{ gap: '0px' }}>
+                <label>Display components:</label>
                 <select value={componentsMode} onChange={(e) => setComponentsMode(e.target.value)}>
                   <option value="none">None</option>
                   <option value="xyz">X / Y / Z</option>
