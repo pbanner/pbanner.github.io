@@ -32,7 +32,7 @@ const ThickArrowHelper = forwardRef(function ThickArrowHelper(
   );
 
   function sync() {
-    const { dir, origin, length, headLength, headWidth } = state.current;
+    const { dir, origin, length, headLength: rawHeadLength, headWidth: rawHeadWidth } = state.current;
     const arrow = arrowRef.current;
     const line = lineRef.current;
     if (!arrow || !line) return;
@@ -42,10 +42,18 @@ const ThickArrowHelper = forwardRef(function ThickArrowHelper(
     line.visible = shouldShow;
     if (!shouldShow) return;
 
+    // Cap the head at a fraction of the arrow's own current length, so a
+    // short arrow's head never grows longer than the shaft -- a fixed
+    // absolute head size looks fine on a long arrow but visibly glitches a
+    // short one (the cone overshoots the tip, and the shaft-end calculation
+    // below can even go negative without this).
+    const headLength = Math.min(rawHeadLength, length * 0.4);
+    const headWidth = rawHeadLength > 0 ? rawHeadWidth * (headLength / rawHeadLength) : rawHeadWidth;
+
     arrow.position.copy(origin);
     arrow.setDirection(dir);
     arrow.setLength(length, headLength, headWidth);
-    arrow.line.visible = false; // always suppress ArrowHelper's own 1px shaft
+    arrow.line.visible = false;
 
     const shaftEnd = origin.clone().addScaledVector(dir, Math.max(0, length - headLength));
     line.geometry.setPositions([origin.x, origin.y, origin.z, shaftEnd.x, shaftEnd.y, shaftEnd.z]);

@@ -16,97 +16,6 @@ const FIELD_MAGNITUDE_DISPLAY_FACTOR = 0.2;
 // A stable placeholder array for <Line> refs that get updated through imperative handles
 const LINE_PLACEHOLDER_POINTS = [[0, 0, 0], [0, 0, 0.001]];
 
-/********** UI components and helpers **********/
-
-// Unicode glyphs (▶ ⏸ ⌂) bake their own, font-dependent vertical padding
-// into the glyph box, so flexbox centering lines up the boxes but not the
-// visible ink — hence the icon-vs-text misalignment. Drawing the icons
-// ourselves as SVG paths sidesteps that: there's no hidden glyph metrics,
-// so `alignItems: 'center'` centers exactly what's visible.
-function PlayIcon({ size = '0.9em' }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style={{ display: 'block' }}>
-      <path d="M4 2l10 6-10 6z" />
-    </svg>
-  );
-}
-
-function PauseIcon({ size = '0.9em' }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style={{ display: 'block' }}>
-      <rect x="3" y="2" width="4" height="12" />
-      <rect x="9" y="2" width="4" height="12" />
-    </svg>
-  );
-}
-
-// For rendering a label, slider, AND textbox all at once
-function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step, disabled = false }) {
-  return (
-    <div className="control-group">
-      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-        <label style={{ margin: '0em 0em' }}>{label}</label> {/*: {valueNum.toFixed(1)}*/}
-        <input
-          type="range"
-          min={min}
-          max={max}
-          step={step}
-          value={valueNum}
-          onChange={(e) => onChangeNum(parseFloat(e.target.value))}
-          style={{ flex: 1 }}
-          disabled={disabled}
-        />
-        <input
-          type="number"
-          min={min}
-          max={max}
-          step={step}
-          value={valueNum}
-          onChange={(e) => {
-            const v = parseFloat(e.target.value);
-            if (!Number.isNaN(v)) onChangeNum(v);
-          }}
-          style={{ width: '70px', padding: '2px' }}
-          disabled={disabled}
-        />
-      </div>
-    </div>
-  );
-}
-
-function getFieldComponentArrows(mode, field, spinState) {
-  switch (mode) {
-    case 'xyz':
-      return [
-        { color: 0xff9900, getDirection: (t) => { const b = fieldDirectionAt(field, t); return { x: b.x, y: 0, z: 0 }; } },
-        { color: 0x33cc33, getDirection: (t) => { const b = fieldDirectionAt(field, t); return { x: 0, y: b.y, z: 0 }; } },
-        { color: 0x9933ff, getDirection: (t) => { const b = fieldDirectionAt(field, t); return { x: 0, y: 0, z: b.z }; } },
-      ];
-    case 'staticAxis': {
-      const n = unitVectorFromAngles(field.theta0, field.phi0);
-      return [
-        { color: 0xff9900, getDirection: (t) => projectParallelPerp(fieldDirectionAt(field, t), n).parallel },
-        { color: 0x9933ff, getDirection: (t) => projectParallelPerp(fieldDirectionAt(field, t), n).perp },
-      ];
-    }
-    case 'spin':
-      return [
-        { color: 0xff9900, getDirection: (t) => projectParallelPerp(fieldDirectionAt(field, t), evolveSpin(spinState, field, t)).parallel },
-        { color: 0x9933ff, getDirection: (t) => projectParallelPerp(fieldDirectionAt(field, t), evolveSpin(spinState, field, t)).perp },
-      ];
-    case 'staticRotating':
-      return [
-        { color: 0xff9900, getDirection: (t) => fieldPartsAt(field, t).staticPart },
-        { color: 0x9933ff, getDirection: (t) => fieldPartsAt(field, t).rotatingPart },
-      ];
-    case 'effectiveField':
-      return [{ color: 0x00cccc, getDirection: () => effectiveField(field) }];
-    case 'none':
-    default:
-      return [];
-  }
-}
-
 /************************************************
 *
 * Physics helpers
@@ -148,6 +57,8 @@ function rotateAroundAxis(v, axis, angle) {
     z: v.z * cos + cross.z * sin + axis.z * dot * (1 - cos),
   };
 }
+
+function magnitude(v) { return Math.sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2); }
 
 function cross(a, b) {
   return { x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x };
@@ -236,6 +147,98 @@ function evolveSpin(spinState, field, t) {
     : rotateAroundAxis(intoRotatingFrame, normalize(beff), -omegaEff * t);
 
   return rotateAroundAxis(precessed, n, Phi);
+}
+
+/********** UI components and helpers **********/
+
+// Unicode glyphs (▶ ⏸ ⌂) bake their own, font-dependent vertical padding
+// into the glyph box, so flexbox centering lines up the boxes but not the
+// visible ink — hence the icon-vs-text misalignment. Drawing the icons
+// ourselves as SVG paths sidesteps that: there's no hidden glyph metrics,
+// so `alignItems: 'center'` centers exactly what's visible.
+function PlayIcon({ size = '0.9em' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style={{ display: 'block' }}>
+      <path d="M4 2l10 6-10 6z" />
+    </svg>
+  );
+}
+
+function PauseIcon({ size = '0.9em' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style={{ display: 'block' }}>
+      <rect x="3" y="2" width="4" height="12" />
+      <rect x="9" y="2" width="4" height="12" />
+    </svg>
+  );
+}
+
+// For rendering a label, slider, AND textbox all at once
+function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step, disabled = false }) {
+  return (
+    <div className="control-group">
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <label style={{ margin: '0em 0em' }}>{label}</label> {/*: {valueNum.toFixed(1)}*/}
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={valueNum}
+          onChange={(e) => onChangeNum(parseFloat(e.target.value))}
+          style={{ flex: 1 }}
+          disabled={disabled}
+        />
+        <input
+          type="number"
+          min={min}
+          max={max}
+          step={step}
+          value={valueNum}
+          onChange={(e) => {
+            const v = parseFloat(e.target.value);
+            if (!Number.isNaN(v)) onChangeNum(v);
+          }}
+          style={{ width: '70px', padding: '2px' }}
+          disabled={disabled}
+        />
+      </div>
+    </div>
+  );
+}
+
+function getFieldComponentArrows(mode, field, spinState) {
+  switch (mode) {
+    case 'xyz':
+      return [
+        { color: 0xff9900, getDirection: (t) => { const b = fieldDirectionAt(field, t); return { x: b.x, y: 0, z: 0 }; } },
+        { color: 0x33cc33, getDirection: (t) => { const b = fieldDirectionAt(field, t); return { x: 0, y: b.y, z: 0 }; } },
+        { color: 0x9933ff, getDirection: (t) => { const b = fieldDirectionAt(field, t); return { x: 0, y: 0, z: b.z }; } },
+      ];
+    case 'staticAxis': {
+      const n = unitVectorFromAngles(field.theta0, field.phi0);
+      return [
+        { color: 0xff9900, getDirection: (t) => projectParallelPerp(fieldDirectionAt(field, t), n).parallel },
+        { color: 0x9933ff, getDirection: (t) => projectParallelPerp(fieldDirectionAt(field, t), n).perp },
+      ];
+    }
+    case 'spin':
+      return [
+        { color: 0xff9900, getDirection: (t) => projectParallelPerp(fieldDirectionAt(field, t), evolveSpin(spinState, field, t)).parallel },
+        { color: 0x9933ff, getDirection: (t) => projectParallelPerp(fieldDirectionAt(field, t), evolveSpin(spinState, field, t)).perp },
+      ];
+    case 'effectiveField': {
+      const n = unitVectorFromAngles(field.theta0, field.phi0);
+      const beff = effectiveField(field);
+      return [{
+        color: 0x00cccc,
+        getDirection: (t) => rotateAroundAxis(beff, n, field.omega1 * t + field.phase1),
+      }];
+    }
+    case 'none':
+    default:
+      return [];
+  }
 }
 
 /************************************************
@@ -370,6 +373,55 @@ function KetLabel({ sign, axis, position, size = 0.20 }) {
   );
 }
 
+// The on-screen tip position of a physics-space direction function --
+// blochToThree is an isometry, so a vector's display tip is just its
+// blochToThree image scaled by the same display factor used for arrow
+// lengths, without separately normalizing and rescaling by magnitude.
+function tipPoint(getDirection) {
+  return (t) => {
+    const v = getDirection(t);
+    return blochToThree(v.x, v.y, v.z).multiplyScalar(FIELD_MAGNITUDE_DISPLAY_FACTOR);
+  };
+}
+
+// A dashed line between two points, each recomputed every frame.
+// getPointA/getPointB return THREE.Vector3s already in display
+// coordinates (post blochToThree, post any frame transform) -- generic
+// enough to connect a component tip to the field tip, or to connect the
+// X/Y/Z box-projection points below.
+function DashedConnector({ simTimeRef, getPointA, getPointB, color = 0x999999 }) {
+  const lineRef = useRef();
+  useFrame(() => {
+    const t = simTimeRef.current;
+    const a = getPointA(t);
+    const b = getPointB(t);
+    const line = lineRef.current;
+    if (!line) return;
+    line.geometry.setPositions([a.x, a.y, a.z, b.x, b.y, b.z]);
+    line.computeLineDistances?.();
+  });
+  return <Line ref={lineRef} points={LINE_PLACEHOLDER_POINTS} color={color} dashed dashSize={0.04} gapSize={0.03} lineWidth={1} />;
+}
+function XYZBoxConnectors({ simTimeRef, tipB, tipX, tipY, tipZ }) {
+  const projXY = (t) => tipX(t).add(tipY(t));
+  const projXZ = (t) => tipX(t).add(tipZ(t));
+  const projYZ = (t) => tipY(t).add(tipZ(t));
+
+  return (
+    <>
+      <DashedConnector simTimeRef={simTimeRef} getPointA={tipB} getPointB={projXY} />
+      <DashedConnector simTimeRef={simTimeRef} getPointA={tipB} getPointB={projXZ} />
+      <DashedConnector simTimeRef={simTimeRef} getPointA={tipB} getPointB={projYZ} />
+      <DashedConnector simTimeRef={simTimeRef} getPointA={projXY} getPointB={tipX} />
+      <DashedConnector simTimeRef={simTimeRef} getPointA={projXY} getPointB={tipY} />
+      <DashedConnector simTimeRef={simTimeRef} getPointA={projXZ} getPointB={tipX} />
+      <DashedConnector simTimeRef={simTimeRef} getPointA={projXZ} getPointB={tipZ} />
+      <DashedConnector simTimeRef={simTimeRef} getPointA={projYZ} getPointB={tipY} />
+      <DashedConnector simTimeRef={simTimeRef} getPointA={projYZ} getPointB={tipZ} />
+    </>
+  );
+}
+
 // For the sake of reducing overhead on updates that happen every frame
 // (like animations), ThickArrowHelper has an ref/imperative handle structure
 // that lets us reach in and set the arrow's direction directly, avoiding
@@ -418,6 +470,8 @@ function TimeDrivenAxisLine({ simTimeRef, getDirection, extent, color = 'gray', 
     <Line ref={lineRef} points={LINE_PLACEHOLDER_POINTS} color={color} dashed dashSize={0.06} gapSize={0.05} lineWidth={lineWidth} />
   );
 }
+
+
 // Traces the spin's path across the sphere surface over simulated time.
 // Points accumulate in a plain array and the whole array is re-handed to
 // the <Line> via setPositions whenever a new point is sampled -- simple,
@@ -513,6 +567,9 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
   const getFieldDirection = applyFrame((t) => fieldDirectionAt(field, t));
   const componentArrows = getFieldComponentArrows(componentsMode, field, spinState);
 
+  const componentLength = (c, t) => magnitude(c.getDirection(t)) * FIELD_MAGNITUDE_DISPLAY_FACTOR;
+  const showSimpleConnectors = componentsMode !== 'none' && componentsMode !== 'effectiveField' && componentsMode !== 'xyz';
+
   // One canonical key, used both to reset the clock and to tell
   // SpinTrace to clear, since neither can rely on t itself changing:
   // t may already be 0 when a parameter changes (e.g. before Start is ever
@@ -537,18 +594,32 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
       <TimeDrivenAxisLine simTimeRef={simTimeRef} getDirection={(t) => normalize(getFieldDirection(t))} extent={SPHERE_AXIS_EXTENT} />
       {componentArrows.map((c, i) => (
         <TimeDrivenArrow
-          key={i}
+          key={`${componentsMode}-${i}`}
           simTimeRef={simTimeRef}
           getDirection={applyFrame(c.getDirection)}
-          getLength={(t) => {
-            const v = c.getDirection(t);
-            return Math.sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2) * FIELD_MAGNITUDE_DISPLAY_FACTOR;
-          }}
+          getLength={(t) => componentLength(c, t)}
           length={1}
           color={c.color}
           headLength={0.10} headWidth={0.06} shaftWidth={3.5}
         />
       ))}
+      {showSimpleConnectors && componentArrows.map((c, i) => (
+        <DashedConnector
+          key={`${componentsMode}-connector-${i}`}
+          simTimeRef={simTimeRef}
+          getPointA={tipPoint(applyFrame(c.getDirection))}
+          getPointB={tipPoint(getFieldDirection)}
+        />
+      ))}
+      {componentsMode === 'xyz' && componentArrows.length === 3 && (
+        <XYZBoxConnectors
+          simTimeRef={simTimeRef}
+          tipB={tipPoint(getFieldDirection)}
+          tipX={tipPoint(applyFrame(componentArrows[0].getDirection))}
+          tipY={tipPoint(applyFrame(componentArrows[1].getDirection))}
+          tipZ={tipPoint(applyFrame(componentArrows[2].getDirection))}
+        />
+      )}
     </>
   );
 }
@@ -750,6 +821,7 @@ export default function App() {
           timeSec={timeSec} setTimeSec={setTimeSec}
           simTimeRef={simTime}
           speedFactor={speedFactor} setSpeedFactor={setSpeedFactor}
+          componentsMode={componentsMode}
           controlBools={controlBools} rotatingFrame={rotatingFrame}
         />
       </div>
@@ -866,9 +938,8 @@ export default function App() {
                 <select value={componentsMode} onChange={(e) => setComponentsMode(e.target.value)}>
                   <option value="none">None</option>
                   <option value="xyz">X / Y / Z</option>
-                  <option value="staticAxis">Relative to static axis</option>
+                  <option value="staticAxis">Static/rotating parts</option>
                   <option value="spin">Relative to spin</option>
-                  <option value="staticRotating">Static / rotating parts</option>
                   <option value="effectiveField">Effective field (rotating frame)</option>
                 </select>
               </div>
