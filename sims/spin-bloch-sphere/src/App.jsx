@@ -375,7 +375,7 @@ function TimeDrivenAxisLine({ simTimeRef, getDirection, extent, color = 'gray', 
 const TRACE_SAMPLE_INTERVAL = 0.05; // seconds of simulated time between points
 const TRACE_MAX_POINTS = 4000;      // safety cap for an unattended long-running tab
 
-function SpinTrace({ simTimeRef, getDirection, speedFactor, color = 0xcc0000 }) {
+function SpinTrace({ simTimeRef, getDirection, speedFactor, color = 0xcc0000, visible = true }) {
   const [tracePoints, setTracePoints] = useState([]);
   const lastSampleTime = useRef(-Infinity);
 
@@ -402,7 +402,7 @@ function SpinTrace({ simTimeRef, getDirection, speedFactor, color = 0xcc0000 }) 
   if (tracePoints.length < 2) return null; // a line needs at least two points
 
   return (
-    <Line points={tracePoints} color={color} lineWidth={2} transparent opacity={0.6} />
+    <Line points={tracePoints} color={color} lineWidth={visible ? 2 : 0} transparent opacity={0.6} />
   );
 }
 
@@ -420,7 +420,7 @@ function SpinTrace({ simTimeRef, getDirection, speedFactor, color = 0xcc0000 }) 
 // The sidebar's numeric time readout is real React state, but throttled to
 // ~10 updates/sec rather than pushed every frame -- a human-readable
 // number doesn't need 60 updates/sec the way the arrows' geometry does.
-function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTimeRef, speedFactor }) {
+function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTimeRef, speedFactor, controlBools }) {
   const lastReportedSec = useRef(-1);
 
   useFrame((state, delta) => {
@@ -446,6 +446,7 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
         simTimeRef={simTimeRef}
         getDirection={getSpinDirection}
         speedFactor={speedFactor}
+        visible={controlBools.showSpinTrace}
       />
       {/* B-field arrow + line */}
       <TimeDrivenArrow
@@ -533,6 +534,7 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
           spinState={spinState} magneticField={magneticField}
           paused={paused} onTimeUpdate={setTimeSec}
           simTimeRef={simTimeRef} speedFactor={speedFactor}
+          controlBools={controlBools}
         />
 
         <OrbitControls ref={controlsRef} target={SPHERE_INITIAL_CAMERA_TARGET} />
@@ -589,7 +591,7 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
 export default function App() {
   const [controlBools, setControlBools] = useState({
     showSphere: true,             // Displaying the sphere
-    advancedBField: false         // For when the user is specifying an advanced magnetic field
+    showSpinTrace: true    
   });
   // Spin state at t = 0, set by two angles
   const [initialSpinState, setInitialSpinState] = useState({ theta: 0, phi: 0 });
@@ -669,18 +671,24 @@ export default function App() {
               <hr className="sidebar-divider" />
 
               <h3>Display Options</h3>
-              <div className="control-group">
-                <label style={{ margin: '0 0 4px 0' }}>
+              <div className="control-group" style={{ gap: '0px' }}>
+                <label>
                   <input type="checkbox" checked={controlBools.showSphere} onChange={(e) => setControlBools({ ...controlBools, showSphere: e.target.checked })} />
                   Show sphere
                 </label>
+                <label>
+                  <input type="checkbox" checked={controlBools.showSpinTrace} onChange={(e) => setControlBools({ ...controlBools, showSpinTrace: e.target.checked })} />
+                  Show path of spin vector
+                </label>
               </div>
 
+              {/*
               <div className="control-group" style={{ marginTop: '1.0em' }}>
                 <button className={`control-button ${controlBools.advancedBField ? 'active-special' : ''}`} onClick={() => setControlBools({ ...controlBools, advancedBField: !controlBools.advancedBField })}>
                   Advanced
                 </button>
               </div>
+              */}
             </div>
           </div>
         </div>
