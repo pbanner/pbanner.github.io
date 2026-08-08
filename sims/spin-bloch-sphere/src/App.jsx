@@ -73,7 +73,7 @@ function normalize(v) {
 // each other. There's no physically privileged transverse "zero" -- this
 // just fixes one choice consistently, which is all phase1 needs.
 function transverseBasis(n) {
-  const helper = Math.abs(n.z) < 0.9 ? { x: 0, y: 0, z: 1 } : { x: 1, y: 0, z: 0 };
+  const helper = Math.abs(n.z) < 0.999 ? { x: 0, y: 0, z: 1 } : { x: 1, y: 0, z: 0 };
   const e1 = normalize(cross(n, helper));
   const e2 = cross(n, e1);
   return { e1, e2 };
