@@ -60,6 +60,15 @@ function rotateAroundAxis(v, axis, angle) {
 
 function magnitude(v) { return Math.sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2); }
 
+function dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+
+function projectParallelPerp(v, axisUnit) {
+  const d = dot(v, axisUnit);
+  const parallel = { x: axisUnit.x * d, y: axisUnit.y * d, z: axisUnit.z * d };
+  const perp = { x: v.x - parallel.x, y: v.y - parallel.y, z: v.z - parallel.z };
+  return { parallel, perp };
+}
+
 function cross(a, b) {
   return { x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x };
 }
@@ -69,22 +78,54 @@ function normalize(v) {
   return { x: v.x / len, y: v.y / len, z: v.z / len };
 }
 
-// An arbitrary but fixed pair of unit vectors perpendicular to n and to
-// each other. There's no physically privileged transverse "zero" -- this
-// just fixes one choice consistently, which is all phase1 needs.
-function transverseBasis(n) {
-  const helper = Math.abs(n.z) < 0.999 ? { x: 0, y: 0, z: 1 } : { x: 1, y: 0, z: 0 };
-  const e1 = normalize(cross(n, helper));
+// Only seeds the very first basis, before there's a previous e1 to carry
+// forward from.
+function arbitraryPerpendicular(n) {
+  const helper = Math.abs(n.z) < 0.9 ? { x: 0, y: 0, z: 1 } : { x: 1, y: 0, z: 0 };
+  return normalize(projectParallelPerp(helper, n).perp);
+}
+
+// The rotating component's phase-zero direction (e1) and its partner (e2),
+// carried forward from the *previous* basis by re-orthogonalizing against
+// the *new* n, instead of recomputed from n alone by a fixed formula.
+//
+// No formula f(n) -> e1 can be continuous over the whole sphere (hairy
+// ball theorem) -- that's why every earlier version (hard-coded fallback,
+// Frisvad's construction, a wider or narrower margin) had a seam
+// somewhere, and why moving the seam never shrank the jump: at the seam,
+// the formula's two sides just disagree, by the same amount regardless of
+// where you put it.
+//
+// theta0/phi0 never actually sweep the whole sphere in one step, though --
+// they move by one slider tick at a time. So instead of "what's e1 as a
+// function of n," this asks "what's e1 now, given what it was a moment
+// ago": project the old e1 back into the plane perpendicular to the new n
+// and renormalize. A small step in n produces a small correction to e1 --
+// no seam anywhere near the path actually being drawn. The only way to
+// hit trouble is if n jumps by something like 90 degrees in one update,
+// which a slider never does.
+function advanceTransverseBasis(prevBasis, n) {
+  const { perp } = projectParallelPerp(prevBasis.e1, n);
+  const mag = magnitude(perp);
+  const e1 = mag > 1e-6
+    ? { x: perp.x / mag, y: perp.y / mag, z: perp.z / mag }
+    : arbitraryPerpendicular(n);
   const e2 = cross(n, e1);
-  return { e1, e2 };
+  return { n, e1, e2 };
+}
+
+// How far the static axis needs to be from the pole before the *total*
+// field (static part plus a circle of radius mag1 around it) could
+// plausibly reach near-polar territory -- see transverseBasis.
+function fieldMargin(field) {
+  return Math.max(1e-7, Math.atan2(Math.abs(field.mag1), Math.max(field.mag0, 1e-6)));
 }
 
 // The field's static and rotating pieces, computed separately -- shared by
 // fieldDirectionAt (which just sums them) and the "static/rotating parts"
 // component display, so there's one definition instead of two.
-function fieldPartsAt(field, t) {
-  const n = unitVectorFromAngles(field.theta0, field.phi0);
-  const { e1, e2 } = transverseBasis(n);
+function fieldPartsAt(field, t, basisRef) {
+  const { n, e1, e2 } = basisRef.current;
   const Phi = field.omega1 * t + field.phase1;
   const staticPart = { x: field.mag0 * n.x, y: field.mag0 * n.y, z: field.mag0 * n.z };
   const rotatingPart = {
@@ -95,13 +136,13 @@ function fieldPartsAt(field, t) {
   return { staticPart, rotatingPart };
 }
 
-function fieldDirectionAt(field, t) {
-  const { staticPart, rotatingPart } = fieldPartsAt(field, t);
+function fieldDirectionAt(field, t, basisRef) {
+  const { staticPart, rotatingPart } = fieldPartsAt(field, t, basisRef);
   return { x: staticPart.x + rotatingPart.x, y: staticPart.y + rotatingPart.y, z: staticPart.z + rotatingPart.z };
 }
 
-function fieldMagnitudeAt(field, t) {
-  const { x, y, z } = fieldDirectionAt(field, t);
+function fieldMagnitudeAt(field, t, basisRef) {
+  const { x, y, z } = fieldDirectionAt(field, t, basisRef);
   return Math.sqrt(x * x + y * y + z * z);
 }
 
@@ -109,9 +150,8 @@ function fieldMagnitudeAt(field, t) {
 // drive -- the exact beff evolveSpin already precesses the spin about.
 // Pulled out on its own so the "Effective field" component display shows
 // literally the object the physics is built from, not a re-derived copy.
-function effectiveField(field) {
-  const n = unitVectorFromAngles(field.theta0, field.phi0);
-  const { e1 } = transverseBasis(n);
+function effectiveField(field, basisRef) {
+  const { n, e1 } = basisRef.current;
   return {
     x: (field.mag0 - field.omega1) * n.x + field.mag1 * e1.x,
     y: (field.mag0 - field.omega1) * n.y + field.mag1 * e1.y,
@@ -119,25 +159,15 @@ function effectiveField(field) {
   };
 }
 
-function dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
-
-function projectParallelPerp(v, axisUnit) {
-  const d = dot(v, axisUnit);
-  const parallel = { x: axisUnit.x * d, y: axisUnit.y * d, z: axisUnit.z * d };
-  const perp = { x: v.x - parallel.x, y: v.y - parallel.y, z: v.z - parallel.z };
-  return { parallel, perp };
-}
-
 // Exact solution for a static field plus one transverse-rotating
 // component sharing the static field's axis: transform into the frame
 // co-rotating with the drive (field looks static there), precess about
 // the resulting fixed effective field, then rotate back to the lab frame.
-function evolveSpin(spinState, field, t) {
-  const n = unitVectorFromAngles(field.theta0, field.phi0);
-  const { e1 } = transverseBasis(n);
+function evolveSpin(spinState, field, t, basisRef) {
+  const { n } = basisRef.current;
   const Phi = field.omega1 * t + field.phase1;
 
-  const beff = effectiveField(field);
+  const beff = effectiveField(field, basisRef);
   const omegaEff = Math.sqrt(beff.x ** 2 + beff.y ** 2 + beff.z ** 2);
 
   const s0 = unitVectorFromAngles(spinState.theta, spinState.phi);
@@ -207,34 +237,33 @@ function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step
   );
 }
 
-function getFieldComponentArrows(mode, field, spinState) {
+function getFieldComponentArrows(mode, field, spinState, basisRef) {
   switch (mode) {
     case 'xyz':
       return [
-        { color: 0xff9900, getDirection: (t) => { const b = fieldDirectionAt(field, t); return { x: b.x, y: 0, z: 0 }; } },
-        { color: 0x33cc33, getDirection: (t) => { const b = fieldDirectionAt(field, t); return { x: 0, y: b.y, z: 0 }; } },
-        { color: 0x9933ff, getDirection: (t) => { const b = fieldDirectionAt(field, t); return { x: 0, y: 0, z: b.z }; } },
+        { color: 0xff9900, getDirection: (t) => { const b = fieldDirectionAt(field, t, basisRef); return { x: b.x, y: 0, z: 0 }; } },
+        { color: 0x33cc33, getDirection: (t) => { const b = fieldDirectionAt(field, t, basisRef); return { x: 0, y: b.y, z: 0 }; } },
+        { color: 0x9933ff, getDirection: (t) => { const b = fieldDirectionAt(field, t, basisRef); return { x: 0, y: 0, z: b.z }; } },
       ];
-    case 'staticAxis': {
-      const n = unitVectorFromAngles(field.theta0, field.phi0);
+    case 'staticAxis':
       return [
-        { color: 0xff9900, getDirection: (t) => projectParallelPerp(fieldDirectionAt(field, t), n).parallel },
-        { color: 0x9933ff, getDirection: (t) => projectParallelPerp(fieldDirectionAt(field, t), n).perp },
+        { color: 0xff9900, getDirection: (t) => projectParallelPerp(fieldDirectionAt(field, t, basisRef), basisRef.current.n).parallel },
+        { color: 0x9933ff, getDirection: (t) => projectParallelPerp(fieldDirectionAt(field, t, basisRef), basisRef.current.n).perp },
       ];
-    }
     case 'spin':
       return [
-        { color: 0xff9900, getDirection: (t) => projectParallelPerp(fieldDirectionAt(field, t), evolveSpin(spinState, field, t)).parallel },
-        { color: 0x9933ff, getDirection: (t) => projectParallelPerp(fieldDirectionAt(field, t), evolveSpin(spinState, field, t)).perp },
+        { color: 0xff9900, getDirection: (t) => projectParallelPerp(fieldDirectionAt(field, t, basisRef), evolveSpin(spinState, field, t, basisRef)).parallel },
+        { color: 0x9933ff, getDirection: (t) => projectParallelPerp(fieldDirectionAt(field, t, basisRef), evolveSpin(spinState, field, t, basisRef)).perp },
       ];
-    case 'effectiveField': {
-      const n = unitVectorFromAngles(field.theta0, field.phi0);
-      const beff = effectiveField(field);
+    case 'effectiveField':
       return [{
         color: 0x00cccc,
-        getDirection: (t) => rotateAroundAxis(beff, n, field.omega1 * t + field.phase1),
+        getDirection: (t) => {
+          const { n } = basisRef.current;
+          const beff = effectiveField(field, basisRef);
+          return rotateAroundAxis(beff, n, field.omega1 * t + field.phase1);
+        },
       }];
-    }
     case 'none':
     default:
       return [];
@@ -557,23 +586,32 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
     mag1: magneticField.rotatingComponent ? magneticField.mag1 : 0,
   };
 
+  // The rotating component's phase-zero transverse axis, carried forward
+  // incrementally each time theta0/phi0 change (see advanceTransverseBasis)
+  // rather than recomputed from n alone by a fixed formula.
+  const n = unitVectorFromAngles(field.theta0, field.phi0);
+  const basisRef = useRef(null);
+  if (basisRef.current === null) {
+    const e1 = arbitraryPerpendicular(n);
+    basisRef.current = { n, e1, e2: cross(n, e1) };
+  }
+  useLayoutEffect(() => {
+    basisRef.current = advanceTransverseBasis(basisRef.current, n);
+  }, [magneticField.theta0, magneticField.phi0]);
+
   const applyFrame = (getDir) => (t) => {
     const raw = getDir(t);
     if (!controlBools.frameRotating) return raw;
     return rotateAroundAxis(raw, frameAxis, frameOmega * t);
   };
 
-  const getSpinDirection = applyFrame((t) => evolveSpin(spinState, field, t));
-  const getFieldDirection = applyFrame((t) => fieldDirectionAt(field, t));
-  const componentArrows = getFieldComponentArrows(componentsMode, field, spinState);
+  const getSpinDirection = applyFrame((t) => evolveSpin(spinState, field, t, basisRef));
+  const getFieldDirection = applyFrame((t) => fieldDirectionAt(field, t, basisRef));
+  const componentArrows = getFieldComponentArrows(componentsMode, field, spinState, basisRef);
 
   const componentLength = (c, t) => magnitude(c.getDirection(t)) * FIELD_MAGNITUDE_DISPLAY_FACTOR;
   const showSimpleConnectors = componentsMode !== 'none' && componentsMode !== 'effectiveField' && componentsMode !== 'xyz';
 
-  // One canonical key, used both to reset the clock and to tell
-  // SpinTrace to clear, since neither can rely on t itself changing:
-  // t may already be 0 when a parameter changes (e.g. before Start is ever
-  // pressed), and no comparison against a *previous* t can detect that.
   const resetKey = `${spinState.theta}|${spinState.phi}|${magneticField.mag0}|${magneticField.theta0}|${magneticField.phi0}|${magneticField.mag1}|${magneticField.omega1}|${magneticField.phase1}|${magneticField.rotatingComponent}|${frameOmega}|${controlBools.frameRotating}`;
 
   useLayoutEffect(() => {
@@ -587,7 +625,7 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
       <TimeDrivenArrow
         simTimeRef={simTimeRef}
         getDirection={getFieldDirection}
-        getLength={(t) => fieldMagnitudeAt(field, t) * FIELD_MAGNITUDE_DISPLAY_FACTOR}
+        getLength={(t) => fieldMagnitudeAt(field, t, basisRef) * FIELD_MAGNITUDE_DISPLAY_FACTOR}
         length={field.mag0}
         color={0x0066cc} headLength={0.12} headWidth={0.08} shaftWidth={5.0}
       />
