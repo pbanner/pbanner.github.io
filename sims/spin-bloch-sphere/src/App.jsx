@@ -116,6 +116,68 @@ function rotateAroundAxis(v, axis, angle) {
   };
 }
 
+function cross(a, b) {
+  return { x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x };
+}
+
+function normalize(v) {
+  const len = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+  return { x: v.x / len, y: v.y / len, z: v.z / len };
+}
+
+// An arbitrary but fixed pair of unit vectors perpendicular to n and to
+// each other. There's no physically privileged transverse "zero" -- this
+// just fixes one choice consistently, which is all phase1 needs.
+function transverseBasis(n) {
+  const helper = Math.abs(n.z) < 0.9 ? { x: 0, y: 0, z: 1 } : { x: 1, y: 0, z: 0 };
+  const e1 = normalize(cross(n, helper));
+  const e2 = cross(n, e1);
+  return { e1, e2 };
+}
+
+// Exact solution for a static field plus one transverse-rotating
+// component sharing the static field's axis: transform into the frame
+// co-rotating with the drive (field looks static there), precess about
+// the resulting fixed effective field, then rotate back to the lab frame.
+function evolveSpin(spinState, field, t) {
+  const n = unitVectorFromAngles(field.theta0, field.phi0);
+  const { e1 } = transverseBasis(n);
+  const Phi = field.omega1 * t + field.phase1;
+
+  const beff = {
+    x: (field.mag0 - field.omega1) * n.x + field.mag1 * e1.x,
+    y: (field.mag0 - field.omega1) * n.y + field.mag1 * e1.y,
+    z: (field.mag0 - field.omega1) * n.z + field.mag1 * e1.z,
+  };
+  const omegaEff = Math.sqrt(beff.x ** 2 + beff.y ** 2 + beff.z ** 2);
+
+  const s0 = unitVectorFromAngles(spinState.theta, spinState.phi);
+  const intoRotatingFrame = rotateAroundAxis(s0, n, -field.phase1);
+  const precessed = omegaEff < 1e-9
+    ? intoRotatingFrame
+    : rotateAroundAxis(intoRotatingFrame, normalize(beff), -omegaEff * t);
+
+  return rotateAroundAxis(precessed, n, Phi);
+}
+
+// The actual (magnitude-carrying) lab-frame field vector at time t -- used
+// for the field arrow's direction/length and the axis line's direction.
+function fieldDirectionAt(field, t) {
+  const n = unitVectorFromAngles(field.theta0, field.phi0);
+  const { e1, e2 } = transverseBasis(n);
+  const Phi = field.omega1 * t + field.phase1;
+  return {
+    x: field.mag0 * n.x + field.mag1 * (Math.cos(Phi) * e1.x + Math.sin(Phi) * e2.x),
+    y: field.mag0 * n.y + field.mag1 * (Math.cos(Phi) * e1.y + Math.sin(Phi) * e2.y),
+    z: field.mag0 * n.z + field.mag1 * (Math.cos(Phi) * e1.z + Math.sin(Phi) * e2.z),
+  };
+}
+
+function fieldMagnitudeAt(field, t) {
+  const { x, y, z } = fieldDirectionAt(field, t);
+  return Math.sqrt(x * x + y * y + z * z);
+}
+
 /************************************************
 *
 * Helpers for sphere drawing
@@ -313,7 +375,7 @@ function TimeDrivenAxisLine({ simTimeRef, getDirection, extent, color = 'gray', 
 const TRACE_SAMPLE_INTERVAL = 0.05; // seconds of simulated time between points
 const TRACE_MAX_POINTS = 4000;      // safety cap for an unattended long-running tab
 
-function SpinTrace({ simTimeRef, getDirection, color = 0xcc0000 }) {
+function SpinTrace({ simTimeRef, getDirection, speedFactor, color = 0xcc0000 }) {
   const [tracePoints, setTracePoints] = useState([]);
   const lastSampleTime = useRef(-Infinity);
 
@@ -326,7 +388,7 @@ function SpinTrace({ simTimeRef, getDirection, color = 0xcc0000 }) {
       return;
     }
 
-    if (t - lastSampleTime.current >= TRACE_SAMPLE_INTERVAL) {
+    if (t - lastSampleTime.current >= TRACE_SAMPLE_INTERVAL/Math.max(1.0, speedFactor)) {
       const { x, y, z } = getDirection(t);
       const p = blochToThree(x, y, z);
       lastSampleTime.current = t;
@@ -371,12 +433,10 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
     }
   });
 
-  const field = magneticField[0];
-  const getSpinDirection = (t) => {
-    const s0 = unitVectorFromAngles(spinState.theta, spinState.phi);
-    const bHat = unitVectorFromAngles(field.theta, field.phi);
-    return rotateAroundAxis(s0, bHat, -field.mag * t);
-  };
+  const field = magneticField;
+
+  const getSpinDirection = (t) => evolveSpin(spinState, field, t);
+  const getFieldDirection = (t) => fieldDirectionAt(field, t);
 
   return (
     <>
@@ -385,19 +445,20 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
       <SpinTrace
         simTimeRef={simTimeRef}
         getDirection={getSpinDirection}
+        speedFactor={speedFactor}
       />
       {/* B-field arrow + line */}
       <TimeDrivenArrow
         simTimeRef={simTimeRef}
-        getDirection={(t) => unitVectorFromAngles(field.theta, field.phi)}
-        getLength={(t) => field.mag*FIELD_MAGNITUDE_DISPLAY_FACTOR}
-        length={field.mag}
+        getDirection={getFieldDirection}
+        getLength={(t) => fieldMagnitudeAt(field, t) * FIELD_MAGNITUDE_DISPLAY_FACTOR}
+        length={field.mag0}
         color={0x0066cc} headLength={0.12} headWidth={0.08} shaftWidth={5.0}
       />
       <TimeDrivenAxisLine
         simTimeRef={simTimeRef}
-        getDirection={(t) => unitVectorFromAngles(field.theta, field.phi)}
-        extent={SPHERE_AXIS_EXTENT} color={0x0066cc}
+        getDirection={(t) => normalize(fieldDirectionAt(field, t))}
+        extent={SPHERE_AXIS_EXTENT}
       />
     </>
   );
@@ -492,7 +553,7 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
         <div className="control-group" style={{ margin: '8px 0px' }}>
           <label>Speed: {speedFactor.toFixed(1)}×</label>
           <input
-            type="range" min={0.1} max={5} step={0.1}
+            type="range" min={0.1} max={2.0} step={0.1}
             value={speedFactor}
             onChange={(e) => setSpeedFactor(parseFloat(e.target.value))}
             style={{ width: '100%' }}
@@ -533,7 +594,7 @@ export default function App() {
   // Spin state at t = 0, set by two angles
   const [initialSpinState, setInitialSpinState] = useState({ theta: 0, phi: 0 });
   // Every element of this array should have a theta, phi, magnitude, omega, and phase (at t=0) specifying it
-  const [magneticField, setMagneticField] = useState([{ mag: 1, theta: 0, phi: 0, omega: 0, phase: 0 }]);
+  const [magneticField, setMagneticField] = useState({ mag0: 1, theta0: 0, phi0: 0, mag1: 0, omega1: 0, phase1: 0 });
   // Pausing the animation
   const [paused, setPaused] = useState(true);
   // Time variable
@@ -542,17 +603,16 @@ export default function App() {
   // Animation speed factor
   const [speedFactor, setSpeedFactor] = useState(1);
 
-  // For setting just one property of one component of a magnetic field
-  // Usage example: updateFieldComponent(0, { theta: parseFloat(e.target.value) })
-  function updateFieldComponent(index, patch) {
+  // For setting just one property of a magnetic field
+  // Usage example: updateField({ theta: parseFloat(e.target.value) })
+  function updateField(patch) {
     simTime.current = 0;
-    setMagneticField(prev => prev.map((c, i) => (i === index ? { ...c, ...patch } : c)));
+    setMagneticField(prev => ({ ...prev, ...patch }));
   }
-  // For adding and removing components of a magnetic field
-  const addFieldComponent = () =>
-    setMagneticField(prev => [...prev, { mag: 1, theta: 0, phi: 0, omega: 0 }]);
-  const removeFieldComponent = (index) =>
-    setMagneticField(prev => prev.filter((_, i) => i !== index));
+  function updateSpinState(patch) {
+    simTime.current = 0;
+    setInitialSpinState(prev => ({ ...prev, ...patch }));
+  }
 
   return (
     <div className="app-layout">
@@ -597,32 +657,13 @@ export default function App() {
               <hr className="sidebar-divider" />
               
               <h3>Magnetic Field</h3>
-
               <div className="control-group">
-                <SliderPlusTextboxControl
-                  label="θ (degrees)"
-                  valueNum={(magneticField[0].theta * 180 / Math.PI).toFixed(1)}
-                  onChangeNum={(val) => {updateFieldComponent(0, { theta: parseFloat(val*Math.PI/180) })}}
-                  min={0.0}
-                  max={180.0}
-                  step={1.0}
-                />
-                <SliderPlusTextboxControl
-                  label="φ (degrees)"
-                  valueNum={(magneticField[0].phi * 180 / Math.PI).toFixed(1)}
-                  onChangeNum={(val) => {updateFieldComponent(0, { phi: parseFloat(val*Math.PI/180) })}}
-                  min={-180.0}
-                  max={180.0}
-                  step={1.0}
-                />
-                <SliderPlusTextboxControl
-                  label="Magnitude"
-                  valueNum={(magneticField[0].mag).toFixed(1)}
-                  onChangeNum={(val) => {updateFieldComponent(0, { mag: parseFloat(val) })}}
-                  min={0.0}
-                  max={10.0}
-                  step={0.1}
-                />
+                <SliderPlusTextboxControl label="θ (°)" valueNum={(magneticField.theta0 * 180 / Math.PI).toFixed(1)} onChangeNum={(val) => updateField({ theta0: val * Math.PI / 180 })} min={0.0} max={180.0} step={1.0} />
+                <SliderPlusTextboxControl label="φ (°)" valueNum={(magneticField.phi0 * 180 / Math.PI).toFixed(1)} onChangeNum={(val) => updateField({ phi0: val * Math.PI / 180 })} min={-180.0} max={180.0} step={1.0} />
+                <SliderPlusTextboxControl label="|B₀|" valueNum={magneticField.mag0.toFixed(1)} onChangeNum={(val) => updateField({ mag0: val })} min={0.0} max={5.0} step={0.1} />
+                <SliderPlusTextboxControl label="Rot. |B₁|" valueNum={magneticField.mag1.toFixed(1)} onChangeNum={(val) => updateField({ mag1: val })} min={0.0} max={10.0} step={0.1} />
+                <SliderPlusTextboxControl label="Rot. ω (rad/s)" valueNum={magneticField.omega1.toFixed(1)} onChangeNum={(val) => updateField({ omega1: val })} min={-10.0} max={10.0} step={0.1} />
+                <SliderPlusTextboxControl label="Rot. φ0 (degrees)" valueNum={(magneticField.phase1 * 180 / Math.PI).toFixed(1)} onChangeNum={(val) => updateField({ phase1: val * Math.PI / 180 })} min={-180.0} max={180.0} step={1.0} />
               </div>
 
               <hr className="sidebar-divider" />
