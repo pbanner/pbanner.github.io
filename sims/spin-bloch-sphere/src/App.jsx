@@ -433,7 +433,10 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
     }
   });
 
-  const field = magneticField;
+  const field = {
+    ...magneticField,
+    mag1: magneticField.rotatingComponent ? magneticField.mag1 : 0,
+  };
 
   const getSpinDirection = (t) => evolveSpin(spinState, field, t);
   const getFieldDirection = (t) => fieldDirectionAt(field, t);
@@ -596,7 +599,7 @@ export default function App() {
   // Spin state at t = 0, set by two angles
   const [initialSpinState, setInitialSpinState] = useState({ theta: 0, phi: 0 });
   // Every element of this array should have a theta, phi, magnitude, omega, and phase (at t=0) specifying it
-  const [magneticField, setMagneticField] = useState({ mag0: 1, theta0: 0, phi0: 0, mag1: 0, omega1: 0, phase1: 0 });
+  const [magneticField, setMagneticField] = useState({ mag0: 1, theta0: 0, phi0: 0, mag1: 0, omega1: 0, phase1: 0, rotatingComponent: false });
   // Pausing the animation
   const [paused, setPaused] = useState(true);
   // Time variable
@@ -662,10 +665,37 @@ export default function App() {
               <div className="control-group">
                 <SliderPlusTextboxControl label="θ (°)" valueNum={(magneticField.theta0 * 180 / Math.PI).toFixed(1)} onChangeNum={(val) => updateField({ theta0: val * Math.PI / 180 })} min={0.0} max={180.0} step={1.0} />
                 <SliderPlusTextboxControl label="φ (°)" valueNum={(magneticField.phi0 * 180 / Math.PI).toFixed(1)} onChangeNum={(val) => updateField({ phi0: val * Math.PI / 180 })} min={-180.0} max={180.0} step={1.0} />
-                <SliderPlusTextboxControl label="|B₀|" valueNum={magneticField.mag0.toFixed(1)} onChangeNum={(val) => updateField({ mag0: val })} min={0.0} max={5.0} step={0.1} />
-                <SliderPlusTextboxControl label="Rot. |B₁|" valueNum={magneticField.mag1.toFixed(1)} onChangeNum={(val) => updateField({ mag1: val })} min={0.0} max={10.0} step={0.1} />
-                <SliderPlusTextboxControl label="Rot. ω (rad/s)" valueNum={magneticField.omega1.toFixed(1)} onChangeNum={(val) => updateField({ omega1: val })} min={-10.0} max={10.0} step={0.1} />
-                <SliderPlusTextboxControl label="Rot. φ0 (degrees)" valueNum={(magneticField.phase1 * 180 / Math.PI).toFixed(1)} onChangeNum={(val) => updateField({ phase1: val * Math.PI / 180 })} min={-180.0} max={180.0} step={1.0} />
+                <SliderPlusTextboxControl label="Mag." valueNum={magneticField.mag0.toFixed(1)} onChangeNum={(val) => updateField({ mag0: val })} min={0.0} max={5.0} step={0.1} />
+                <div className="control-group" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '8px', marginTop: '0.25em' }}>
+                  <h6 style={{ margin: 0 }}>Transverse Rotating Component</h6>
+                  <input
+                    type="checkbox"
+                    checked={magneticField.rotatingComponent}
+                    onChange={(e) => updateField({ rotatingComponent: e.target.checked })}
+                  />
+                </div>
+                {magneticField.rotatingComponent && (
+                  <div className="control-group">
+                    <SliderPlusTextboxControl
+                      label="Mag."
+                      valueNum={magneticField.mag1.toFixed(1)}
+                      onChangeNum={(val) => updateField({ mag1: val })}
+                      min={0.0} max={10.0} step={0.1}
+                    />
+                    <SliderPlusTextboxControl
+                      label="ω (rad/s)"
+                      valueNum={magneticField.omega1.toFixed(1)}
+                      onChangeNum={(val) => updateField({ omega1: val })}
+                      min={-10.0} max={10.0} step={0.1}
+                    />
+                    <SliderPlusTextboxControl
+                      label="φ(t=0) (°)"
+                      valueNum={(magneticField.phase1 * 180 / Math.PI).toFixed(1)}
+                      onChangeNum={(val) => updateField({ phase1: val * Math.PI / 180 })}
+                      min={-180.0} max={180.0} step={1.0}
+                    />
+                  </div>
+                )}
               </div>
 
               <hr className="sidebar-divider" />
