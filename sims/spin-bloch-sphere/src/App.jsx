@@ -674,7 +674,7 @@ export default function App() {
                 <SliderPlusTextboxControl
                   label="θ (degrees)"
                   valueNum={(initialSpinState.theta * 180 / Math.PI).toFixed(1)}
-                  onChangeNum={(val) => {setInitialSpinState({ ...initialSpinState, theta: val*Math.PI/180 })}}
+                  onChangeNum={(val) => updateSpinState({ theta: val*Math.PI/180 })}
                   min={0.0}
                   max={180.0}
                   step={1.0}
@@ -682,7 +682,7 @@ export default function App() {
                 <SliderPlusTextboxControl
                   label="φ (degrees)"
                   valueNum={(initialSpinState.phi * 180 / Math.PI).toFixed(1)}
-                  onChangeNum={(val) => {setInitialSpinState({ ...initialSpinState, phi: val*Math.PI/180 })}}
+                  onChangeNum={(val) => updateSpinState({ phi: val*Math.PI/180 })}
                   min={-180.0}
                   max={180.0}
                   step={1.0}
