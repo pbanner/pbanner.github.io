@@ -588,7 +588,7 @@ function SpinTrace({ simTimeRef, getDirection, speedFactor, resetKey, color = 0x
 // The sidebar's numeric time readout is real React state, but throttled to
 // ~10 updates/sec rather than pushed every frame -- a human-readable
 // number doesn't need 60 updates/sec the way the arrows' geometry does.
-function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTimeRef, speedFactor, componentsMode, controlBools, frameAxis, frameOmega, collapsedDirection, trialToken }) {
+function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTimeRef, speedFactor, componentsMode, controlBools, frameAxis, frameOmega, collapsedDirection, trialToken, basisRef }) {
   const lastReportedSec = useRef(-1);
 
   useFrame((state, delta) => {
@@ -607,11 +607,6 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
   // incrementally each time theta0/phi0 change (see advanceTransverseBasis)
   // rather than recomputed from n alone by a fixed formula.
   const n = unitVectorFromAngles(field.theta0, field.phi0);
-  const basisRef = useRef(null);
-  if (basisRef.current === null) {
-    const e1 = arbitraryPerpendicular(n);
-    basisRef.current = { n, e1, e2: cross(n, e1) };
-  }
   useLayoutEffect(() => {
     basisRef.current = advanceTransverseBasis(basisRef.current, n);
   }, [magneticField.theta0, magneticField.phi0]);
@@ -626,7 +621,7 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
   // outcome pole rather than continuing to reflect evolveSpin -- a real
   // projective measurement snaps to the measured eigenstate regardless of
   // where the precession had it an instant before.
-  const getSpinDirection = applyFrame((t) => collapsedDirection ?? evolveSpin(spinState, field, t));
+  const getSpinDirection = applyFrame((t) => collapsedDirection ?? evolveSpin(spinState, field, t, basisRef));
   const getFieldDirection = applyFrame((t) => fieldDirectionAt(field, t, basisRef));
   const componentArrows = getFieldComponentArrows(componentsMode, field, spinState, basisRef);
 
@@ -705,7 +700,7 @@ function RotatingFrameBackdrop({ simTimeRef, axis, omega, active, children }) {
   return <group ref={groupRef}>{children}</group>;
 }
 
-function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, setTimeSec, simTimeRef, speedFactor, setSpeedFactor, componentsMode, controlBools, rotatingFrame, dc }) {
+function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, setTimeSec, simTimeRef, speedFactor, setSpeedFactor, componentsMode, controlBools, rotatingFrame, dc, basisRef }) {
   const controlsRef = useRef();
   // Can't use controls.reset(), since target0/position0 get captured before
   // drei applies the `target` prop below, so reset() would snap to the wrong
@@ -783,6 +778,7 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
           componentsMode={componentsMode} controlBools={controlBools}
           frameAxis={frameAxisPhysics} frameOmega={frameOmega}
           collapsedDirection={dc.collapsedDirection} trialToken={dc.trialToken}
+          basisRef={basisRef}
         />
 
         <OrbitControls ref={controlsRef} target={SPHERE_INITIAL_CAMERA_TARGET} />
@@ -958,6 +954,13 @@ export default function App() {
   // Animation speed factor
   const [speedFactor, setSpeedFactor] = useState(1);
 
+  const basisRef = useRef(null);
+  if (basisRef.current === null) {
+    const n0 = unitVectorFromAngles(magneticField.theta0, magneticField.phi0);
+    const e1 = arbitraryPerpendicular(n0);
+    basisRef.current = { n: n0, e1, e2: cross(n0, e1) };
+  }
+
   /********** Data collection mode **********/
   const [dcModeOn, setDcModeOn] = useState(false);
   const [measurementAxis, setMeasurementAxis] = useState('z');
@@ -977,14 +980,12 @@ export default function App() {
   const [showTheory, setShowTheory] = useState(false);
 
   // The exact Born-rule P(+axis) for the current preparation, field, axis,
-  // and evolution time -- computed once here rather than separately inside
-  // the trial-completion effect and the batch handler, so a single-shot
-  // trial, a batch run, and the histogram's theory line can never disagree
-  // with each other about what's being predicted.
-  const theoryProbPlus = useMemo(() => {
-    const finalVector = evolveSpin(initialSpinState, activeField(magneticField), trialDuration);
-    return (1 + dot(finalVector, axisUnitVector(measurementAxis))) / 2;
-  }, [initialSpinState, magneticField, measurementAxis, trialDuration]);
+  // and evolution time -- recomputed every render (cheap) rather than
+  // memoized, so it always reflects basisRef.current's latest value rather
+  // than being stuck with whatever it was on the last render that changed
+  // one of the memo's own dependencies.
+  const theoryFinalVector = evolveSpin(initialSpinState, activeField(magneticField), trialDuration, basisRef);
+  const theoryProbPlus = (1 + dot(theoryFinalVector, axisUnitVector(measurementAxis))) / 2;
 
   // Any change to what's actually being measured -- the prepared state, the
   // field driving its evolution, which axis is measured, or how long it
@@ -1106,7 +1107,7 @@ export default function App() {
           speedFactor={speedFactor} setSpeedFactor={setSpeedFactor}
           componentsMode={componentsMode}
           controlBools={controlBools} rotatingFrame={rotatingFrame}
-          dc={dc}
+          dc={dc} basisRef={basisRef}
         />
       </div>
 
