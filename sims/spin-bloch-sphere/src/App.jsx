@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo, useState } from 'react';
+import React, { useRef, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
 import ThickArrowHelper from './ThickArrowHelper.jsx';
@@ -383,6 +383,7 @@ function SpinTrace({ simTimeRef, getDirection, speedFactor, color = 0xcc0000, vi
     const t = simTimeRef.current;
 
     if (t < lastSampleTime.current) {
+      console.log('trace CLEAR fired', { t, lastSampleTime: lastSampleTime.current });
       lastSampleTime.current = -Infinity;
       setTracePoints([]);
       return;
@@ -394,6 +395,7 @@ function SpinTrace({ simTimeRef, getDirection, speedFactor, color = 0xcc0000, vi
       lastSampleTime.current = t;
       setTracePoints((prev) => {
         const next = prev.length >= TRACE_MAX_POINTS ? prev.slice(1) : prev;
+        console.log('trace SAMPLE', { prevLength: prev.length, t, point: [p.x, p.y, p.z] });
         return [...next, [p.x, p.y, p.z]];
       });
     }
@@ -446,6 +448,15 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
 
   const getSpinDirection = applyFrame((t) => evolveSpin(spinState, field, t));
   const getFieldDirection = applyFrame((t) => fieldDirectionAt(field, t));
+
+  useLayoutEffect(() => {
+    simTimeRef.current = 0;
+  }, [
+    spinState.theta, spinState.phi,
+    magneticField.mag0, magneticField.theta0, magneticField.phi0,
+    magneticField.mag1, magneticField.omega1, magneticField.phase1, magneticField.rotatingComponent,
+    frameOmega, controlBools.frameRotating,
+  ]);
 
   return (
     <>
@@ -639,11 +650,11 @@ export default function App() {
   // For setting just one property of a magnetic field
   // Usage example: updateField({ theta: parseFloat(e.target.value) })
   function updateField(patch) {
-    simTime.current = 0;
+    //simTime.current = 0;
     setMagneticField(prev => ({ ...prev, ...patch }));
   }
   function updateSpinState(patch) {
-    simTime.current = 0;
+    //simTime.current = 0;
     setInitialSpinState(prev => ({ ...prev, ...patch }));
   }
 
