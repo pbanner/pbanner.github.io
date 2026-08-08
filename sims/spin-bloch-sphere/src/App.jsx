@@ -290,6 +290,34 @@ function getFieldComponentArrows(mode, field, spinState, basisRef) {
   }
 }
 
+// A compact single-row substitute for a full row of X/Y/Z buttons plus its
+// own label line above them -- adapted from the Stern-Gerlach sim's
+// AxisStepper (same up/down-stepper-through-a-fixed-list idea, same CSS
+// classes), simplified since there's always exactly one stepper here (not
+// one per SG) and only the three axis names to cycle through, never an
+// "advanced" angle-entry mode.
+const MEASUREMENT_AXES = ['x', 'y', 'z'];
+
+function MeasurementAxisStepper({ axis, setAxis, disabled, label }) {
+  const currentIndex = MEASUREMENT_AXES.indexOf(axis);
+  const step = (delta) => {
+    const nextIndex = (currentIndex + delta + MEASUREMENT_AXES.length) % MEASUREMENT_AXES.length;
+    setAxis(MEASUREMENT_AXES[nextIndex]);
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px' }}>
+      <label style={{ margin: 0, fontSize: '13px' }}>{label}</label>
+      <div className="axis-stepper">
+        <span className={`axis-stepper-value ${disabled ? 'disabled' : ''}`}>{axis.toUpperCase()}</span>
+        <div className="axis-stepper-arrows">
+          <button type="button" className="axis-stepper-arrow" onClick={() => step(1)} aria-label="Next axis" disabled={disabled}>▲</button>
+          <button type="button" className="axis-stepper-arrow" onClick={() => step(-1)} aria-label="Previous axis" disabled={disabled}>▼</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /************************************************
 *
 * Helpers for sphere drawing
@@ -784,31 +812,23 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
         <OrbitControls ref={controlsRef} target={SPHERE_INITIAL_CAMERA_TARGET} />
       </Canvas>
 
-      <div style={{ position: 'absolute', top: '10px', right: '10px', display: 'flex', flexDirection: 'column', gap: '10px', width: '230px' }}>
+      <div style={{ position: 'absolute', top: '10px', right: '10px', display: 'flex', flexDirection: 'column', gap: '10px', width: '250px' }}>
         <div className="overlay-controls">
-          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: 0, fontWeight: 600 }}>
-            <input type="checkbox" checked={dc.mode} onChange={(e) => dc.setMode(e.target.checked)} />
-            Data collection mode
-          </label>
-
-          <hr className="sidebar-divider" style={{ margin: '2px 0' }} />
-
-          <h3 style={{ marginTop: 0 }}>Time Controls</h3>
-
           {!dc.mode ? (
             <>
+              <h3 style={{ marginTop: 0, marginBottom: '6px', textAlign: 'center' }}>Time Controls</h3>
               <label>Time: {timeSec.toFixed(1)} sec</label>
-              <div style={{ display: 'flex', flexDirection: 'row' }}>
-                <button className="control-button" onClick={() => setPaused((p) => !p)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', margin: 0, fontSize: '1.0rem', width: '100px' }}>
+              <div style={{ display: 'flex', flexDirection: 'row', gap: '6px' }}>
+                <button className="control-button" onClick={() => setPaused((p) => !p)} style={{ display: 'inline-flex', flex: 1, alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '6px 14px', margin: 0, fontSize: '1.0rem' }}>
                   {paused ? <PlayIcon /> : <PauseIcon />}
                   {paused ? 'Start' : 'Pause'}
                 </button>
-                <button className="control-button" onClick={() => { simTimeRef.current = 0; }} style={{ marginLeft: '6px', padding: '6px 14px', fontSize: '1.0rem', width: '100px' }}>
+                <button className="control-button" onClick={() => { simTimeRef.current = 0; }} style={{ flex: 1, padding: '6px 14px', margin: 0, fontSize: '1.0rem' }}>
                   Reset
                 </button>
               </div>
               <div className="control-group" style={{ margin: '8px 0px' }}>
-                <label>Speed: {speedFactor.toFixed(1)}×</label>
+                <label>Animation Speed: {speedFactor.toFixed(1)}×</label>
                 <input
                   type="range" min={0.1} max={2.0} step={0.1}
                   value={speedFactor}
@@ -819,25 +839,11 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
             </>
           ) : (
             <>
-              <div className="control-group" style={{ gap: '4px' }}>
-                <label style={{ margin: 0 }}>Measurement axis:</label>
-                <div style={{ display: 'flex', flexDirection: 'row', gap: '6px' }}>
-                  {['x', 'y', 'z'].map((axis) => (
-                    <button
-                      key={axis}
-                      className={`control-button ${dc.axis === axis ? 'active' : ''}`}
-                      onClick={() => dc.setAxis(axis)}
-                      disabled={dc.phase === 'running'}
-                      style={{ flex: 1, margin: 0 }}
-                    >
-                      {axis.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <h3 style={{ marginTop: 0, marginBottom: '6px', textAlign: 'center' }}>Experiment Controls</h3>
+              <MeasurementAxisStepper axis={dc.axis} setAxis={dc.setAxis} disabled={dc.phase === 'running'} label={"Measurement Axis:"} />
 
-              <div className="control-group" style={{ margin: '8px 0px' }}>
-                <label>Evolve for: {dc.duration.toFixed(1)} sec</label>
+              <div className="control-group" style={{ margin: '0px 0px 16px 0px' }}>
+                <label>Delay before measurement: {dc.duration.toFixed(1)} sec</label>
                 <input
                   type="range" min={0.1} max={20.0} step={0.1}
                   value={dc.duration}
@@ -849,24 +855,34 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
 
               <label>
                 Time: {timeSec.toFixed(1)} / {dc.duration.toFixed(1)} sec
-                {dc.phase === 'collapsed' ? ' (measured)' : ''}
               </label>
 
-              {dc.phase === 'collapsed' ? (
-                <button className="control-button" onClick={dc.onRePrepare} style={{ margin: '4px 0px' }}>
-                  Re-prepare
-                </button>
-              ) : (
+              <div style={{ display: 'flex', flexDirection: 'row', gap: '8px' }}>
+                {dc.phase === 'collapsed' ? (
+                  <button className="control-button" onClick={dc.onRePrepare} style={{ margin: '4px 0px' }}>
+                    Re-prepare
+                  </button>
+                ) : (
+                  <button
+                    className="control-button"
+                    onClick={dc.onRunTrial}
+                    disabled={dc.phase === 'running'}
+                    style={{ margin: '4px 0px' }}
+                  >
+                    {dc.phase === 'running' ? 'Running…' : 'Run One Trial'}
+                  </button>
+                )}
                 <button
                   className="control-button"
-                  onClick={dc.onRunTrial}
+                  onClick={dc.onRunBatch}
                   disabled={dc.phase === 'running'}
-                  style={{ margin: '4px 0px' }}
+                  style={{ flex: 1, margin: '4px 0px' }}
                 >
-                  {dc.phase === 'running' ? 'Running…' : 'Run Trial'}
+                  Run {dc.batchSize} Trials
                 </button>
-              )}
+              </div>
 
+              {/*
               <div className="control-group" style={{ gap: '4px' }}>
                 <label style={{ margin: 0 }}>Batch trials:</label>
                 <div style={{ display: 'flex', flexDirection: 'row', gap: '6px', alignItems: 'center' }}>
@@ -890,6 +906,7 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
                   </button>
                 </div>
               </div>
+              */}
             </>
           )}
         </div>
@@ -1116,6 +1133,23 @@ export default function App() {
         <div className="sidebar-content">
           <div className="panel-controls">
             <div>
+              <div className="control-group" style={{ gap: '0px' }}>
+                <label>Simulation Mode:</label>
+                <select value={dcModeOn ? 'true' : 'false'} onChange={(e) => handleSetDataCollectionMode(e.target.value === 'true')}>
+                  <option value="false">Time evolution</option>
+                  <option value="true">Data collection</option>
+                </select>
+              </div>
+              <div className="control-group" style={{ gap: '0px' }}>
+                <label>Presets:</label>
+                <select value={dcModeOn ? 'true' : 'false'} onChange={(e) => handleSetDataCollectionMode(e.target.value === 'true')}>
+                  <option value="false">Time evolution</option>
+                  <option value="true">Data collection</option>
+                </select>
+              </div>
+
+              <hr className="sidebar-divider" />
+
               <h3>Spin State at t = 0</h3>
               <div className="control-group">
                 <SliderPlusTextboxControl

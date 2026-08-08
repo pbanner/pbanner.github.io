@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { ketWidth, drawKet } from './ket.js';
+import './App.css';
 
 // A small, fixed two-bar histogram for the data-collection mode's
 // projective measurement results, drawn on a canvas as an actual labeled
@@ -14,8 +15,8 @@ import { ketWidth, drawKet } from './ket.js';
 const PADDING_TOP = 30;      // room for the "Counts" axis label and its arrowhead
 const PADDING_BOTTOM = 34;   // room for each bar's ket label below the zero axis
 const PADDING_SIDE = 14;     // room for the horizontal axis's arrowheads
-const CENTER_GAP = 38;       // gap between the vertical axis and each bar's inner edge -- wide enough that a tick's number, and a bar's own count label overhanging past the bar's edge, both clear each other
-const BAR_WIDTH_RATIO = 0.65; // fraction of each half-slot's remaining width (outside the center gap) a bar fills
+const CENTER_GAP = 10;       // gap between the vertical axis and each bar's inner edge -- wide enough that a tick's number, and a bar's own count label overhanging past the bar's edge, both clear each other
+const BAR_WIDTH_RATIO = 0.40; // fraction of each half-slot's remaining width (outside the center gap) a bar fills
 const ARROW_SIZE = 7;        // px, axis arrowhead size
 const AXIS_HEADROOM = 1.25;  // the scale's top tick clears the tallest bar (or theory line) by this factor, leaving room for both bars' count labels above them
 const MIN_AXIS_MAX = 5;      // the counts axis never scales down below this, even with 0 or 1 counts
@@ -149,7 +150,7 @@ export default function Histogram({ axisLabel, counts, showTheory, setShowTheory
       ctx.moveTo(centerX - 4, y);
       ctx.lineTo(centerX + 4, y);
       ctx.stroke();
-      ctx.fillText(String(v), centerX + 7, y);
+      //ctx.fillText(String(v), centerX + 7, y);
     });
 
     // Axis label, just under the arrowhead
@@ -211,15 +212,15 @@ export default function Histogram({ axisLabel, counts, showTheory, setShowTheory
       const subPx = ketSize * 0.55;
       ctx.font = `bold ${subPx}px sans-serif`;
       const subWidth = ctx.measureText(axisLabel).width;
-      const gap = -ketSize * 0.06;
+      const gap = ketSize * 0.06;
       const totalWidth = kWidth + gap + subWidth;
-      const startX = x + barWidth / 2 - totalWidth / 2;
+      const startX = x + barWidth / 2 - totalWidth / 2.5;
       const midY = plotY1 + PADDING_BOTTOM * 0.5;
       ctx.fillStyle = LABEL_COLOR;
       drawKet(ctx, startX, midY, ketSize, signOf[key]);
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillText(axisLabel, startX + kWidth + gap, midY + ketSize * 0.28);
+      ctx.fillText(axisLabel, startX + kWidth + gap, midY + ketSize * 0.40);
     });
   }, [canvasDims, counts, showTheory, theoryProbPlus, axisLabel]);
 
@@ -233,20 +234,19 @@ export default function Histogram({ axisLabel, counts, showTheory, setShowTheory
 
   return (
     <div className="overlay-controls">
-      <h3>Measurement Histogram</h3>
+      <h3 style={{ textAlign: 'center' }}>Data Histogram</h3>
+      <span style={{ fontSize: '0.85rem', color: '#333', textAlign: 'center', fontWeight: 'bold' }}>Total N = {total}</span>
       <div ref={containerRef} style={{ width: '100%', height: '170px' }}>
         <canvas ref={canvasRef} style={{ display: 'block' }} />
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', margin: 0 }}>
-          <input type="checkbox" checked={showTheory} onChange={(e) => setShowTheory(e.target.checked)} />
+      <div className="control-group" style={{ display: 'flex', flexDirection: 'row', gap: '8px' }}>
+        <button className={`control-button ${showTheory ? 'active' : ''}`} style={{ flex: 1 }} onClick={() => setShowTheory(!showTheory)}>
           Show theory
-        </label>
-        <span style={{ fontSize: '0.85rem', color: '#666' }}>N = {total}</span>
-      </div>
-      <button className="control-button" onClick={onClear} disabled={total === 0}>
-        Clear Data
-      </button>
+        </button>
+        <button className="control-button" onClick={onClear} style={{ flex: 1 }} disabled={total === 0}>
+          Clear Data
+        </button>
+        </div>
     </div>
   );
 }

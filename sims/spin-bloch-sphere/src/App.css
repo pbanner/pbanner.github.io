@@ -163,6 +163,59 @@
   border-color: #bbb;
 }
 
+/* Custom axis stepper control (ported from the Stern-Gerlach sim) */
+.axis-stepper {
+  display: inline-flex;
+  height: 28px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.axis-stepper-value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  background: #fff;
+  border-right: 1px solid #ddd;
+}
+
+.axis-stepper-value.disabled {
+  background: #eeeeee;
+  color: #999999;
+  cursor: not-allowed;
+}
+
+.axis-stepper-arrows {
+  display: flex;
+  flex-direction: column;
+  width: 20px;
+}
+
+.axis-stepper-arrow {
+  flex: 1;
+  border: none;
+  background: #f5f5f5;
+  cursor: pointer;
+  font-size: 8px;
+  line-height: 1;
+  color: #666;
+  padding: 0;
+}
+
+.axis-stepper-arrow:hover {
+  background: #e0e0e0;
+}
+
+.axis-stepper-arrow:first-child {
+  border-bottom: 1px solid #ddd;
+}
+
 /* Responsive for smaller screens */
 @media (max-width: 800px) {
   .sidebar {
