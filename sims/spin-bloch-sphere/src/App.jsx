@@ -342,7 +342,11 @@ function SpinTrace({ simTimeRef, getDirection, resetKey, color = 0xcc0000 }) {
     if (t - lastSampleTime.current >= TRACE_SAMPLE_INTERVAL) {
       const { x, y, z } = getDirection(t);
       const p = blochToThree(x, y, z);
-      points.current.push(p.x, p.y, p.z);
+      if (points.current.length === 0) {
+        points.current.push(p.x, p.y, p.z, p.x, p.y, p.z);
+      } else {
+        points.current.push(p.x, p.y, p.z);
+      }
       if (points.current.length > TRACE_MAX_POINTS * 3) {
         points.current.splice(0, points.current.length - TRACE_MAX_POINTS * 3);
       }
