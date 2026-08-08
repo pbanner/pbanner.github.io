@@ -314,49 +314,38 @@ const TRACE_SAMPLE_INTERVAL = 0.05; // seconds of simulated time between points
 const TRACE_MAX_POINTS = 4000;      // safety cap for an unattended long-running tab
 
 function SpinTrace({ simTimeRef, getDirection, resetKey, color = 0xcc0000 }) {
-  const lineRef = useRef();
-  const points = useRef([]);
+  const [tracePoints, setTracePoints] = useState([]);
   const lastSampleTime = useRef(-Infinity);
 
-  // Any change to the trajectory's defining parameters (resetKey) means
-  // the trace drawn so far describes a different, no-longer-current
-  // trajectory -- clear it rather than mixing stale segments from a
-  // previous setup in with new ones.
   useEffect(() => {
-    points.current = [];
     lastSampleTime.current = -Infinity;
-    lineRef.current?.geometry.setPositions([0, 0, 0, 0, 0, 0.001]);
+    setTracePoints([]);
   }, [resetKey]);
 
   useFrame(() => {
     const t = simTimeRef.current;
 
-    // Time running backwards means the clock was just reset via the
-    // Reset button -- start the trace over rather than drawing a line
-    // back to wherever it left off.
     if (t < lastSampleTime.current) {
-      points.current = [];
       lastSampleTime.current = -Infinity;
+      setTracePoints([]);
+      return;
     }
 
     if (t - lastSampleTime.current >= TRACE_SAMPLE_INTERVAL) {
       const { x, y, z } = getDirection(t);
       const p = blochToThree(x, y, z);
-      if (points.current.length === 0) {
-        points.current.push(p.x, p.y, p.z, p.x, p.y, p.z);
-      } else {
-        points.current.push(p.x, p.y, p.z);
-      }
-      if (points.current.length > TRACE_MAX_POINTS * 3) {
-        points.current.splice(0, points.current.length - TRACE_MAX_POINTS * 3);
-      }
       lastSampleTime.current = t;
-      lineRef.current?.geometry.setPositions(points.current);
+      setTracePoints((prev) => {
+        const next = prev.length >= TRACE_MAX_POINTS ? prev.slice(1) : prev;
+        return [...next, [p.x, p.y, p.z]];
+      });
     }
   });
 
+  if (tracePoints.length < 2) return null; // a line needs at least two points
+
   return (
-    <Line ref={lineRef} points={LINE_PLACEHOLDER_POINTS} color={color} lineWidth={2} transparent opacity={0.6} />
+    <Line points={tracePoints} color={color} lineWidth={2} transparent opacity={0.6} />
   );
 }
 
