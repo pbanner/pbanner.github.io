@@ -13,6 +13,9 @@ const SPHERE_AXIS_EXTENT = 1.3;  // Helps determine how far axis arrows and axis
 
 const FIELD_MAGNITUDE_DISPLAY_FACTOR = 0.2;
 
+// A stable placeholder array for <Line> refs that get updated through imperative handles
+const LINE_PLACEHOLDER_POINTS = [[0, 0, 0], [0, 0, 0.001]];
+
 /********** UI components and helpers **********/
 
 // Unicode glyphs (▶ ⏸ ⌂) bake their own, font-dependent vertical padding
@@ -290,7 +293,7 @@ function TimeDrivenAxisLine({ simTimeRef, getDirection, extent, color = 'gray', 
     line.computeLineDistances?.();
   });
   return (
-    <Line ref={lineRef} points={[[0, 0, 0], [0, 0, 0.001]]} color={color} dashed dashSize={0.06} gapSize={0.05} lineWidth={lineWidth} />
+    <Line ref={lineRef} points={LINE_PLACEHOLDER_POINTS} color={color} dashed dashSize={0.06} gapSize={0.05} lineWidth={lineWidth} />
   );
 }
 // Traces the spin's path across the sphere surface over simulated time.
@@ -349,7 +352,7 @@ function SpinTrace({ simTimeRef, getDirection, resetKey, color = 0xcc0000 }) {
   });
 
   return (
-    <Line ref={lineRef} points={[[0, 0, 0], [0, 0, 0.001]]} color={color} lineWidth={2} transparent opacity={0.6} />
+    <Line ref={lineRef} points={LINE_PLACEHOLDER_POINTS} color={color} lineWidth={2} transparent opacity={0.6} />
   );
 }
 
