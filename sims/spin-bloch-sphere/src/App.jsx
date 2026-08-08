@@ -468,7 +468,29 @@ function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTi
   );
 }
 
-function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, setTimeSec, simTimeRef, speedFactor, setSpeedFactor, controlBools }) {
+// Rotates the "lab frame" backdrop -- sphere, graticule, axis arrows, ket
+// labels -- about the static field's axis when the rotating-frame view is
+// active. This is the entire implementation of that view: the spin arrow,
+// field arrow, and trace keep computing lab-frame directions exactly as
+// before, with no awareness a rotating view exists. Rotating the backdrop
+// *backward* at the frame's rate produces an identical picture to rotating
+// every dynamic object *forward* by the same amount, but touches only
+// static geometry instead of every animated component.
+function RotatingFrameBackdrop({ simTimeRef, axis, omega, active, children }) {
+  const groupRef = useRef();
+  useFrame(() => {
+    const group = groupRef.current;
+    if (!group) return;
+    if (!active) {
+      group.quaternion.identity();
+      return;
+    }
+    group.quaternion.setFromAxisAngle(axis, -omega * simTimeRef.current);
+  });
+  return <group ref={groupRef}>{children}</group>;
+}
+
+function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, setTimeSec, simTimeRef, speedFactor, setSpeedFactor, controlBools, rotatingFrame }) {
   const controlsRef = useRef();
   // Can't use controls.reset(), since target0/position0 get captured before
   // drei applies the `target` prop below, so reset() would snap to the wrong
@@ -494,6 +516,12 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
     return <directionalLight ref={lightRef} intensity={30.0} />;
   }
 
+  const staticAxisPhysics = unitVectorFromAngles(magneticField.theta0, magneticField.phi0);
+  const frameAxis = blochToThree(staticAxisPhysics.x, staticAxisPhysics.y, staticAxisPhysics.z);
+  const frameOmega = controlBools.frameLocked
+    ? (magneticField.rotatingComponent ? -magneticField.omega1 : magneticField.mag0)
+    : rotatingFrame;
+
   return (
     // position: 'relative' + the button's position: 'absolute' below keeps
     // the button entirely out of the surrounding flex layout -- it overlays
@@ -501,37 +529,35 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
     // affect the heading/canvas alignment above it.
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <Canvas camera={{ position: SPHERE_INITIAL_CAMERA_POSITION, fov: 35 }} style={{ width: '100%', height: '100%' }}>
-        {controlBools.showSphere ? 
-          (
-          <>
-            <ambientLight intensity={5.0} />
-            <CameraLight />
+        <ambientLight intensity={5.0} />
+        <CameraLight />
+
+        <RotatingFrameBackdrop simTimeRef={simTimeRef} axis={frameAxis} omega={frameOmega} active={controlBools.frameRotating}>
+          {controlBools.showSphere && (
             <mesh>
               <sphereGeometry args={[1, 32, 32]} />
               <meshStandardMaterial color="gray" transparent opacity={0.25} side={THREE.FrontSide} depthWrite={false} roughness={0.5} metalness={1.00} />
             </mesh>
-          </>
-          ) : 
-          (null)
-        }
+          )}
 
-        <Line points={equatorXY} color="gray" lineWidth={controlBools.showSphere ? 1 : 0} dashed dashSize={0.06} gapSize={0.05} />
-        <Line points={meridianXZ} color="gray" lineWidth={controlBools.showSphere ? 0 : 0} dashed dashSize={0.06} gapSize={0.05} />
-        <Line points={meridianYZ} color="gray" lineWidth={controlBools.showSphere ? 0 : 0} dashed dashSize={0.06} gapSize={0.05} />
+          <Line points={equatorXY} color="gray" lineWidth={controlBools.showSphere ? 1 : 0} dashed dashSize={0.06} gapSize={0.05} />
+          <Line points={meridianXZ} color="gray" lineWidth={controlBools.showSphere ? 0 : 0} dashed dashSize={0.06} gapSize={0.05} />
+          <Line points={meridianYZ} color="gray" lineWidth={controlBools.showSphere ? 0 : 0} dashed dashSize={0.06} gapSize={0.05} />
 
-        <ThickArrowHelper dir={blochToThree(1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
-        <ThickArrowHelper dir={blochToThree(0, 1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
-        <ThickArrowHelper dir={blochToThree(0, 0, 1)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
-        <ThickArrowHelper dir={blochToThree(-1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
-        <ThickArrowHelper dir={blochToThree(0, -1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
-        <ThickArrowHelper dir={blochToThree(0, 0, -1)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
+          <ThickArrowHelper dir={blochToThree(1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
+          <ThickArrowHelper dir={blochToThree(0, 1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
+          <ThickArrowHelper dir={blochToThree(0, 0, 1)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
+          <ThickArrowHelper dir={blochToThree(-1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
+          <ThickArrowHelper dir={blochToThree(0, -1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
+          <ThickArrowHelper dir={blochToThree(0, 0, -1)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
 
-        <KetLabel sign="+" axis="x" position={blochToThree(SPHERE_AXIS_EXTENT + 0.2, 0, 0).toArray()} />
-        <KetLabel sign="-" axis="x" position={blochToThree(-(SPHERE_AXIS_EXTENT + 0.2), 0, 0).toArray()} />
-        <KetLabel sign="+" axis="y" position={blochToThree(0, SPHERE_AXIS_EXTENT + 0.2, 0).toArray()} />
-        <KetLabel sign="-" axis="y" position={blochToThree(0, -(SPHERE_AXIS_EXTENT + 0.2), 0).toArray()} />
-        <KetLabel sign="+" axis="z" position={blochToThree(0, 0, SPHERE_AXIS_EXTENT + 0.2).toArray()} />
-        <KetLabel sign="-" axis="z" position={blochToThree(0, 0, -(SPHERE_AXIS_EXTENT + 0.2)).toArray()} />
+          <KetLabel sign="+" axis="x" position={blochToThree(SPHERE_AXIS_EXTENT + 0.2, 0, 0).toArray()} />
+          <KetLabel sign="-" axis="x" position={blochToThree(-(SPHERE_AXIS_EXTENT + 0.2), 0, 0).toArray()} />
+          <KetLabel sign="+" axis="y" position={blochToThree(0, SPHERE_AXIS_EXTENT + 0.2, 0).toArray()} />
+          <KetLabel sign="-" axis="y" position={blochToThree(0, -(SPHERE_AXIS_EXTENT + 0.2), 0).toArray()} />
+          <KetLabel sign="+" axis="z" position={blochToThree(0, 0, SPHERE_AXIS_EXTENT + 0.2).toArray()} />
+          <KetLabel sign="-" axis="z" position={blochToThree(0, 0, -(SPHERE_AXIS_EXTENT + 0.2)).toArray()} />
+        </RotatingFrameBackdrop>
 
         <SimulationScene
           spinState={spinState} magneticField={magneticField}
@@ -594,8 +620,9 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
 export default function App() {
   const [controlBools, setControlBools] = useState({
     frameRotating: false,
+    frameLocked: false,
     showSphere: true,
-    showSpinTrace: true    
+    showSpinTrace: true
   });
   // Spin state at t = 0, set by two angles
   const [initialSpinState, setInitialSpinState] = useState({ theta: 0, phi: 0 });
@@ -633,7 +660,7 @@ export default function App() {
           timeSec={timeSec} setTimeSec={setTimeSec}
           simTimeRef={simTime}
           speedFactor={speedFactor} setSpeedFactor={setSpeedFactor}
-          controlBools={controlBools}
+          controlBools={controlBools} rotatingFrame={rotatingFrame}
         />
       </div>
 
@@ -709,16 +736,26 @@ export default function App() {
                   <input type="checkbox" checked={controlBools.frameRotating} onChange={(e) => setControlBools({ ...controlBools, frameRotating: e.target.checked })} />
                   Enable rotating frame
                 </label>
-                <label>
-                  <input type="checkbox" checked={controlBools.frameRotating} onChange={(e) => setControlBools({ ...controlBools, frameRotating: e.target.checked })} />
-                  Lock rotation to B-field
-                </label>
-                <SliderPlusTextboxControl
-                  label="Frame ω (rad/s)"
-                  valueNum={rotatingFrame.toFixed(1)}
-                  onChangeNum={(val) => setRotatingFrame(val)}
-                  min={-10.0} max={10.0} step={0.1}
-                />
+                {controlBools.frameRotating &&
+                  <>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={controlBools.frameLocked}
+                        disabled={!magneticField.rotatingComponent}
+                        onChange={(e) => setControlBools({ ...controlBools, frameLocked: e.target.checked })}
+                      />
+                      Lock rotation to B-field
+                    </label>
+                    <SliderPlusTextboxControl
+                      label="Frame ω (rad/s)"
+                      valueNum={rotatingFrame.toFixed(1)}
+                      onChangeNum={(val) => setRotatingFrame(val)}
+                      min={-10.0} max={10.0} step={0.1}
+                      disabled={!controlBools.frameRotating || controlBools.frameLocked}
+                    />
+                  </>
+                }
               </div>
 
               <hr className="sidebar-divider" />
