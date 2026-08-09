@@ -948,6 +948,92 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
   );
 }
 
+// Preset scenarios for the sidebar's "Presets" dropdown. Each fully
+// specifies the physical setup (initial spin state, field, rotating-frame
+// display) rather than patching individual fields, so picking one always
+// lands on a clean, known-good configuration regardless of whatever was
+// set before -- no leftover field/frame values from a previous preset or
+// manual tweak.
+//
+// Deliberately not included: adiabatic/rapid passage (slowly sweeping the
+// static field's own direction to show the spin either tracking it or
+// not). The field's static axis (theta0/phi0) is fixed for the whole
+// trial here -- the only built-in time-dependence is the transverse
+// component's fixed-axis rotation -- so there's no way to sweep the field
+// direction itself over time without extending the physics model.
+const PRESETS = [
+  {
+    key: 'larmor',
+    label: 'Larmor precession',
+    apply(setters) {
+      setters.setInitialSpinState({ theta: Math.PI / 2, phi: 0 });
+      setters.setMagneticField({ mag0: 1, theta0: 0, phi0: 0, mag1: 0, omega1: 0, phase1: 0, rotatingComponent: false });
+      setters.setControlBools((prev) => ({ ...prev, frameRotating: false, frameLocked: false }));
+      setters.setComponentsMode('none');
+    },
+  },
+  // {
+  //   key: 'frozenRotatingFrame',
+  //   label: 'Larmor precession, in rotating frame',
+  //   apply(setters) {
+  //     // Same physical setup as Larmor precession above -- the point here
+  //     // is purely the rotating-frame view. With no transverse component,
+  //     // locking the frame spins it at exactly mag0 (see BlochSphere's
+  //     // frameOmega), matching the spin's own precession rate exactly, so
+  //     // the spin arrow holds still relative to the (also-rotating) sphere
+  //     // and axis labels.
+  //     setters.setInitialSpinState({ theta: Math.PI / 2, phi: 0 });
+  //     setters.setMagneticField({ mag0: 1, theta0: 0, phi0: 0, mag1: 0, omega1: 0, phase1: 0, rotatingComponent: false });
+  //     setters.setControlBools((prev) => ({ ...prev, frameRotating: true, frameLocked: true }));
+  //     setters.setComponentsMode('none');
+  //   },
+  // },
+  {
+    key: 'onResonanceRabi',
+    label: 'On-resonance Rabi flopping',
+    apply(setters) {
+      // omega1 === mag0 cancels the (mag0 - omega1) detuning term in the
+      // effective field (see effectiveField/evolveSpin), leaving a purely
+      // transverse effective field -- starting at the north pole, the spin
+      // nutates all the way down to the south pole and back.
+      setters.setInitialSpinState({ theta: 0, phi: 0 });
+      setters.setMagneticField({ mag0: 1, theta0: 0, phi0: 0, mag1: 1, omega1: 1, phase1: 0, rotatingComponent: true });
+      setters.setControlBools((prev) => ({ ...prev, frameRotating: false, frameLocked: false }));
+      setters.setComponentsMode('none');
+    },
+  },
+  // {
+  //   key: 'onResonanceRabiRotatingFrame',
+  //   label: 'On-resonance Rabi (rotating-frame view)',
+  //   apply(setters) {
+  //     // Same physical setup as the on-resonance preset above, but locking
+  //     // the frame to the drive turns the fast lab-frame spiral into the
+  //     // textbook picture: the spin simply nutates around a fixed effective
+  //     // field, which the "effective field" component display then draws
+  //     // directly as a static arrow.
+  //     setters.setInitialSpinState({ theta: 0, phi: 0 });
+  //     setters.setMagneticField({ mag0: 1, theta0: 0, phi0: 0, mag1: 1, omega1: 1, phase1: 0, rotatingComponent: true });
+  //     setters.setControlBools((prev) => ({ ...prev, frameRotating: true, frameLocked: true }));
+  //     setters.setComponentsMode('effectiveField');
+  //   },
+  // },
+  {
+    key: 'offResonanceRabi',
+    label: 'Off-resonance Rabi flopping',
+    apply(setters) {
+      // Detuning (mag0 - omega1 = 0.5, same size as the drive itself)
+      // tilts the effective field away from purely transverse, so the
+      // nutation cone -- starting from the north pole, already close to
+      // that tilted axis -- never reaches the south pole: incomplete
+      // flopping, in contrast to the on-resonance case above.
+      setters.setInitialSpinState({ theta: 0, phi: 0 });
+      setters.setMagneticField({ mag0: 1, theta0: 0, phi0: 0, mag1: 0.5, omega1: 0.5, phase1: 0, rotatingComponent: true });
+      setters.setControlBools((prev) => ({ ...prev, frameRotating: false, frameLocked: false }));
+      setters.setComponentsMode('none');
+    },
+  },
+];
+
 export default function App() {
   const [controlBools, setControlBools] = useState({
     frameRotating: false,
@@ -970,6 +1056,10 @@ export default function App() {
   const simTime = useRef(0);
   // Animation speed factor
   const [speedFactor, setSpeedFactor] = useState(1);
+  // The sidebar's "Presets" dropdown -- always reset back to '' right
+  // after applying one (see applyPreset below), since it's a one-shot
+  // action rather than a mode the state keeps matching.
+  const [selectedPreset, setSelectedPreset] = useState('');
 
   const basisRef = useRef(null);
   if (basisRef.current === null) {
@@ -1111,6 +1201,21 @@ export default function App() {
     resetTrialData();
   }
 
+  // A preset is a one-shot action (load this configuration), not a
+  // persistent mode the dropdown keeps tracking -- so it resets back to
+  // its placeholder immediately rather than continuing to claim "you're
+  // viewing <preset>" after the user has since dragged a slider away from
+  // it. Also always drops out of data collection mode: presets are for
+  // watching a scenario play out, and handleSetDataCollectionMode's own
+  // pause/reset-to-t=0 gives every preset the same clean starting point.
+  function applyPreset(key) {
+    const preset = PRESETS.find((p) => p.key === key);
+    if (!preset) return;
+    handleSetDataCollectionMode(false);
+    preset.apply({ setInitialSpinState, setMagneticField, setControlBools, setComponentsMode });
+    setSelectedPreset('');
+  }
+
   return (
     <div className="app-layout">
       {/* Main Canvas Area */}
@@ -1142,9 +1247,11 @@ export default function App() {
               </div>
               <div className="control-group" style={{ gap: '0px' }}>
                 <label>Presets:</label>
-                <select value={dcModeOn ? 'true' : 'false'} onChange={(e) => handleSetDataCollectionMode(e.target.value === 'true')}>
-                  <option value="false">Time evolution</option>
-                  <option value="true">Data collection</option>
+                <select value={selectedPreset} onChange={(e) => applyPreset(e.target.value)}>
+                  <option value="" disabled>Choose a preset…</option>
+                  {PRESETS.map((preset) => (
+                    <option key={preset.key} value={preset.key}>{preset.label}</option>
+                  ))}
                 </select>
               </div>
 
