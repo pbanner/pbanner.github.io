@@ -776,10 +776,10 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
     // Defaults to panning for the *current* mode (dc.mode, closed over
   // fresh each render) so the "Reset View" button and the auto-repan
   // effect below share one implementation.
-  const resetView = (panned = dc.mode) => {
+  const resetView = () => {
     const controls = controlsRef.current;
     if (!controls) return;
-    const offset = panned ? DATA_COLLECTION_CAMERA_PAN : [0, 0, 0];
+    const offset = dc.mode ? DATA_COLLECTION_CAMERA_PAN : [0, 0, 0];
     controls.object.position.set(...SPHERE_INITIAL_CAMERA_POSITION.map((v, i) => v + offset[i]));
     controls.target.set(...SPHERE_INITIAL_CAMERA_TARGET.map((v, i) => v + offset[i]));
     controls.update();
@@ -790,7 +790,7 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
   // own `camera` prop only sets the *initial* position, so without this
   // the camera would just stay wherever it was as the overlay appears.
   useEffect(() => {
-    resetView(dc.mode);
+    resetView();
   }, [dc.mode]);
 
   const equatorXY = useMemo(() => graticuleRing('z'), []);
