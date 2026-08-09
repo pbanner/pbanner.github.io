@@ -12,10 +12,14 @@ const SPHERE_INITIAL_CAMERA_POSITION = [3.6, 2.4, -3.6];
 const SPHERE_INITIAL_CAMERA_TARGET = [0, 0.15, 0];
 const SPHERE_AXIS_EXTENT = 1.3;  // Helps determine how far axis arrows and axis labels are drawn beyond the sphere itself
 
+const DATA_COLLECTION_CAMERA_PAN = [-0.36, 0, -0.36];
+
 const FIELD_MAGNITUDE_DISPLAY_FACTOR = 0.2;
 
 // A stable placeholder array for <Line> refs that get updated through imperative handles
 const LINE_PLACEHOLDER_POINTS = [[0, 0, 0], [0, 0, 0.001]];
+
+const AXIS_TICK_HALF_ANGLE = 0.05; // radians each arm reaches from center
 
 /************************************************
 *
@@ -359,6 +363,42 @@ function graticuleRing(fixedAxis, segments = 96) {
     else pts.push(blochToThree(0, c, s));                          // y-z meridian
   }
   return pts;
+}
+
+// A short segment of one of graticuleRing's own great circles, centered on
+// angle centerT -- used below to draw "+" tick marks that actually lie on
+// the sphere (sharing graticuleRing's exact parametrization, not a flat
+// billboarded glyph), so their curvature reads as real surface geometry
+// rather than a 2D icon floating in front of it.
+function graticuleArc(fixedAxis, centerT, halfAngle, segments = 8) {
+  const pts = [];
+  for (let i = 0; i <= segments; i++) {
+    const t = centerT - halfAngle + (2 * halfAngle) * (i / segments);
+    const c = Math.cos(t), s = Math.sin(t);
+    if (fixedAxis === 'z') pts.push(blochToThree(c, s, 0));
+    else if (fixedAxis === 'y') pts.push(blochToThree(c, 0, s));
+    else pts.push(blochToThree(0, c, s));
+  }
+  return pts;
+}
+
+// A small "+" mark on the sphere's surface at each of the six points where
+// the axis arrows pierce it -- each arm is a short arc of whichever
+// graticule ring already passes through that point (two rings cross at
+// every axis point, giving two arms at right angles). AXIS_TICK_HALF_ANGLE
+// controls each arm's length; keeping it well under the ring's own segment
+// spacing near these points is why a coarser 8-segment arc still looks
+// smooth despite the full rings using 96.
+function axisSurfaceTicks(halfAngle = AXIS_TICK_HALF_ANGLE) {
+  const arms = [
+    ['z', 0], ['y', 0],                       // +x
+    ['z', Math.PI], ['y', Math.PI],           // -x
+    ['z', Math.PI / 2], ['x', 0],             // +y
+    ['z', -Math.PI / 2], ['x', Math.PI],      // -y
+    ['y', Math.PI / 2], ['x', Math.PI / 2],   // +z
+    ['y', -Math.PI / 2], ['x', -Math.PI / 2], // -z
+  ];
+  return arms.map(([ring, t]) => graticuleArc(ring, t, halfAngle));
 }
 
 // Drawn once per label text onto an offscreen 2D canvas, then used as a
@@ -733,17 +773,30 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
   // Can't use controls.reset(), since target0/position0 get captured before
   // drei applies the `target` prop below, so reset() would snap to the wrong
   // point. Set both explicitly instead.
-  const resetView = () => {
+    // Defaults to panning for the *current* mode (dc.mode, closed over
+  // fresh each render) so the "Reset View" button and the auto-repan
+  // effect below share one implementation.
+  const resetView = (panned = dc.mode) => {
     const controls = controlsRef.current;
     if (!controls) return;
-    controls.object.position.set(...SPHERE_INITIAL_CAMERA_POSITION);
-    controls.target.set(...SPHERE_INITIAL_CAMERA_TARGET);
+    const offset = panned ? DATA_COLLECTION_CAMERA_PAN : [0, 0, 0];
+    controls.object.position.set(...SPHERE_INITIAL_CAMERA_POSITION.map((v, i) => v + offset[i]));
+    controls.target.set(...SPHERE_INITIAL_CAMERA_TARGET.map((v, i) => v + offset[i]));
     controls.update();
   };
+
+  // Re-pans automatically on entering/leaving data collection mode, rather
+  // than only whenever the user happens to hit "Reset View" -- Canvas's
+  // own `camera` prop only sets the *initial* position, so without this
+  // the camera would just stay wherever it was as the overlay appears.
+  useEffect(() => {
+    resetView(dc.mode);
+  }, [dc.mode]);
 
   const equatorXY = useMemo(() => graticuleRing('z'), []);
   const meridianXZ = useMemo(() => graticuleRing('y'), []);
   const meridianYZ = useMemo(() => graticuleRing('x'), []);
+  const axisTicks = useMemo(() => axisSurfaceTicks(), []);
 
   function CameraLight() {
     const lightRef = useRef();
@@ -783,13 +836,21 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
           <Line points={equatorXY} color="gray" lineWidth={controlBools.showSphere ? 1 : 0} dashed dashSize={0.06} gapSize={0.05} />
           <Line points={meridianXZ} color="gray" lineWidth={controlBools.showSphere ? 0 : 0} dashed dashSize={0.06} gapSize={0.05} />
           <Line points={meridianYZ} color="gray" lineWidth={controlBools.showSphere ? 0 : 0} dashed dashSize={0.06} gapSize={0.05} />
+          {controlBools.showSphere && axisTicks.map((armPoints, i) => (
+            <Line key={i} points={armPoints} color="black" lineWidth={2} />
+          ))}
 
+          {/*
           <ThickArrowHelper dir={blochToThree(1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
           <ThickArrowHelper dir={blochToThree(0, 1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
           <ThickArrowHelper dir={blochToThree(0, 0, 1)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
           <ThickArrowHelper dir={blochToThree(-1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
           <ThickArrowHelper dir={blochToThree(0, -1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
           <ThickArrowHelper dir={blochToThree(0, 0, -1)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
+          */}
+          <Line points={[[-1,0,0],[1,0,0]]} color="black" lineWidth={2} />
+          <Line points={[[0,-1,0],[0,1,0]]} color="black" lineWidth={2} />
+          <Line points={[[0,0,-1],[0,0,1]]} color="black" lineWidth={2} />
 
           <KetLabel sign="+" axis="x" position={blochToThree(SPHERE_AXIS_EXTENT + 0.2, 0, 0).toArray()} />
           <KetLabel sign="-" axis="x" position={blochToThree(-(SPHERE_AXIS_EXTENT + 0.2), 0, 0).toArray()} />
@@ -881,32 +942,6 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
                   Run {dc.batchSize} Trials
                 </button>
               </div>
-
-              {/*
-              <div className="control-group" style={{ gap: '4px' }}>
-                <label style={{ margin: 0 }}>Batch trials:</label>
-                <div style={{ display: 'flex', flexDirection: 'row', gap: '6px', alignItems: 'center' }}>
-                  <input
-                    type="number" min={1} max={10000} step={1}
-                    value={dc.batchSize}
-                    onChange={(e) => {
-                      const v = parseInt(e.target.value, 10);
-                      if (!Number.isNaN(v)) dc.setBatchSize(v);
-                    }}
-                    disabled={dc.phase === 'running'}
-                    style={{ width: '70px', padding: '4px' }}
-                  />
-                  <button
-                    className="control-button"
-                    onClick={dc.onRunBatch}
-                    disabled={dc.phase === 'running'}
-                    style={{ flex: 1, margin: 0 }}
-                  >
-                    Run Batch
-                  </button>
-                </div>
-              </div>
-              */}
             </>
           )}
         </div>
