@@ -294,6 +294,57 @@ function getFieldComponentArrows(mode, field, spinState, basisRef) {
   }
 }
 
+// A "|+>_x"-style ket, drawn with ket.js onto a small canvas rather than
+// as text, so it shares the exact same bracket geometry as every other ket
+// in the app (the sphere's own pole labels, the histogram's bar labels)
+// instead of drifting from them the way a font-rendered "|+>" would. Used
+// below as the icon on each axis-eigenstate preset button.
+function KetIcon({ sign, axis, size = 24 }) {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+    canvas.style.width = `${size}px`;
+    canvas.style.height = `${size}px`;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, size, size);
+
+    const ketSize = size * 0.55;
+    const kWidth = ketWidth(ketSize);
+    const subPx = ketSize * 0.55;
+    ctx.font = `bold ${subPx}px sans-serif`;
+    const subWidth = ctx.measureText(axis).width;
+    const gap = -ketSize * 0.06;
+    const totalWidth = kWidth + gap + subWidth;
+    const startX = (size - totalWidth) / 2;
+    const midY = size / 2;
+
+    ctx.fillStyle = '#333333';
+    drawKet(ctx, startX, midY, ketSize, sign);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(axis, startX + kWidth + gap, midY + ketSize * 0.28);
+  }, [sign, axis, size]);
+
+  return <canvas ref={canvasRef} style={{ display: 'block' }} />;
+}
+
+// The six eigenstates of X, Y, and Z -- theta/phi for each, matching the
+// same unitVectorFromAngles convention used everywhere else (theta from
+// +z, phi from +x toward +y).
+const AXIS_EIGENSTATES = [
+  { sign: '+', axis: 'x', theta: Math.PI / 2, phi: 0 },
+  { sign: '-', axis: 'x', theta: Math.PI / 2, phi: Math.PI },
+  { sign: '+', axis: 'y', theta: Math.PI / 2, phi: Math.PI / 2 },
+  { sign: '-', axis: 'y', theta: Math.PI / 2, phi: -Math.PI / 2 },
+  { sign: '+', axis: 'z', theta: 0, phi: 0 },
+  { sign: '-', axis: 'z', theta: Math.PI, phi: 0 },
+];
+
 // A compact single-row substitute for a full row of X/Y/Z buttons plus its
 // own label line above them -- adapted from the Stern-Gerlach sim's
 // AxisStepper (same up/down-stepper-through-a-fixed-list idea, same CSS
@@ -1293,6 +1344,19 @@ export default function App() {
               <hr className="sidebar-divider" />
 
               <h3>Spin State at t = 0</h3>
+              <div style={{ display: 'flex', flexDirection: 'row', gap: '4px', marginBottom: '8px' }}>
+                {AXIS_EIGENSTATES.map(({ sign, axis, theta, phi }) => (
+                  <button
+                    key={`${sign}${axis}`}
+                    className="control-button"
+                    onClick={() => updateSpinState({ theta, phi })}
+                    aria-label={`Set initial state to |${sign}${axis}⟩`}
+                    style={{ flex: 1, aspectRatio: '1 / 1', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, margin: 0 }}
+                  >
+                    <KetIcon sign={sign} axis={axis} />
+                  </button>
+                ))}
+              </div>
               <div className="control-group">
                 <SliderPlusTextboxControl
                   label="θ (degrees)"
