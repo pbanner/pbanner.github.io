@@ -1344,7 +1344,7 @@ export default function App() {
               <hr className="sidebar-divider" />
 
               <h3>Spin State at t = 0</h3>
-              <div style={{ display: 'flex', flexDirection: 'row', gap: '4px', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', flexDirection: 'row', gap: '4px', marginBottom: '12px' }}>
                 {AXIS_EIGENSTATES.map(({ sign, axis, theta, phi }) => (
                   <button
                     key={`${sign}${axis}`}
