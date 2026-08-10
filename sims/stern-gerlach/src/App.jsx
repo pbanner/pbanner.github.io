@@ -183,7 +183,7 @@ function SetUpExperimentPanel({ experiment, setExperiment, addSternGerlach, expM
           disabled={controlsLocked}
         />
         <AddComponentButton
-          icon={magImage}
+          image={magImage}
           shape="square"
           ariaLabel="Add magnetic field"
           onMouseEnter={() => setHoveredAddButton('field')}
