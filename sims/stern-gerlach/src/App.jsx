@@ -138,11 +138,6 @@ function SetUpExperimentPanel({ experiment, setExperiment, addSternGerlach, expM
       <div className="setup-experiment-width-floor" style={{ marginBottom: '-6px' }} aria-hidden="true" />
       <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Set Up Experiment</h3>
 
-      <label style={{ margin: '0 0 4px 0' }}>
-        <input type="checkbox" disabled={controlsLocked} checked={displayBools.previewPaths} onChange={(e) => setDisplayBools({ ...displayBools, previewPaths: e.target.checked })} />
-        Preview possible paths
-      </label>
-
       <div className="add-component-row">
         <span className="add-component-row-label">Add:</span>
         <AddComponentButton
@@ -202,12 +197,19 @@ function SetUpExperimentPanel({ experiment, setExperiment, addSternGerlach, expM
         Remove Components
       </button>
 
-      <label style={{ margin: '8px 0 0px 0' }}>
-        <input type="checkbox" disabled={controlsLocked} checked={displayBools.gridOn} onChange={(e) => setDisplayBools({ ...displayBools, gridOn: e.target.checked })} />
-        Show grid
-      </label>
-
       <SetMeasurementBasesPanel experiment={experiment} setExperiment={setExperiment} controlsLocked={controlsLocked} expMode={expMode} resetDataCollection={resetDataCollection} />
+
+      <h3 style={{ margin: '8px 0 8px 0', fontWeight: 'bold' }}>Display Options</h3>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '0 0 0 2px' }}>
+        <label>
+          <input type="checkbox" disabled={controlsLocked} checked={displayBools.previewPaths} onChange={(e) => setDisplayBools({ ...displayBools, previewPaths: e.target.checked })} />
+          Preview possible paths
+        </label>
+        <label>
+          <input type="checkbox" disabled={controlsLocked} checked={displayBools.gridOn} onChange={(e) => setDisplayBools({ ...displayBools, gridOn: e.target.checked })} />
+          Show grid
+        </label>
+      </div>
     </>
   );
 }
