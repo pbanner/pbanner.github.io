@@ -823,11 +823,21 @@ function SpinTrace({ simTimeRef, getDirection, speedFactor, resetKey, color = 0x
 // The sidebar's numeric time readout is real React state, but throttled to
 // ~10 updates/sec rather than pushed every frame -- a human-readable
 // number doesn't need 60 updates/sec the way the arrows' geometry does.
-function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTimeRef, speedFactor, componentsMode, controlBools, frameAxis, frameOmega, collapsedDirection, trialToken, basisRef }) {
+function SimulationScene({ spinState, magneticField, paused, onTimeUpdate, simTimeRef, speedFactor, componentsMode, controlBools, frameAxis, frameOmega, collapsedDirection, trialToken, basisRef, tabVisible }) {
   const lastReportedSec = useRef(-1);
+  const wasVisibleRef = useRef(tabVisible);
 
   useFrame((state, delta) => {
-    if (!paused) simTimeRef.current += speedFactor * delta;
+    // Three's clock ticks in real wall-clock time regardless of whether
+    // the tab was actually rendering, so the first frame after regaining
+    // visibility reports a delta spanning the whole backgrounded gap.
+    // Discard just that one frame's delta (rather than fast-forwarding
+    // simTimeRef through however long the tab was hidden) and resume
+    // normally from the next frame on.
+    const justBecameVisible = tabVisible && !wasVisibleRef.current;
+    wasVisibleRef.current = tabVisible;
+
+    if (!paused && tabVisible && !justBecameVisible) simTimeRef.current += speedFactor * delta;
     const t = simTimeRef.current;
     const rounded = Math.floor(t * 10) / 10;
     if (rounded !== lastReportedSec.current) {
@@ -935,7 +945,7 @@ function RotatingFrameBackdrop({ simTimeRef, axis, omega, active, children }) {
   return <group ref={groupRef}>{children}</group>;
 }
 
-function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, setTimeSec, simTimeRef, speedFactor, setSpeedFactor, componentsMode, controlBools, rotatingFrame, dc, basisRef, graticuleLatCount, graticuleLonCount }) {
+function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, setTimeSec, simTimeRef, speedFactor, setSpeedFactor, componentsMode, controlBools, rotatingFrame, dc, basisRef, graticuleLatCount, graticuleLonCount, tabVisible }) {
   const controlsRef = useRef();
   // Can't use controls.reset(), since target0/position0 get captured before
   // drei applies the `target` prop below, so reset() would snap to the wrong
@@ -1037,7 +1047,7 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
           componentsMode={componentsMode} controlBools={controlBools}
           frameAxis={frameAxisPhysics} frameOmega={frameOmega}
           collapsedDirection={dc.collapsedDirection} trialToken={dc.trialToken}
-          basisRef={basisRef}
+          basisRef={basisRef} tabVisible={tabVisible}
         />
 
         <OrbitControls ref={controlsRef} target={SPHERE_INITIAL_CAMERA_TARGET} />
@@ -1271,6 +1281,18 @@ export default function App() {
   // action rather than a mode the state keeps matching.
   const [selectedPreset, setSelectedPreset] = useState('');
 
+  // For getting tab visibility and pausing animation as appropriate --
+  // without this, simTimeRef keeps advancing (or the next useFrame delta
+  // spans the whole backgrounded gap) while the tab is hidden, so
+  // switching back shows the spin having fast-forwarded through however
+  // long the tab was away instead of picking up where it left off.
+  const [tabVisible, setTabVisible] = useState(!document.hidden);
+  useEffect(() => {
+    const onVisibilityChange = () => setTabVisible(!document.hidden);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
+
   const basisRef = useRef(null);
   if (basisRef.current === null) {
     const n0 = unitVectorFromAngles(magneticField.theta0, magneticField.phi0);
@@ -1441,6 +1463,7 @@ export default function App() {
           controlBools={controlBools} rotatingFrame={rotatingFrame}
           dc={dc} basisRef={basisRef}
           graticuleLatCount={graticuleLatCount} graticuleLonCount={graticuleLonCount}
+          tabVisible={tabVisible}
         />
       </div>
 
