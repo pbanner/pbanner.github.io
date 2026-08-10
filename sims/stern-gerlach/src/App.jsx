@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import './App.css';
 import LabPanel from './LabPanel';
 import Histogram from './Histogram';
+import { AxisStepper, SliderPlusTextboxControl } from './controls';
+import { SG_OPTION_LABELS, SG_OPTION_BASES } from './axisOptions';
 import sgImage from './assets/SG.png';
 import pcImage from './assets/PC.png';
 import bbImage from './assets/BB.png';
@@ -27,18 +29,28 @@ function StopIcon({ size = '0.9em' }) {
   );
 }
 
-const SG_OPTION_LABELS = ['X', 'Y', 'Z'];
-const SG_OPTION_BASES = [[Math.PI/2, 0], [Math.PI/2, Math.PI/2], [0, 0]];
-// The advanced θ/ϕ controls are degrees-in, degrees-out for the user -- sg.basis
-// itself always stays in radians, since that's what every physics function expects.
-const RAD_TO_DEG = 180 / Math.PI;
-const DEG_TO_RAD = Math.PI / 180;
-// Rounds for *display only* -- the underlying radians value in sg.basis is
-// never touched, so this just hides floating-point noise like
-// 59.999999999999996 in the textbox without losing any real precision.
-const roundDeg = (d) => Math.round(d * 1000) / 1000;
+// Cross-hatched square, same visual language as the on-canvas field
+// rectangles themselves (see drawFieldRect in LabPanel.jsx) -- there's no
+// PNG asset for a magnetic field the way there is for the SG/PC/BB, so
+// this is drawn instead, same reasoning as Play/StopIcon above.
+function FieldIcon({ size = '1.4em' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true" style={{ display: 'block' }}>
+      <rect x="1" y="3" width="14" height="10" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <g stroke="currentColor" strokeWidth="0.8" clipPath="inset(0)">
+        <line x1="1" y1="9" x2="7" y2="3" />
+        <line x1="1" y1="13" x2="11" y2="3" />
+        <line x1="5" y1="13" x2="15" y2="3" />
+        <line x1="9" y1="13" x2="15" y2="7" />
+      </g>
+    </svg>
+  );
+}
 
-function AxisStepper({ index, sg, setExperiment, disabled, resetDataCollection }) {
+// Thin adapter from the generic AxisStepper (controls.jsx) to "this is
+// SG[index]'s own measurement basis" -- owns exactly the setExperiment
+// wiring and resetDataCollection calls specific to that.
+function SGBasisStepper({ index, sg, setExperiment, disabled, resetDataCollection }) {
   const currentIndex = SG_OPTION_BASES.findIndex(
     ([theta, phi]) => theta === sg.basis[0] && phi === sg.basis[1]
   );
@@ -80,103 +92,15 @@ function AxisStepper({ index, sg, setExperiment, disabled, resetDataCollection }
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', padding: '6px' }}>
-      <label style={{ fontSize: '14px', fontWeight: '500', marginRight: '5px' }}>{'SG' + (index + 1)}</label>
-      {sg.advanced ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <label style={{ width: '12px' }}>θ</label>
-            <input
-              type="number"
-              min={0}
-              max={180}
-              step={1}
-              value={roundDeg(sg.basis[0] * RAD_TO_DEG)}
-              disabled={disabled}
-              onChange={(e) => {
-                const v = parseFloat(e.target.value);
-                if (!Number.isNaN(v)) setAngle('theta', v * DEG_TO_RAD);
-              }}
-              style={{ width: '70px', padding: '2px' }}
-            />
-            <span>°</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <label style={{ width: '12px' }}>ϕ</label>
-            <input
-              type="number"
-              min={0}
-              max={360}
-              step={1}
-              value={roundDeg(sg.basis[1] * RAD_TO_DEG)}
-              disabled={disabled}
-              onChange={(e) => {
-                const v = parseFloat(e.target.value);
-                if (!Number.isNaN(v)) setAngle('phi', v * DEG_TO_RAD);
-              }}
-              style={{ width: '70px', padding: '2px' }}
-            />
-            <span>°</span>
-          </div>
-        </div>
-      ) : (
-        <div className="axis-stepper">
-          <span className={`axis-stepper-value ${disabled ? 'disabled' : ''}`}>
-            {currentIndex === -1 ? '?' : SG_OPTION_LABELS[currentIndex]}
-          </span>
-          <div className="axis-stepper-arrows">
-            <button type="button" className="axis-stepper-arrow" onClick={() => step(1)} aria-label="Next axis" disabled={disabled}>▲</button>
-            <button type="button" className="axis-stepper-arrow" onClick={() => step(-1)} aria-label="Previous axis" disabled={disabled}>▼</button>
-          </div>
-        </div>
-      )}
-      {/* marginLeft: auto pins this to the row's right edge regardless of
-          whether the stepper or the (differently-sized) theta/phi textboxes
-          are showing above, rather than sitting immediately after them. */}
-      <button
-        type="button"
-        className={`control-bar-button advanced-toggle-button ${sg.advanced ? 'active' : ''}`}
-        aria-label={`Toggle advanced basis controls for SG${index + 1}`}
-        onClick={() => setAdvanced(!sg.advanced)}
-        disabled={disabled}
-        style={{ marginLeft: 'auto' }}
-      >
-        {sg.advanced ? 'Set by axis' : 'Set by angles' }
-      </button>
-    </div>
-  );
-}
-
-function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step, disabled = false }) {
-  return (
-    <div className="control-group">
-      <label style={{ margin: '-0.25em 0em' }}>{label}</label> {/*: {valueNum.toFixed(1)}*/}
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <input
-          type="range"
-          min={min}
-          max={max}
-          step={step}
-          value={valueNum}
-          onChange={(e) => onChangeNum(parseFloat(e.target.value))}
-          style={{ flex: 1 }}
-          disabled={disabled}
-        />
-        <input
-          type="number"
-          min={min}
-          max={max}
-          step={step}
-          value={valueNum}
-          onChange={(e) => {
-            const v = parseFloat(e.target.value);
-            if (!Number.isNaN(v)) onChangeNum(v);
-          }}
-          style={{ width: '70px', padding: '2px' }}
-          disabled={disabled}
-        />
-      </div>
-    </div>
+    <AxisStepper
+      label={'SG' + (index + 1)}
+      value={sg.basis}
+      advanced={sg.advanced}
+      onStep={step}
+      onSetAdvanced={setAdvanced}
+      onSetAngle={setAngle}
+      disabled={disabled}
+    />
   );
 }
 
@@ -184,25 +108,37 @@ function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step
 // reserved, so hovering never shifts layout) where hoverLabel appears --
 // shape picks between a square button (BB, and the inert fourth slot) and
 // one just wide enough for its own icon (SG, PC -- both wider than tall).
-function AddComponentButton({ image, shape, ariaLabel, hoverLabel, active = false, disabled = false, onClick, onMouseDown }) {
+function AddComponentButton({ image, icon, shape, ariaLabel, active = false, disabled = false, onClick, onMouseDown, onMouseEnter, onMouseLeave }) {
   return (
-    <div className="add-component-item">
-      <button
-        type="button"
-        className={`control-bar-button icon-only-button icon-only-button-${shape} ${active ? 'active' : ''}`}
-        aria-label={ariaLabel}
-        onClick={onClick}
-        onMouseDown={onMouseDown}
-        disabled={disabled}
-      >
-        <img src={image} alt="" className="icon-only-button-image" draggable="false" />
-      </button>
-      <span className="add-component-hover-label">{hoverLabel}</span>
-    </div>
+    <button
+      type="button"
+      className={`control-bar-button icon-only-button icon-only-button-${shape} ${active ? 'active' : ''}`}
+      aria-label={ariaLabel}
+      onClick={onClick}
+      onMouseDown={onMouseDown}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      disabled={disabled}
+    >
+      {icon ?? <img src={image} alt="" className="icon-only-button-image" draggable="false" />}
+    </button>
   );
 }
 
+// One heading per Add-row button, keyed the same way hoveredAddButton is --
+// shown in place of the default "Add Components" text while that button's
+// hovered, so the row itself never has to reserve horizontal space for
+// per-button labels (the fourth button is what made that stop fitting).
+const ADD_BUTTON_LABELS = {
+  sg: 'Stern-Gerlach Analyzer',
+  pc: 'Particle Counter',
+  bb: 'Beam Block',
+  field: 'Magnetic Field',
+};
+
 function SetUpExperimentPanel({ experiment, setExperiment, addSternGerlach, expMode, setExpMode, controlsLocked, displayBools, setDisplayBools, resetDataCollection }) {
+  const [hoveredAddButton, setHoveredAddButton] = useState(null);
+
   return (
         <>
       {/* Zero-height, purely a width floor -- see .setup-experiment-group
@@ -212,20 +148,16 @@ function SetUpExperimentPanel({ experiment, setExperiment, addSternGerlach, expM
           gap, which would otherwise open up a sliver of empty space right
           below this, being the first child. */}
       <div className="setup-experiment-width-floor" style={{ marginBottom: '-6px' }} aria-hidden="true" />
-      <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Set Up Experiment</h3>
+      <h3 style={{ margin: '0 0 10px 0', fontWeight: 'bold' }}>Set Up Experiment</h3>
 
-      <label style={{ margin: '0 0 4px 0' }}>
-        <input type="checkbox" disabled={controlsLocked} checked={displayBools.previewPaths} onChange={(e) => setDisplayBools({ ...displayBools, previewPaths: e.target.checked })} />
-        Preview possible paths
-      </label>
-
+      <p className="add-component-heading">{'Add: ' + (ADD_BUTTON_LABELS[hoveredAddButton] ?? '')}</p>
       <div className="add-component-row">
-        <span className="add-component-row-label">Add:</span>
         <AddComponentButton
           image={sgImage}
           shape="wide"
           ariaLabel="Add Stern-Gerlach apparatus"
-          hoverLabel="Stern-Gerlach"
+          onMouseEnter={() => setHoveredAddButton('sg')}
+          onMouseLeave={() => setHoveredAddButton(null)}
           onClick={addSternGerlach}
           disabled={controlsLocked}
         />
@@ -233,7 +165,8 @@ function SetUpExperimentPanel({ experiment, setExperiment, addSternGerlach, expM
           image={pcImage}
           shape="wide"
           ariaLabel="Add particle counter"
-          hoverLabel="Particle Counter"
+          onMouseEnter={() => setHoveredAddButton('pc')}
+          onMouseLeave={() => setHoveredAddButton(null)}
           active={expMode.build === 1}
           onMouseDown={() => setExpMode({ ...expMode, build: expMode.build === 1 ? 0 : 1 })}
           disabled={controlsLocked}
@@ -242,18 +175,30 @@ function SetUpExperimentPanel({ experiment, setExperiment, addSternGerlach, expM
           image={bbImage}
           shape="square"
           ariaLabel="Add beam block"
-          hoverLabel="Beam Block"
+          onMouseEnter={() => setHoveredAddButton('bb')}
+          onMouseLeave={() => setHoveredAddButton(null)}
           active={expMode.build === 2}
           onMouseDown={() => setExpMode({ ...expMode, build: expMode.build === 2 ? 0 : 2 })}
           disabled={controlsLocked}
         />
+        <AddComponentButton
+          icon={<FieldIcon size="20px" />}
+          shape="square"
+          ariaLabel="Add magnetic field"
+          onMouseEnter={() => setHoveredAddButton('field')}
+          onMouseLeave={() => setHoveredAddButton(null)}
+          active={expMode.build === 3}
+          onMouseDown={() => setExpMode({ ...expMode, build: expMode.build === 3 ? 0 : 3 })}
+          disabled={controlsLocked}
+        />
         {/* Inert placeholder for a component we haven't built yet -- reuses
-            the beam block icon for now purely as a stand-in. 
+            the beam block icon for now purely as a stand-in.
         <AddComponentButton
           image={bbImage}
           shape="square"
           ariaLabel="Add screen to end of setup"
-          hoverLabel="Screen"
+          onMouseEnter={() => setHoveredAddButton('screen')}
+          onMouseLeave={() => setHoveredAddButton(null)}
           disabled={controlsLocked}
         />
         */}
@@ -269,12 +214,19 @@ function SetUpExperimentPanel({ experiment, setExperiment, addSternGerlach, expM
         Remove Components
       </button>
 
-      <label style={{ margin: '8px 0 0px 0' }}>
-        <input type="checkbox" disabled={controlsLocked} checked={displayBools.gridOn} onChange={(e) => setDisplayBools({ ...displayBools, gridOn: e.target.checked })} />
-        Show grid
-      </label>
-
       <SetMeasurementBasesPanel experiment={experiment} setExperiment={setExperiment} controlsLocked={controlsLocked} expMode={expMode} resetDataCollection={resetDataCollection} />
+
+      <h3 style={{ margin: '8px 0 8px 0', fontWeight: 'bold' }}>Display Options</h3>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '0 0 0 2px' }}>
+        <label>
+          <input type="checkbox" disabled={controlsLocked} checked={displayBools.previewPaths} onChange={(e) => setDisplayBools({ ...displayBools, previewPaths: e.target.checked })} />
+          Preview possible paths
+        </label>
+        <label>
+          <input type="checkbox" disabled={controlsLocked} checked={displayBools.gridOn} onChange={(e) => setDisplayBools({ ...displayBools, gridOn: e.target.checked })} />
+          Show grid
+        </label>
+      </div>
     </>
   );
 }
@@ -328,10 +280,10 @@ function recheckStartError(error, experiment) {
 function SetMeasurementBasesPanel({ experiment, setExperiment, controlsLocked, expMode, resetDataCollection, showHeader = true }) {
   return (
     <>
-      {showHeader && <p style={{ margin: '10px 0 0px 0', fontWeight: 'bold', fontSize: '14px', color: '#333' }}>Set Measurement Bases</p>}
+      {showHeader && <p style={{ margin: '10px 0 0px 0', fontWeight: 'bold', fontSize: '14px', color: '#333' }}>Set Analyzer Orientations</p>}
       {/* <p style={{ width: '250px' }}>Click Set by Angles/Set by Axis to set an SG's basis by angles (θ, ϕ).</p> */}
       {experiment.map((sg, i) => (
-        <AxisStepper key={i} index={i} sg={sg} setExperiment={setExperiment} disabled={controlsLocked || (expMode.build !== 0)} resetDataCollection={resetDataCollection} />
+        <SGBasisStepper key={i} index={i} sg={sg} setExperiment={setExperiment} disabled={controlsLocked || (expMode.build !== 0)} resetDataCollection={resetDataCollection} />
       ))}
     </>
   );
@@ -371,8 +323,14 @@ export default function App() {
   // up and down may be null, `bb`, or { type: 'pc', data: [integer], colorId: string }
   // advanced toggles that SG's basis control between the X/Y/Z stepper and
   // raw theta/phi textboxes -- a display preference, not a physics value
+  // field.up/field.down are independent of up/down themselves -- a branch
+  // can have a static magnetic field *and* still end at a PC or BB -- each
+  // is null or { axis: [theta, phi], magnitude, advanced }, magnitude
+  // measured in complete precession cycles (0 to 2; see physics.js's
+  // precessState for why 2, not 1, is the point a field becomes a total
+  // no-op again)
   // Start with one apparatus already in place
-  const [experiment, setExperiment] = useState([{ basis: [0, 0], up: 'bb', down: 'bb', advanced: false }]);
+  const [experiment, setExperiment] = useState([{ basis: [0, 0], up: { type: 'pc', data: 0, colorId: 0 }, down: { type: 'pc', data: 0, colorId: 1 }, advanced: false, field: { up: null, down: null } }]);
 
   // For getting tab visibility and pausing animation as appropriate
   // Tracks whether this tab is the active one, so both particle production
@@ -430,7 +388,7 @@ export default function App() {
   const addSternGerlach = () => {
     setExperiment((prev) => [
       ...prev,
-      { basis: [0, 0], up: null, down: null, advanced: false },
+      { basis: [0, 0], up: null, down: null, advanced: false, field: { up: null, down: null } },
     ]);
     resetDataCollection();
   };
@@ -527,6 +485,7 @@ export default function App() {
           tabVisible={tabVisible}
           startError={liveStartError}
           hoveredDetector={histDisplayBools.hoveredDetector}
+          controlsLocked={controlsLocked}
         />
       </div>
 
@@ -556,17 +515,19 @@ export default function App() {
                 <label><input type="radio" name="DCmode" value="stream" checked={expMode.dc === 'stream'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} disabled={expMode.build !== 0} />Continuous</label>
               </div>
             </div>
-            <div className="control-group" style={{ marginTop: '0.5em' }}>
-              <SliderPlusTextboxControl
-                label="Particles per Second"
-                valueNum={expMode.rate}
-                onChangeNum={(val) => {setExpMode({ ...expMode, rate: val });}}
-                min={0.0}
-                max={100}
-                step={1.0}
-                disabled={(expMode.build !== 0) || (expMode.dc === 'single')}
-              />
-            </div>
+            {expMode.dc === 'stream' &&
+              <div className="control-group" style={{ marginTop: '0.5em' }}>
+                <SliderPlusTextboxControl
+                  label="Particles per Second"
+                  valueNum={expMode.rate}
+                  onChangeNum={(val) => {setExpMode({ ...expMode, rate: val });}}
+                  min={0.0}
+                  max={100}
+                  step={1.0}
+                  disabled={(expMode.build !== 0) || (expMode.dc === 'single')}
+                />
+              </div>
+            }
             <button className="control-bar-button" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px'}} onClick={handleStartPause} disabled={expMode.build !== 0}>
               {expMode.dc === 'single'
                 ? (<><PlayIcon /> Make One Particle</>)

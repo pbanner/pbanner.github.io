@@ -16,6 +16,52 @@
   overflow: hidden;
 }
 
+/* On-canvas overlay control panel -- same look as the Bloch sphere sim's
+   Time Controls overlay (border + radius + padding), plus a background
+   since this one floats over a 2D scene that's mostly white/gray already,
+   rather than over a 3D view dark enough for translucent text alone to
+   read against it. */
+.overlay-controls {
+  border: 2px solid #333;
+  border-radius: 12px;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+.field-overlay-controls {
+  width: 170px;
+}
+
+.field-overlay-controls h4 {
+  margin: 0;
+  font-size: 13px;
+  color: #333;
+}
+
+.field-overlay-remove {
+  border: none;
+  background: transparent;
+  color: #972323;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+
+.field-overlay-remove:hover {
+  color: #e74c3c;
+}
+
+.field-overlay-remove:disabled {
+  color: #bbb;
+  cursor: not-allowed;
+}
+
 /* Bottom control bar */
 .control-bar {
   height: 250px;
@@ -151,24 +197,23 @@
   height: 0;
 }
 
-/* "Add:" row in Set Up Experiment: a label plus a row of icon-only
-   buttons, each with a hover-revealed name underneath. */
-.add-component-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin: 4px 0 20px 0;
-}
-
-.add-component-row-label {
+/* "Add Components" heading above the row of icon-only buttons in Set Up
+   Experiment -- swaps to name whichever button is currently hovered (see
+   ADD_BUTTON_LABELS in App.jsx). A single line, always -- so the row below
+   it never jiggles vertically as the heading text's length changes. */
+.add-component-heading {
   font-size: 14px;
   font-weight: 600;
   color: #333;
-  padding-top: 10px; /* centers against the 36px-tall buttons themselves, ignoring the hover-label space reserved below them */
+  margin: 4px 0 6px 0;
+  white-space: nowrap;
 }
 
-.add-component-item {
-  position: relative;
+.add-component-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px 0;
 }
 
 .icon-only-button {
@@ -180,12 +225,13 @@
 }
 
 .icon-only-button-wide {
-  width: auto;
+  flex: 1;
   min-width: 52px; /* comfortably fits the SG/PC icons, which are wider than they are tall */
 }
 
 .icon-only-button-square {
-  width: 36px;
+  flex: 1;
+  min-width: 36px;
   padding: 4px;
 }
 
@@ -195,27 +241,6 @@
   object-fit: contain;
   -webkit-user-drag: none;
   user-select: none;
-}
-
-/* Always present (so hovering never shifts layout), just invisible until
-   its button is hovered. */
-.add-component-hover-label {
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-top: 3px;
-  font-size: 12px;
-  line-height: 1.2;
-  color: #333;
-  text-align: center;
-  white-space: nowrap;
-  pointer-events: none;
-  visibility: hidden;
-}
-
-.add-component-item:hover .add-component-hover-label {
-  visibility: visible;
 }
 
 .compact-tab-pane.compact-tab-hidden {
@@ -277,6 +302,13 @@
   border: 1px solid #ddd;
   border-radius: 4px;
   overflow: hidden;
+  /* Per spec, overflow != visible zeroes out a flex item's *automatic*
+     minimum size -- without this, a cramped flex row (like the field
+     overlay's, which is much narrower than the sidebar's own AxisStepper
+     rows) squeezes this all the way to 0 width to make room for its
+     siblings instead of wrapping or shrinking them, silently clipping the
+     axis value and arrows to nothing. */
+  flex-shrink: 0;
 }
 
 .axis-stepper-value {
