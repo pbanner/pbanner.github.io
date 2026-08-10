@@ -2,7 +2,7 @@ import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHand
 import { upEigenstate, downEigenstate, applyT, applyField, sampleOvenState, cAbs2, theoreticalProbabilities } from './physics';
 import { PC_COLORS } from './colors';
 import { arrowWidth, drawArrow } from './canvasArrow';
-import { AxisStepper, SliderPlusTextboxControl } from './controls';
+import { AxisStepper } from './controls';
 import { SG_OPTION_LABELS, SG_OPTION_BASES } from './axisOptions';
 import sgImage from './assets/SG.png';
 import pcImage from './assets/PC.png';
@@ -56,7 +56,7 @@ const BB_WIDTH = 9;
 // z-order (drawn under the paths/PC/BB/particles -- see drawScene) is
 // what keeps it from visually competing with anything drawn on top of it.
 const FIELD_RECT_HEIGHT = 70;
-const FIELD_RECT_MARGIN = 14;  // gap from the SG's own edge and from the next SG's
+const FIELD_RECT_MARGIN = 0;  // gap from the SG's own edge and from the next SG's
 const FIELD_HATCH_SPACING = 10;
 const FIELD_PLACED_COLOR = '#5b6b7a';
 
@@ -267,7 +267,7 @@ function getSGCenter(sgIndex, axis) {
 function getFieldRect(sgIndex, arm, axis) {
   const x0 = getSGX0(sgIndex) + SG_WIDTH + FIELD_RECT_MARGIN;
   const x1 = getSGX0(sgIndex) + SG_SPACING - FIELD_RECT_MARGIN;
-  const outputY = axis - SG_HEIGHT / 2 + (arm === 'up' ? SG_OUTPUT_UP : SG_OUTPUT_DOWN);
+  const outputY = axis;
   const y = arm === 'up' ? outputY - FIELD_RECT_HEIGHT : outputY;
   return { x: x0, y, width: Math.max(x1 - x0, 0), height: FIELD_RECT_HEIGHT };
 }
@@ -665,15 +665,22 @@ function drawTheoryBar(ctx, pc, sgIndex, arm, prob, drawMode) {
 }
 
 const FIELD_OVERLAY_GAP = 8; // px between a field rectangle's outer edge and its control panel
+// Sideways nudge (px, toward the oven) applied to a field's overlay panel
+// when its arm already has a PC or BB on it -- keeps the panel from
+// sitting on top of that component's own site. Tune freely.
+const FIELD_OVERLAY_PC_BB_SHIFT = 80;
 
 // Where a field's overlay panel anchors, in the container's own CSS-pixel
 // coordinates -- same origin getFieldRect already draws in. The panel
 // itself is positioned with translate(-50%, ...): -100% (up arm, so it
 // grows upward off this point) or 0% (down arm, grows downward), which is
 // why only one anchor point -- not a full box -- is needed here.
-function getFieldOverlayAnchor(sgIndex, arm, axis) {
+// hasComponent is whether this arm already has a PC or BB placed on it --
+// when it does, the panel shifts left by FIELD_OVERLAY_PC_BB_SHIFT so it
+// doesn't sit on top of that component.
+function getFieldOverlayAnchor(sgIndex, arm, axis, hasComponent) {
   const rect = getFieldRect(sgIndex, arm, axis);
-  const x = rect.x + rect.width / 2;
+  const x = rect.x + rect.width / 2 - (hasComponent ? FIELD_OVERLAY_PC_BB_SHIFT : 0);
   const y = arm === 'up' ? rect.y - FIELD_OVERLAY_GAP : rect.y + rect.height + FIELD_OVERLAY_GAP;
   return { x, y, growUp: arm === 'up' };
 }
@@ -704,12 +711,6 @@ function FieldOverlayPanel({ sgIndex, arm, field, setExperiment, resetDataCollec
     updateField({ axis: SG_OPTION_BASES[nextIndex] });
     resetDataCollection();
   };
-  const setAdvanced = (advanced) => updateField({ advanced });
-  const setAngle = (which, value) => {
-    const [theta, phi] = field.axis;
-    updateField({ axis: which === 'theta' ? [value, phi] : [theta, value] });
-    resetDataCollection();
-  };
   const setMagnitude = (magnitude) => {
     updateField({ magnitude });
     resetDataCollection();
@@ -731,30 +732,21 @@ function FieldOverlayPanel({ sgIndex, arm, field, setExperiment, resetDataCollec
         left: anchor.x,
         top: anchor.y,
         transform: anchor.growUp ? 'translate(-50%, -100%)' : 'translate(-50%, 0%)',
+        textAlign: 'center'
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <h4 style={{ margin: 0 }}>{`SG${sgIndex + 1} ${arm === 'up' ? 'upper' : 'lower'} field`}</h4>
-        <button
-          type="button"
-          className="field-overlay-remove"
-          aria-label={`Remove SG${sgIndex + 1} ${arm} field`}
-          onClick={removeField}
-          disabled={disabled}
-        >
-          ×
-        </button>
-      </div>
-      <AxisStepper label="Axis" value={field.axis} advanced={field.advanced} disabled={disabled}
-        onStep={step} onSetAdvanced={setAdvanced} onSetAngle={setAngle} />
-      <div title="0 = off, 1 = one complete precession cycle, 2 = maximum">
-        <SliderPlusTextboxControl
-          label={`Magnitude: ${field.magnitude.toFixed(2)} cycles`}
-          valueNum={field.magnitude}
-          onChangeNum={setMagnitude}
+      <h4 style={{ margin: 0, fontSize: '0.9em' }}>{`SG${sgIndex + 1} ${arm === 'up' ? 'Upper' : 'Lower'} Field`}</h4>
+      <AxisStepper label="Direction:" value={field.axis} disabled={disabled} showAdvancedToggle={false} onStep={step} />
+      <div className="control-bar-group" style={{ border: '0px', padding: '6px 6px 10px 6px', marginTop: '-6px' }} title="0 = off, 1 = one complete precession cycle, 2 = maximum">
+        <label style={{ fontSize: '14px', fontWeight: '500', marginBottom: '4px' }}>{`Magnitude: ${field.magnitude.toFixed(2)}`}</label>
+        <input
+          type="range"
           min={0}
           max={2}
           step={0.05}
+          value={field.magnitude}
+          onChange={(e) => setMagnitude(parseFloat(e.target.value))}
+          style={{ width: '130px' }}
           disabled={disabled}
         />
       </div>
@@ -1415,7 +1407,7 @@ const LabPanel = forwardRef(function LabPanel(
         setExperiment={setExperiment}
         resetDataCollection={resetDataCollection}
         disabled={controlsLocked || expMode.build !== 0}
-        anchor={getFieldOverlayAnchor(sgIndex, arm, axis)}
+        anchor={getFieldOverlayAnchor(sgIndex, arm, axis, sg[arm] !== null)}
       />
     )];
   }));

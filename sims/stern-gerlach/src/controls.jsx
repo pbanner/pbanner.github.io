@@ -13,7 +13,7 @@ import { SG_OPTION_LABELS, SG_OPTION_BASES, RAD_TO_DEG, DEG_TO_RAD, roundDeg } f
 // callers wire that up themselves via onStep/onSetAdvanced/onSetAngle. See
 // SGBasisStepper in App.jsx and FieldOverlayPanel in LabPanel.jsx for the
 // two callers.
-export function AxisStepper({ label, value, advanced, onStep, onSetAdvanced, onSetAngle, disabled }) {
+export function AxisStepper({ label, value, advanced, onStep, onSetAdvanced, onSetAngle, disabled, showAdvancedToggle = true }) {
   const currentIndex = SG_OPTION_BASES.findIndex(
     ([theta, phi]) => theta === value[0] && phi === value[1]
   );
@@ -21,7 +21,7 @@ export function AxisStepper({ label, value, advanced, onStep, onSetAdvanced, onS
   return (
     <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', padding: '6px' }}>
       <label style={{ fontSize: '14px', fontWeight: '500', marginRight: '5px' }}>{label}</label>
-      {advanced ? (
+      {showAdvancedToggle && advanced ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <label style={{ width: '12px' }}>θ</label>
@@ -72,16 +72,18 @@ export function AxisStepper({ label, value, advanced, onStep, onSetAdvanced, onS
       {/* marginLeft: auto pins this to the row's right edge regardless of
           whether the stepper or the (differently-sized) theta/phi textboxes
           are showing above, rather than sitting immediately after them. */}
-      <button
-        type="button"
-        className={`control-bar-button advanced-toggle-button ${advanced ? 'active' : ''}`}
-        aria-label={`Toggle advanced controls for ${label}`}
-        onClick={() => onSetAdvanced(!advanced)}
-        disabled={disabled}
-        style={{ marginLeft: 'auto' }}
-      >
-        {advanced ? 'Set by axis' : 'Set by angles'}
-      </button>
+      {showAdvancedToggle && (
+        <button
+          type="button"
+          className={`control-bar-button advanced-toggle-button ${advanced ? 'active' : ''}`}
+          aria-label={`Toggle advanced controls for ${label}`}
+          onClick={() => onSetAdvanced(!advanced)}
+          disabled={disabled}
+          style={{ marginLeft: 'auto' }}
+        >
+          {advanced ? 'Set by axis' : 'Set by angles'}
+        </button>
+      )}
     </div>
   );
 }
