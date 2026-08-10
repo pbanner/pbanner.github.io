@@ -108,25 +108,37 @@ function SGBasisStepper({ index, sg, setExperiment, disabled, resetDataCollectio
 // reserved, so hovering never shifts layout) where hoverLabel appears --
 // shape picks between a square button (BB, and the inert fourth slot) and
 // one just wide enough for its own icon (SG, PC -- both wider than tall).
-function AddComponentButton({ image, icon, shape, ariaLabel, hoverLabel, active = false, disabled = false, onClick, onMouseDown }) {
+function AddComponentButton({ image, icon, shape, ariaLabel, active = false, disabled = false, onClick, onMouseDown, onMouseEnter, onMouseLeave }) {
   return (
-    <div className="add-component-item">
-      <button
-        type="button"
-        className={`control-bar-button icon-only-button icon-only-button-${shape} ${active ? 'active' : ''}`}
-        aria-label={ariaLabel}
-        onClick={onClick}
-        onMouseDown={onMouseDown}
-        disabled={disabled}
-      >
-        {icon ?? <img src={image} alt="" className="icon-only-button-image" draggable="false" />}
-      </button>
-      <span className="add-component-hover-label">{hoverLabel}</span>
-    </div>
+    <button
+      type="button"
+      className={`control-bar-button icon-only-button icon-only-button-${shape} ${active ? 'active' : ''}`}
+      aria-label={ariaLabel}
+      onClick={onClick}
+      onMouseDown={onMouseDown}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      disabled={disabled}
+    >
+      {icon ?? <img src={image} alt="" className="icon-only-button-image" draggable="false" />}
+    </button>
   );
 }
 
+// One heading per Add-row button, keyed the same way hoveredAddButton is --
+// shown in place of the default "Add Components" text while that button's
+// hovered, so the row itself never has to reserve horizontal space for
+// per-button labels (the fourth button is what made that stop fitting).
+const ADD_BUTTON_LABELS = {
+  sg: 'Stern-Gerlach Analyzer',
+  pc: 'Particle Counter',
+  bb: 'Beam Block',
+  field: 'Magnetic Field',
+};
+
 function SetUpExperimentPanel({ experiment, setExperiment, addSternGerlach, expMode, setExpMode, controlsLocked, displayBools, setDisplayBools, resetDataCollection }) {
+  const [hoveredAddButton, setHoveredAddButton] = useState(null);
+
   return (
         <>
       {/* Zero-height, purely a width floor -- see .setup-experiment-group
@@ -136,15 +148,16 @@ function SetUpExperimentPanel({ experiment, setExperiment, addSternGerlach, expM
           gap, which would otherwise open up a sliver of empty space right
           below this, being the first child. */}
       <div className="setup-experiment-width-floor" style={{ marginBottom: '-6px' }} aria-hidden="true" />
-      <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Set Up Experiment</h3>
+      <h3 style={{ margin: '0 0 10px 0', fontWeight: 'bold' }}>Set Up Experiment</h3>
 
+      <p className="add-component-heading">{'Add: ' + (ADD_BUTTON_LABELS[hoveredAddButton] ?? '')}</p>
       <div className="add-component-row">
-        <span className="add-component-row-label">Add:</span>
         <AddComponentButton
           image={sgImage}
           shape="wide"
           ariaLabel="Add Stern-Gerlach apparatus"
-          hoverLabel="Stern-Gerlach"
+          onMouseEnter={() => setHoveredAddButton('sg')}
+          onMouseLeave={() => setHoveredAddButton(null)}
           onClick={addSternGerlach}
           disabled={controlsLocked}
         />
@@ -152,7 +165,8 @@ function SetUpExperimentPanel({ experiment, setExperiment, addSternGerlach, expM
           image={pcImage}
           shape="wide"
           ariaLabel="Add particle counter"
-          hoverLabel="Particle Counter"
+          onMouseEnter={() => setHoveredAddButton('pc')}
+          onMouseLeave={() => setHoveredAddButton(null)}
           active={expMode.build === 1}
           onMouseDown={() => setExpMode({ ...expMode, build: expMode.build === 1 ? 0 : 1 })}
           disabled={controlsLocked}
@@ -161,7 +175,8 @@ function SetUpExperimentPanel({ experiment, setExperiment, addSternGerlach, expM
           image={bbImage}
           shape="square"
           ariaLabel="Add beam block"
-          hoverLabel="Beam Block"
+          onMouseEnter={() => setHoveredAddButton('bb')}
+          onMouseLeave={() => setHoveredAddButton(null)}
           active={expMode.build === 2}
           onMouseDown={() => setExpMode({ ...expMode, build: expMode.build === 2 ? 0 : 2 })}
           disabled={controlsLocked}
@@ -170,7 +185,8 @@ function SetUpExperimentPanel({ experiment, setExperiment, addSternGerlach, expM
           icon={<FieldIcon size="20px" />}
           shape="square"
           ariaLabel="Add magnetic field"
-          hoverLabel="Magnetic Field"
+          onMouseEnter={() => setHoveredAddButton('field')}
+          onMouseLeave={() => setHoveredAddButton(null)}
           active={expMode.build === 3}
           onMouseDown={() => setExpMode({ ...expMode, build: expMode.build === 3 ? 0 : 3 })}
           disabled={controlsLocked}
@@ -181,7 +197,8 @@ function SetUpExperimentPanel({ experiment, setExperiment, addSternGerlach, expM
           image={bbImage}
           shape="square"
           ariaLabel="Add screen to end of setup"
-          hoverLabel="Screen"
+          onMouseEnter={() => setHoveredAddButton('screen')}
+          onMouseLeave={() => setHoveredAddButton(null)}
           disabled={controlsLocked}
         />
         */}

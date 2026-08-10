@@ -197,24 +197,23 @@
   height: 0;
 }
 
-/* "Add:" row in Set Up Experiment: a label plus a row of icon-only
-   buttons, each with a hover-revealed name underneath. */
-.add-component-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin: 4px 0 20px 0;
-}
-
-.add-component-row-label {
+/* "Add Components" heading above the row of icon-only buttons in Set Up
+   Experiment -- swaps to name whichever button is currently hovered (see
+   ADD_BUTTON_LABELS in App.jsx). A single line, always -- so the row below
+   it never jiggles vertically as the heading text's length changes. */
+.add-component-heading {
   font-size: 14px;
   font-weight: 600;
   color: #333;
-  padding-top: 10px; /* centers against the 36px-tall buttons themselves, ignoring the hover-label space reserved below them */
+  margin: 4px 0 6px 0;
+  white-space: nowrap;
 }
 
-.add-component-item {
-  position: relative;
+.add-component-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px 0;
 }
 
 .icon-only-button {
@@ -226,12 +225,13 @@
 }
 
 .icon-only-button-wide {
-  width: auto;
+  flex: 1;
   min-width: 52px; /* comfortably fits the SG/PC icons, which are wider than they are tall */
 }
 
 .icon-only-button-square {
-  width: 36px;
+  flex: 1;
+  min-width: 36px;
   padding: 4px;
 }
 
@@ -241,27 +241,6 @@
   object-fit: contain;
   -webkit-user-drag: none;
   user-select: none;
-}
-
-/* Always present (so hovering never shifts layout), just invisible until
-   its button is hovered. */
-.add-component-hover-label {
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-top: 3px;
-  font-size: 12px;
-  line-height: 1.2;
-  color: #333;
-  text-align: center;
-  white-space: nowrap;
-  pointer-events: none;
-  visibility: hidden;
-}
-
-.add-component-item:hover .add-component-hover-label {
-  visibility: visible;
 }
 
 .compact-tab-pane.compact-tab-hidden {
