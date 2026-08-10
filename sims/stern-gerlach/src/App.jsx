@@ -556,17 +556,19 @@ export default function App() {
                 <label><input type="radio" name="DCmode" value="stream" checked={expMode.dc === 'stream'} onChange={(event) => {setExpMode({ ...expMode, dc: event.target.value });}} disabled={expMode.build !== 0} />Continuous</label>
               </div>
             </div>
-            <div className="control-group" style={{ marginTop: '0.5em' }}>
-              <SliderPlusTextboxControl
-                label="Particles per Second"
-                valueNum={expMode.rate}
-                onChangeNum={(val) => {setExpMode({ ...expMode, rate: val });}}
-                min={0.0}
-                max={100}
-                step={1.0}
-                disabled={(expMode.build !== 0) || (expMode.dc === 'single')}
-              />
-            </div>
+            {expMode.dc === 'stream' &&
+              <div className="control-group" style={{ marginTop: '0.5em' }}>
+                <SliderPlusTextboxControl
+                  label="Particles per Second"
+                  valueNum={expMode.rate}
+                  onChangeNum={(val) => {setExpMode({ ...expMode, rate: val });}}
+                  min={0.0}
+                  max={100}
+                  step={1.0}
+                  disabled={(expMode.build !== 0) || (expMode.dc === 'single')}
+                />
+              </div>
+            }
             <button className="control-bar-button" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px'}} onClick={handleStartPause} disabled={expMode.build !== 0}>
               {expMode.dc === 'single'
                 ? (<><PlayIcon /> Make One Particle</>)
