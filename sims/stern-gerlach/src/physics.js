@@ -39,6 +39,45 @@ export function applyT(theta, phi, state) {
   return { up, down };
 }
 
+// Rotates a spin-1/2 state through `cycles` complete precessions about a
+// field pointing along (axisTheta, axisPhi) -- the standard SU(2) rotation
+// operator exp(-i*angle/2*(n_hat.sigma)), with angle = cycles * 2*PI. Note
+// that's a spinor phase of 2*PI per cycle, not 4*PI: cycles=1 is exactly
+// the point where a *classical* magnetic moment has turned once around the
+// field and a spinor's sign has flipped (physically unobservable on its
+// own), and cycles=2 is where the spinor itself returns to identical --
+// not just projectively equivalent -- state, matching spin-1/2's familiar
+// 4*PI periodicity.
+export function precessState(state, axisTheta, axisPhi, cycles) {
+  const angle = cycles * 2 * Math.PI;
+  const nx = Math.sin(axisTheta) * Math.cos(axisPhi);
+  const ny = Math.sin(axisTheta) * Math.sin(axisPhi);
+  const nz = Math.cos(axisTheta);
+  const c = Math.cos(angle / 2);
+  const s = Math.sin(angle / 2);
+
+  // U = cos(angle/2) I - i sin(angle/2) (n_hat . sigma), expanded into its
+  // four complex entries.
+  const u00 = { re: c, im: -nz * s };
+  const u01 = { re: -ny * s, im: -nx * s };
+  const u10 = { re: ny * s, im: -nx * s };
+  const u11 = { re: c, im: nz * s };
+
+  return {
+    a: cAdd(cMul(u00, state.a), cMul(u01, state.b)),
+    b: cAdd(cMul(u10, state.a), cMul(u11, state.b)),
+  };
+}
+
+// Applies whatever field sits on one arm of one SG (or does nothing, if
+// `field` is null) -- the single place that knows a null field is a no-op,
+// shared by both samplePath's Monte-Carlo walk and theoreticalProbabilities'
+// exact one below, so the two can't drift apart on this the way the file
+// header comment already promises for the rest of the physics.
+export function applyField(field, state) {
+  return field ? precessState(state, field.axis[0], field.axis[1], field.magnitude) : state;
+}
+
 // Maximally-mixed oven state (rho = I/2), unraveled as one uniformly
 // random pure state per particle -- averaged over many particles this
 // reproduces I/2's measurement statistics exactly (50/50 along any axis),
@@ -99,7 +138,7 @@ export function theoreticalProbabilities(experiment) {
       const dest = sg[arm];
       if (dest === null) {
         const collapsed = arm === 'up' ? upEigenstate(theta, phi) : downEigenstate(theta, phi);
-        recurse(sgIndex + 1, collapsed, branchProb);
+        recurse(sgIndex + 1, applyField(sg.field[arm], collapsed), branchProb);
       } else if (dest.type === 'pc') {
         results.push({ sgIndex, arm, colorId: dest.colorId, prob: branchProb });
       }

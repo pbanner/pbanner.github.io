@@ -1,7 +1,9 @@
 import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { upEigenstate, downEigenstate, applyT, sampleOvenState, cAbs2, theoreticalProbabilities } from './physics';
+import { upEigenstate, downEigenstate, applyT, applyField, sampleOvenState, cAbs2, theoreticalProbabilities } from './physics';
 import { PC_COLORS } from './colors';
 import { arrowWidth, drawArrow } from './canvasArrow';
+import { AxisStepper, SliderPlusTextboxControl } from './controls';
+import { SG_OPTION_LABELS, SG_OPTION_BASES } from './axisOptions';
 import sgImage from './assets/SG.png';
 import pcImage from './assets/PC.png';
 import bbImage from './assets/BB.png';
@@ -46,6 +48,17 @@ const PC_HIGHLIGHT_LINE_WIDTH = 3;
 const BB_HEIGHT = 50;
 const BB_WIDTH = 9;
 //const BB_INPUT = BB_HEIGHT/2;
+
+// A field's on-canvas rectangle spans nearly the whole gap between this
+// SG's output and the next SG's input (or the edge, if there's no next
+// SG) -- deliberately covering the whole channel a particle travels
+// through on that arm, not just some narrower "placement site", since
+// z-order (drawn under the paths/PC/BB/particles -- see drawScene) is
+// what keeps it from visually competing with anything drawn on top of it.
+const FIELD_RECT_HEIGHT = 70;
+const FIELD_RECT_MARGIN = 14;  // gap from the SG's own edge and from the next SG's
+const FIELD_HATCH_SPACING = 10;
+const FIELD_PLACED_COLOR = '#5b6b7a';
 
 // Theory-probability bar meter (theoryScreenshotToggle, Shift+P in App) --
 // drawn in place of a placed particle counter's image+running-count, in the
@@ -167,7 +180,8 @@ function samplePath(experiment) {
 
     const dest = sg[arm];
     if (dest === null) {
-      state = arm === 'up' ? upEigenstate(theta, phi) : downEigenstate(theta, phi);
+      const collapsed = arm === 'up' ? upEigenstate(theta, phi) : downEigenstate(theta, phi);
+      state = applyField(sg.field[arm], collapsed);
       continue;
     }
     return { hops, terminal: { sgIndex, arm, dest } };
@@ -242,6 +256,83 @@ function getSGX0(sgIndex) {
 
 function getSGCenter(sgIndex, axis) {
   return { x: getSGX0(sgIndex) + SG_WIDTH / 2, y: axis };
+}
+
+// A field's on-canvas rectangle for one SG's arm -- shared by drawScene
+// (actually-placed fields, and the build/delete-mode highlights) and the
+// on-canvas overlay panel's own positioning (see FieldOverlayPanel), so all
+// three always agree on where a given field "is". Sits entirely above the
+// up arm's output line (or entirely below the down arm's), so the two
+// arms' rectangles never touch even though FIELD_RECT_HEIGHT is generous.
+function getFieldRect(sgIndex, arm, axis) {
+  const x0 = getSGX0(sgIndex) + SG_WIDTH + FIELD_RECT_MARGIN;
+  const x1 = getSGX0(sgIndex) + SG_SPACING - FIELD_RECT_MARGIN;
+  const outputY = axis - SG_HEIGHT / 2 + (arm === 'up' ? SG_OUTPUT_UP : SG_OUTPUT_DOWN);
+  const y = arm === 'up' ? outputY - FIELD_RECT_HEIGHT : outputY;
+  return { x: x0, y, width: Math.max(x1 - x0, 0), height: FIELD_RECT_HEIGHT };
+}
+
+// Cross-hatch fill (diagonal lines clipped to the rect) plus a border, in
+// one color -- used both for an actually-placed field (drawn early, so it
+// sits under the paths/SG/PC/BB/particles -- see drawScene) and for
+// build-mode's candidate/snapped-target highlight (drawn late, over
+// everything, in the same orange/green convention the PC/BB circles use).
+function drawFieldRect(ctx, rect, color, lineWidth = 2) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(rect.x, rect.y, rect.width, rect.height);
+  ctx.clip();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  for (let x = rect.x - rect.height; x < rect.x + rect.width; x += FIELD_HATCH_SPACING) {
+    ctx.beginPath();
+    ctx.moveTo(x, rect.y + rect.height);
+    ctx.lineTo(x + rect.height, rect.y);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+}
+
+// Every arm that doesn't have a field yet -- build mode 3's candidates.
+// Unlike PC/BB placement, a field can coexist with whatever's already
+// terminating that arm (or with nothing), so the only thing disqualifying
+// an arm here is already having a field of its own.
+function getFieldPlacementCandidates(experiment, axis) {
+  const candidates = [];
+  experiment.forEach((sg, sgIndex) => {
+    ['up', 'down'].forEach((arm) => {
+      if (sg.field[arm] !== null) return;
+      candidates.push({ sgIndex, arm, rect: getFieldRect(sgIndex, arm, axis) });
+    });
+  });
+  return candidates;
+}
+
+// Nearest candidate whose rectangle actually contains the cursor -- a
+// point-in-rect test, not the circular radius the PC/BB sites use, since a
+// field's hit target really is the rectangle drawn for it, not a circle
+// standing in for an image's footprint.
+function findNearestFieldCandidate(mouseX, mouseY, experiment, axis) {
+  let closest = null;
+  let closestDist = Infinity;
+
+  getFieldPlacementCandidates(experiment, axis).forEach((candidate) => {
+    const { rect } = candidate;
+    if (mouseX < rect.x || mouseX > rect.x + rect.width || mouseY < rect.y || mouseY > rect.y + rect.height) return;
+    const cx = rect.x + rect.width / 2;
+    const cy = rect.y + rect.height / 2;
+    const dist = Math.hypot(mouseX - cx, mouseY - cy);
+    if (dist < closestDist) {
+      closestDist = dist;
+      closest = candidate;
+    }
+  });
+
+  return closest;
 }
 
 // --- Particle path geometry ------------------------------------------------
@@ -432,6 +523,25 @@ function findNearestDeletable(mouseX, mouseY, experiment, axis) {
         closest = { kind: 'arm', sgIndex, arm, site, width, height, center, radius };
       }
     });
+
+    // Its fields, if present -- point-in-rect, like build mode 3's own
+    // candidate hit-testing (see findNearestFieldCandidate), with a
+    // synthetic center/radius here purely so this can compare against the
+    // circular SG/arm candidates above on equal footing.
+    ['up', 'down'].forEach((arm) => {
+      if (sg.field[arm] === null) return;
+
+      const rect = getFieldRect(sgIndex, arm, axis);
+      if (mouseX < rect.x || mouseX > rect.x + rect.width || mouseY < rect.y || mouseY > rect.y + rect.height) return;
+
+      const center = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+      const dist = Math.hypot(mouseX - center.x, mouseY - center.y);
+
+      if (dist < closestDist) {
+        closestDist = dist;
+        closest = { kind: 'field', sgIndex, arm, rect, center, radius: Math.max(rect.width, rect.height) / 2 };
+      }
+    });
   });
 
   return closest;
@@ -554,8 +664,106 @@ function drawTheoryBar(ctx, pc, sgIndex, arm, prob, drawMode) {
   }
 }
 
+const FIELD_OVERLAY_GAP = 8; // px between a field rectangle's outer edge and its control panel
+
+// Where a field's overlay panel anchors, in the container's own CSS-pixel
+// coordinates -- same origin getFieldRect already draws in. The panel
+// itself is positioned with translate(-50%, ...): -100% (up arm, so it
+// grows upward off this point) or 0% (down arm, grows downward), which is
+// why only one anchor point -- not a full box -- is needed here.
+function getFieldOverlayAnchor(sgIndex, arm, axis) {
+  const rect = getFieldRect(sgIndex, arm, axis);
+  const x = rect.x + rect.width / 2;
+  const y = arm === 'up' ? rect.y - FIELD_OVERLAY_GAP : rect.y + rect.height + FIELD_OVERLAY_GAP;
+  return { x, y, growUp: arm === 'up' };
+}
+
+// The on-canvas control panel for one arm's field -- axis stepper (shared
+// with the SG basis controls, see controls.jsx) plus a magnitude slider,
+// styled and positioned like the Bloch sphere sim's Time Controls overlay,
+// but anchored to this specific field's rectangle instead of a fixed
+// corner. Magnitude is in complete precession cycles (see physics.js's
+// precessState): 0 is off, 1 is one full turn, 2 is the max -- the point
+// a spin-1/2's 4*PI periodicity makes the field a total no-op again.
+function FieldOverlayPanel({ sgIndex, arm, field, setExperiment, resetDataCollection, disabled, anchor }) {
+  const currentIndex = SG_OPTION_BASES.findIndex(
+    ([theta, phi]) => theta === field.axis[0] && phi === field.axis[1]
+  );
+
+  const updateField = (patch) => {
+    setExperiment((prev) => {
+      const next = [...prev];
+      next[sgIndex] = { ...next[sgIndex], field: { ...next[sgIndex].field, [arm]: { ...next[sgIndex].field[arm], ...patch } } };
+      return next;
+    });
+  };
+
+  const step = (delta) => {
+    const base = currentIndex === -1 ? 0 : currentIndex;
+    const nextIndex = (base + delta + SG_OPTION_LABELS.length) % SG_OPTION_LABELS.length;
+    updateField({ axis: SG_OPTION_BASES[nextIndex] });
+    resetDataCollection();
+  };
+  const setAdvanced = (advanced) => updateField({ advanced });
+  const setAngle = (which, value) => {
+    const [theta, phi] = field.axis;
+    updateField({ axis: which === 'theta' ? [value, phi] : [theta, value] });
+    resetDataCollection();
+  };
+  const setMagnitude = (magnitude) => {
+    updateField({ magnitude });
+    resetDataCollection();
+  };
+  const removeField = () => {
+    setExperiment((prev) => {
+      const next = [...prev];
+      next[sgIndex] = { ...next[sgIndex], field: { ...next[sgIndex].field, [arm]: null } };
+      return next;
+    });
+    resetDataCollection();
+  };
+
+  return (
+    <div
+      className="overlay-controls field-overlay-controls"
+      style={{
+        position: 'absolute',
+        left: anchor.x,
+        top: anchor.y,
+        transform: anchor.growUp ? 'translate(-50%, -100%)' : 'translate(-50%, 0%)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <h4 style={{ margin: 0 }}>{`SG${sgIndex + 1} ${arm === 'up' ? 'upper' : 'lower'} field`}</h4>
+        <button
+          type="button"
+          className="field-overlay-remove"
+          aria-label={`Remove SG${sgIndex + 1} ${arm} field`}
+          onClick={removeField}
+          disabled={disabled}
+        >
+          ×
+        </button>
+      </div>
+      <AxisStepper label="Axis" value={field.axis} advanced={field.advanced} disabled={disabled}
+        onStep={step} onSetAdvanced={setAdvanced} onSetAngle={setAngle} />
+      <div title="0 = off, 1 = one complete precession cycle, 2 = maximum">
+        <SliderPlusTextboxControl
+          label={`Magnitude: ${field.magnitude.toFixed(2)} cycles`}
+          valueNum={field.magnitude}
+          onChangeNum={setMagnitude}
+          min={0}
+          max={2}
+          step={0.05}
+          disabled={disabled}
+        />
+      </div>
+    </div>
+  );
+}
+
 const LabPanel = forwardRef(function LabPanel(
-  { experiment, setExperiment, expMode, setExpMode, displayBools, setParticleCount, resetToken, resetDataCollection, tabVisible, startError, hoveredDetector },
+  { experiment, setExperiment, expMode, setExpMode, displayBools, setParticleCount, resetToken, resetDataCollection, tabVisible, startError, hoveredDetector, controlsLocked },
   ref
 ) {
   const canvasRef = useRef(null);
@@ -654,6 +862,17 @@ const LabPanel = forwardRef(function LabPanel(
     } else if (!expMode.running && ovenOffImageRef.current && ovenOffImageRef.current.complete) {
       ctx.drawImage(ovenOffImageRef.current, OVEN_X0, axis - OVEN_HEIGHT / 2, OVEN_WIDTH, OVEN_HEIGHT);
     }
+
+    // Placed magnetic fields -- drawn early, so paths, SG/PC/BB images, and
+    // particles (drawn later, some by drawParticles after this whole
+    // function returns) always sit on top of the cross-hatch rather than
+    // being obscured by it.
+    experiment.forEach((sg, sgIndex) => {
+      ['up', 'down'].forEach((arm) => {
+        if (sg.field[arm] === null) return;
+        drawFieldRect(ctx, getFieldRect(sgIndex, arm, axis), FIELD_PLACED_COLOR, 1.5);
+      });
+    });
 
     // Build mode's snap target, computed once up front so both the SG loop
     // below (which needs to skip drawing whatever's really occupying the
@@ -798,7 +1017,7 @@ const LabPanel = forwardRef(function LabPanel(
     // instant build mode is entered. Left in place for every site except the
     // one currently snapped to below, which gets its own green circle and
     // full-opacity component instead -- drawing both there would double up.
-    if (expMode.build > 0 && imageReady(activeComponentImageRef)) {
+    if ((expMode.build === 1 || expMode.build === 2) && imageReady(activeComponentImageRef)) {
       getPlacementCandidates(experiment, axis, expMode.build).forEach((candidate) => {
         if (buildSnappedSite && candidate.sgIndex === buildSnappedSite.sgIndex && candidate.arm === buildSnappedSite.arm) return;
         ctx.strokeStyle = '#f39c12';
@@ -825,7 +1044,7 @@ const LabPanel = forwardRef(function LabPanel(
     // component, not whatever it's replacing) around that one site, and
     // draw the new component there at full opacity, standing in for
     // whatever's really occupying it (skipped above, in the SG loop).
-    if (expMode.build > 0 && buildSnappedSite && imageReady(activeComponentImageRef)) {
+    if ((expMode.build === 1 || expMode.build === 2) && buildSnappedSite && imageReady(activeComponentImageRef)) {
       const newDims = getNewComponentDims(expMode.build);
       const center = getPlacementSiteCenter(buildSnappedSite.site, newDims.width);
 
@@ -846,12 +1065,27 @@ const LabPanel = forwardRef(function LabPanel(
     // pre-replacement UI's drag-along ghost. Once the cursor snaps to a
     // site (block above), this stops -- the docked full-opacity component
     // there is the only preview shown.
-    if (expMode.build > 0 && mousePos && !buildSnappedSite && imageReady(activeComponentImageRef)) {
+    if ((expMode.build === 1 || expMode.build === 2) && mousePos && !buildSnappedSite && imageReady(activeComponentImageRef)) {
       ctx.globalAlpha = 0.5;
       expMode.build === 1
         ? ctx.drawImage(pcImageRef.current, mousePos.x - PC_WIDTH / 2, mousePos.y - PC_HEIGHT / 2, PC_WIDTH, PC_HEIGHT)
         : ctx.drawImage(bbImageRef.current, mousePos.x - BB_WIDTH / 2, mousePos.y - BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
       ctx.globalAlpha = 1.0;
+    }
+
+    // Build mode 3 (magnetic field): same orange/green candidate-highlight
+    // convention as PC/BB above, but rectangles instead of circles+image,
+    // and no "docked at the snapped site" image to draw since a field has
+    // no image of its own -- the rectangle itself, filled in at full
+    // opacity, is that feedback.
+    if (expMode.build === 3) {
+      const snappedField = mousePos ? findNearestFieldCandidate(mousePos.x, mousePos.y, experiment, axis) : null;
+      getFieldPlacementCandidates(experiment, axis).forEach((candidate) => {
+        const isSnapped = snappedField && snappedField.sgIndex === candidate.sgIndex && snappedField.arm === candidate.arm;
+        ctx.globalAlpha = isSnapped ? 1.0 : 0.6;
+        drawFieldRect(ctx, candidate.rect, isSnapped ? '#2ecc71' : '#f39c12', 3);
+        ctx.globalAlpha = 1.0;
+      });
     }
 
     // Hovering over an existing component in delete mode
@@ -861,22 +1095,33 @@ const LabPanel = forwardRef(function LabPanel(
         ctx.strokeStyle = '#e74c3c';
         ctx.lineWidth = 3;
 
-        ctx.beginPath();
-        ctx.arc(target.center.x, target.center.y, target.radius, 0, Math.PI * 2);
-        ctx.stroke();
+        if (target.kind === 'field') {
+          ctx.strokeRect(target.rect.x, target.rect.y, target.rect.width, target.rect.height);
+        } else {
+          ctx.beginPath();
+          ctx.arc(target.center.x, target.center.y, target.radius, 0, Math.PI * 2);
+          ctx.stroke();
+        }
 
         if (target.kind === 'sg') {
-          // Preview the cascade: circle anything on this SG's arms too
+          // Preview the cascade: circle/rectangle anything on this SG's
+          // arms too -- both its terminal components and its fields, since
+          // deleting the whole SG takes all of that with it.
           const sg = experiment[target.sgIndex];
           ['up', 'down'].forEach((arm) => {
-            if (sg[arm] === null) return;
-            const width = sg[arm].type === 'pc' ? PC_WIDTH : BB_WIDTH;
-            const height = sg[arm].type === 'pc' ? PC_HEIGHT : BB_HEIGHT;
-            const site = getPlacementSite(target.sgIndex, arm, axis);
-            const armCenter = getPlacementSiteCenter(site, width);
-            ctx.beginPath();
-            ctx.arc(armCenter.x, armCenter.y, (Math.max(width, height) / 2) * SITE_MARGIN, 0, Math.PI * 2);
-            ctx.stroke();
+            if (sg[arm] !== null) {
+              const width = sg[arm].type === 'pc' ? PC_WIDTH : BB_WIDTH;
+              const height = sg[arm].type === 'pc' ? PC_HEIGHT : BB_HEIGHT;
+              const site = getPlacementSite(target.sgIndex, arm, axis);
+              const armCenter = getPlacementSiteCenter(site, width);
+              ctx.beginPath();
+              ctx.arc(armCenter.x, armCenter.y, (Math.max(width, height) / 2) * SITE_MARGIN, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+            if (sg.field[arm] !== null) {
+              const fieldRect = getFieldRect(target.sgIndex, arm, axis);
+              ctx.strokeRect(fieldRect.x, fieldRect.y, fieldRect.width, fieldRect.height);
+            }
           });
         }
       }
@@ -1084,6 +1329,12 @@ const LabPanel = forwardRef(function LabPanel(
 
       if (target.kind === 'sg') {
         setExperiment((prev) => prev.filter((_, i) => i !== target.sgIndex));
+      } else if (target.kind === 'field') {
+        setExperiment((prev) => {
+          const next = [...prev];
+          next[target.sgIndex] = { ...next[target.sgIndex], field: { ...next[target.sgIndex].field, [target.arm]: null } };
+          return next;
+        });
       } else {
         setExperiment((prev) => {
           const next = [...prev];
@@ -1093,6 +1344,21 @@ const LabPanel = forwardRef(function LabPanel(
       }
       setExpMode({ ...expMode, build: 0 });
       resetDataCollection(); // deleting a component is a setup change
+      return;
+    }
+
+    if (expMode.build === 3) {
+      const snappedField = findNearestFieldCandidate(mouseX, mouseY, experiment, axis);
+      if (!snappedField) return;
+
+      const { sgIndex, arm } = snappedField;
+      setExperiment((prev) => {
+        const next = [...prev];
+        next[sgIndex] = { ...next[sgIndex], field: { ...next[sgIndex].field, [arm]: { axis: [0, 0], magnitude: 0, advanced: false } } };
+        return next;
+      });
+      setExpMode({ ...expMode, build: 0 });
+      resetDataCollection(); // placing a field is a setup change
       return;
     }
 
@@ -1132,8 +1398,30 @@ const LabPanel = forwardRef(function LabPanel(
     setMousePos(null)
   }
 
+  // Every arm with a field gets its own overlay panel, positioned in the
+  // same CSS-pixel coordinates drawScene already draws its rectangle in
+  // (see getFieldOverlayAnchor) -- disabled, not hidden, while build/delete
+  // mode or particle propagation is active, same convention the sidebar's
+  // SGBasisStepper rows already use for controlsLocked.
+  const fieldOverlays = experiment.flatMap((sg, sgIndex) => ['up', 'down'].flatMap((arm) => {
+    const field = sg.field[arm];
+    if (!field) return [];
+    return [(
+      <FieldOverlayPanel
+        key={`${sgIndex}-${arm}`}
+        sgIndex={sgIndex}
+        arm={arm}
+        field={field}
+        setExperiment={setExperiment}
+        resetDataCollection={resetDataCollection}
+        disabled={controlsLocked || expMode.build !== 0}
+        anchor={getFieldOverlayAnchor(sgIndex, arm, axis)}
+      />
+    )];
+  }));
+
   return (
-    <div ref={containerRef} style={{ width: '100%', height: '100%' }}>
+    <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
       <canvas
         ref={canvasRef}
         onMouseMove={handleMouseMove}
@@ -1144,6 +1432,7 @@ const LabPanel = forwardRef(function LabPanel(
           touchAction: 'none',
         }}
       />
+      {fieldOverlays}
     </div>
   );
 });

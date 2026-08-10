@@ -16,6 +16,52 @@
   overflow: hidden;
 }
 
+/* On-canvas overlay control panel -- same look as the Bloch sphere sim's
+   Time Controls overlay (border + radius + padding), plus a background
+   since this one floats over a 2D scene that's mostly white/gray already,
+   rather than over a 3D view dark enough for translucent text alone to
+   read against it. */
+.overlay-controls {
+  border: 2px solid #333;
+  border-radius: 12px;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+.field-overlay-controls {
+  width: 220px;
+}
+
+.field-overlay-controls h4 {
+  margin: 0;
+  font-size: 13px;
+  color: #333;
+}
+
+.field-overlay-remove {
+  border: none;
+  background: transparent;
+  color: #972323;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+
+.field-overlay-remove:hover {
+  color: #e74c3c;
+}
+
+.field-overlay-remove:disabled {
+  color: #bbb;
+  cursor: not-allowed;
+}
+
 /* Bottom control bar */
 .control-bar {
   height: 250px;
@@ -277,6 +323,13 @@
   border: 1px solid #ddd;
   border-radius: 4px;
   overflow: hidden;
+  /* Per spec, overflow != visible zeroes out a flex item's *automatic*
+     minimum size -- without this, a cramped flex row (like the field
+     overlay's, which is much narrower than the sidebar's own AxisStepper
+     rows) squeezes this all the way to 0 width to make room for its
+     siblings instead of wrapping or shrinking them, silently clipping the
+     axis value and arrows to nothing. */
+  flex-shrink: 0;
 }
 
 .axis-stepper-value {
