@@ -372,7 +372,7 @@ export default function App() {
   // advanced toggles that SG's basis control between the X/Y/Z stepper and
   // raw theta/phi textboxes -- a display preference, not a physics value
   // Start with one apparatus already in place
-  const [experiment, setExperiment] = useState([{ basis: [0, 0], up: 'bb', down: 'bb', advanced: false }]);
+  const [experiment, setExperiment] = useState([{ basis: [0, 0], up: { type: 'pc', data: 0, colorId: 0 }, down: { type: 'pc', data: 0, colorId: 1 }, advanced: false }]);
 
   // For getting tab visibility and pausing animation as appropriate
   // Tracks whether this tab is the active one, so both particle production
