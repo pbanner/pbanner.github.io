@@ -172,15 +172,15 @@ function fieldMagnitudeAt(field, t, basisRef) {
 }
 
 // The time-independent effective field in the frame co-rotating with the
-// drive -- the exact beff evolveSpin already precesses the spin about.
+// drive -- the exact b_eff evolveSpin already precesses the spin about.
 // Pulled out on its own so the "Effective field" component display shows
 // literally the object the physics is built from, not a re-derived copy.
 function effectiveField(field, basisRef) {
   const { n, e1 } = basisRef.current;
   return {
-    x: (field.mag0 - field.omega1) * n.x + field.mag1 * e1.x,
-    y: (field.mag0 - field.omega1) * n.y + field.mag1 * e1.y,
-    z: (field.mag0 - field.omega1) * n.z + field.mag1 * e1.z,
+    x: (field.mag0 + field.omega1) * n.x + field.mag1 * e1.x,
+    y: (field.mag0 + field.omega1) * n.y + field.mag1 * e1.y,
+    z: (field.mag0 + field.omega1) * n.z + field.mag1 * e1.z,
   };
 }
 
@@ -1197,12 +1197,12 @@ const PRESETS = [
     key: 'onResonanceRabi',
     label: 'On-resonance Rabi flopping',
     apply(setters) {
-      // omega1 === mag0 cancels the (mag0 - omega1) detuning term in the
+      // omega1 === -mag0 cancels the (mag0 + omega1) detuning term in the
       // effective field (see effectiveField/evolveSpin), leaving a purely
       // transverse effective field -- starting at the north pole, the spin
       // nutates all the way down to the south pole and back.
       setters.setInitialSpinState({ theta: 0, phi: 0 });
-      setters.setMagneticField({ mag0: 1, theta0: 0, phi0: 0, mag1: 1, omega1: 1, phase1: 0, rotatingComponent: true });
+      setters.setMagneticField({ mag0: 1, theta0: 0, phi0: 0, mag1: 1, omega1: -1, phase1: 0, rotatingComponent: true });
       setters.setControlBools((prev) => ({ ...prev, frameRotating: false, frameLocked: false }));
       setters.setComponentsMode('none');
     },
@@ -1226,13 +1226,13 @@ const PRESETS = [
     key: 'offResonanceRabi',
     label: 'Off-resonance Rabi flopping',
     apply(setters) {
-      // Detuning (mag0 - omega1 = 0.5, same size as the drive itself)
+      // Detuning (mag0 + omega1 = 0.5, same size as the drive itself)
       // tilts the effective field away from purely transverse, so the
       // nutation cone -- starting from the north pole, already close to
       // that tilted axis -- never reaches the south pole: incomplete
       // flopping, in contrast to the on-resonance case above.
       setters.setInitialSpinState({ theta: 0, phi: 0 });
-      setters.setMagneticField({ mag0: 1, theta0: 0, phi0: 0, mag1: 0.5, omega1: 0.5, phase1: 0, rotatingComponent: true });
+      setters.setMagneticField({ mag0: 1, theta0: 0, phi0: 0, mag1: 0.5, omega1: -0.5, phase1: 0, rotatingComponent: true });
       setters.setControlBools((prev) => ({ ...prev, frameRotating: false, frameLocked: false }));
       setters.setComponentsMode('none');
     },
