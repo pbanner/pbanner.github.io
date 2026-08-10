@@ -7,6 +7,7 @@ import { SG_OPTION_LABELS, SG_OPTION_BASES } from './axisOptions';
 import sgImage from './assets/SG.png';
 import pcImage from './assets/PC.png';
 import bbImage from './assets/BB.png';
+import magImage from './assets/magnet.png';
 
 // Unicode glyphs (▶ ⏸ ⌂) bake their own, font-dependent vertical padding
 // into the glyph box, so flexbox centering lines up the boxes but not the
@@ -182,7 +183,7 @@ function SetUpExperimentPanel({ experiment, setExperiment, addSternGerlach, expM
           disabled={controlsLocked}
         />
         <AddComponentButton
-          icon={<FieldIcon size="20px" />}
+          icon={magImage}
           shape="square"
           ariaLabel="Add magnetic field"
           onMouseEnter={() => setHoveredAddButton('field')}
