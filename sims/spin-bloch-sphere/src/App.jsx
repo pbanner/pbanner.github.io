@@ -997,7 +997,7 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
             </mesh>
           )}
 
-          {controlBools.showSphere && (
+          {(controlBools.showSphere && controlBools.showSphereGrid) && (
             <GraticuleLines latCount={graticuleLatCount} lonCount={graticuleLonCount} />
           )}
           {/*
@@ -1006,12 +1006,14 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
           ))}
           */}
 
-          <ThickArrowHelper dir={blochToThree(1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
-          <ThickArrowHelper dir={blochToThree(0, 1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
-          <ThickArrowHelper dir={blochToThree(0, 0, 1)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
-          <ThickArrowHelper dir={blochToThree(-1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
-          <ThickArrowHelper dir={blochToThree(0, -1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
-          <ThickArrowHelper dir={blochToThree(0, 0, -1)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
+          {controlBools.showAxes &&
+          <>
+            <ThickArrowHelper dir={blochToThree(1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
+            <ThickArrowHelper dir={blochToThree(0, 1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
+            <ThickArrowHelper dir={blochToThree(0, 0, 1)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
+            <ThickArrowHelper dir={blochToThree(-1, 0, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
+            <ThickArrowHelper dir={blochToThree(0, -1, 0)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
+            <ThickArrowHelper dir={blochToThree(0, 0, -1)} origin={new THREE.Vector3(0, 0, 0)} length={SPHERE_AXIS_EXTENT} color={0x000000} headLength={0.09} headWidth={0.06} shaftWidth={3.0} />
           {/*
           <Line points={[[-1,0,0],[1,0,0]]} color="black" lineWidth={2} />
           <Line points={[[0,-1,0],[0,1,0]]} color="black" lineWidth={2} />
@@ -1024,6 +1026,8 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
           <KetLabel sign="-" axis="y" position={blochToThree(0, -(SPHERE_AXIS_EXTENT + SPHERE_AXIS_LABEL_EXTENT), 0).toArray()} />
           <KetLabel sign="+" axis="z" position={blochToThree(0, 0, SPHERE_AXIS_EXTENT + SPHERE_AXIS_LABEL_EXTENT).toArray()} />
           <KetLabel sign="-" axis="z" position={blochToThree(0, 0, -(SPHERE_AXIS_EXTENT + SPHERE_AXIS_LABEL_EXTENT)).toArray()} />
+          </>
+          }
         </RotatingFrameBackdrop>
 
         <SimulationScene
@@ -1240,7 +1244,9 @@ export default function App() {
     frameRotating: false,
     frameLocked: false,
     showSphere: true,
-    showSpinTrace: true
+    showSpinTrace: true,
+    showAxes: true,
+    showSphereGrid: true
   });
   // Spin state at t = 0, set by two angles
   const [initialSpinState, setInitialSpinState] = useState({ theta: 0, phi: 0 });
@@ -1567,18 +1573,8 @@ export default function App() {
               <hr className="sidebar-divider" />
 
               <h3>Display Options</h3>
-              <div className="control-group" style={{ gap: '0px' }}>
-                <label>
-                  <input type="checkbox" checked={controlBools.showSphere} onChange={(e) => setControlBools({ ...controlBools, showSphere: e.target.checked })} />
-                  Show sphere
-                </label>
-                <label>
-                  <input type="checkbox" checked={controlBools.showSpinTrace} onChange={(e) => setControlBools({ ...controlBools, showSpinTrace: e.target.checked })} />
-                  Show path of spin vector
-                </label>
-              </div>
-              <div className="control-group" style={{ gap: '0px' }}>
-                <label>Display components:</label>
+              <div className="control-group" style={{ gap: '0px', marginBottom: '10px' }}>
+                <label>Display B-field components:</label>
                 <select value={componentsMode} onChange={(e) => setComponentsMode(e.target.value)}>
                   <option value="none">None</option>
                   <option value="xyz">X / Y / Z</option>
@@ -1586,6 +1582,24 @@ export default function App() {
                   <option value="spin">Relative to spin</option>
                   <option value="effectiveField">Effective field (rotating frame)</option>
                 </select>
+              </div>
+              <div className="control-group" style={{ gap: '0px' }}>
+                <label>
+                  <input type="checkbox" checked={controlBools.showSphere} onChange={(e) => setControlBools({ ...controlBools, showSphere: e.target.checked })} />
+                  Show sphere
+                </label>
+                <label>
+                  <input type="checkbox" checked={controlBools.showSphereGrid} onChange={(e) => setControlBools({ ...controlBools, showSphereGrid: e.target.checked })} />
+                  Show sphere grid
+                </label>
+                <label>
+                  <input type="checkbox" checked={controlBools.showAxes} onChange={(e) => setControlBools({ ...controlBools, showAxes: e.target.checked })} />
+                  Show axes
+                </label>
+                <label>
+                  <input type="checkbox" checked={controlBools.showSpinTrace} onChange={(e) => setControlBools({ ...controlBools, showSpinTrace: e.target.checked })} />
+                  Show path of spin vector
+                </label>
               </div>
 
               {/*
