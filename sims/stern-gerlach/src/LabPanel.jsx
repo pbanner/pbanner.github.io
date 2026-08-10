@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { upEigenstate, downEigenstate, applyT, applyField, sampleOvenState, cAbs2, theoreticalProbabilities } from './physics';
+import { upEigenstate, downEigenstate, applyT, applyField, recombineThroughFields, sampleOvenState, cAbs2, theoreticalProbabilities } from './physics';
 import { PC_COLORS } from './colors';
 import { arrowWidth, drawArrow } from './canvasArrow';
 import { AxisStepper } from './controls';
@@ -169,8 +169,9 @@ function samplePath(experiment) {
 
     if (sg.up === null && sg.down === null) {
       const { up } = applyT(theta, phi, state);
-      const arm = Math.random() < cAbs2(up) ? 'up' : 'down'; // visual only -- state untouched
+      const arm = Math.random() < cAbs2(up) ? 'up' : 'down'; // visual only -- which arc this particle's animation takes, not a real measurement
       hops.push({ sgIndex, arm });
+      state = recombineThroughFields(theta, phi, sg.field.up, sg.field.down, state);
       continue;
     }
 

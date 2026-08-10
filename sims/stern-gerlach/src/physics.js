@@ -78,6 +78,55 @@ export function applyField(field, state) {
   return field ? precessState(state, field.axis[0], field.axis[1], field.magnitude) : state;
 }
 
+// Scales a 2-component state by a complex number.
+function scaleState(state, z) {
+  return { a: cMul(z, state.a), b: cMul(z, state.b) };
+}
+
+// Componentwise sum of two states -- not itself normalized; callers that
+// need a valid state back, not just an intermediate, should follow with
+// normalizeState.
+function addStates(s1, s2) {
+  return { a: cAdd(s1.a, s2.a), b: cAdd(s1.b, s2.b) };
+}
+
+function normalizeState(state) {
+  const norm = Math.sqrt(cAbs2(state.a) + cAbs2(state.b));
+  return { a: cScale(state.a, 1 / norm), b: cScale(state.b, 1 / norm) };
+}
+
+// A transparent SG (no detector on either arm) ordinarily just passes
+// `state` through unchanged -- no measurement, no collapse, so the two
+// arms recombine into exactly what went in. But that's only true if the
+// two arms are physically identical; a field on one of them breaks that
+// symmetry even though nothing here performs a real measurement. This
+// decomposes `state` into the SG's own +/-n eigenbasis, applies whichever
+// field sits on each arm (applyField is a no-op with none), and adds the
+// two branches back into a single coherent state -- literally the same
+// physics as a beam splitter followed by a perfect recombiner, which is
+// what "transparent" has meant all along.
+//
+// The recombined state is renormalized before being returned. Without any
+// field this is exact and a no-op (the two branches already summed to a
+// unit vector). With one, the small renormalization stands in for the
+// (unmodeled) chance that the field also nudges the particle's trajectory
+// enough to miss recombination -- a real but second-order effect outside
+// what a spin-only simulator can track. Treating recombination as always
+// succeeding is the standard idealization for this kind of interference
+// demo (this is the "spin echo" / Ramsey-style physics the field feature
+// exists for).
+export function recombineThroughFields(theta, phi, upField, downField, state) {
+  if (!upField && !downField) return state; // nothing to do -- skip the wasted arithmetic on the common case
+
+  const upAmp = innerProduct(upEigenstate(theta, phi), state);
+  const downAmp = innerProduct(downEigenstate(theta, phi), state);
+
+  const upBranch = scaleState(applyField(upField, upEigenstate(theta, phi)), upAmp);
+  const downBranch = scaleState(applyField(downField, downEigenstate(theta, phi)), downAmp);
+
+  return normalizeState(addStates(upBranch, downBranch));
+}
+
 // Maximally-mixed oven state (rho = I/2), unraveled as one uniformly
 // random pure state per particle -- averaged over many particles this
 // reproduces I/2's measurement statistics exactly (50/50 along any axis),
@@ -122,7 +171,18 @@ export function theoreticalProbabilities(experiment) {
     const [theta, phi] = sg.basis;
 
     if (sg.up === null && sg.down === null) {
-      recurse(sgIndex + 1, priorState, pathProb); // transparent -- no collapse, no branching
+      // A field on one of this SG's arms still coherently recombines --
+      // recombineThroughFields is a no-op when neither arm has one, so this
+      // is exactly the old "pass straight through" behavior in the common
+      // case. priorState === null (no real measurement anywhere yet, so
+      // this path is still the maximally-mixed oven state) is left as-is
+      // even when a field is present: propagating a field through a still-
+      // mixed state exactly would need a density-matrix treatment this
+      // closed-form calculation doesn't do -- samplePath's Monte-Carlo walk
+      // below has no such gap, since it always tracks one concrete sampled
+      // state rather than a "still mixed" placeholder.
+      const nextState = priorState === null ? null : recombineThroughFields(theta, phi, sg.field.up, sg.field.down, priorState);
+      recurse(sgIndex + 1, nextState, pathProb); // transparent -- no branching
       return;
     }
 
