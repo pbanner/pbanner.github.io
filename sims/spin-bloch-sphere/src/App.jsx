@@ -1547,10 +1547,11 @@ export default function App() {
                       onChangeNum={(val) => updateField({ mag1: val })}
                       min={0.0} max={10.0} step={0.1}
                     />
+                    {/* The sign flip is intention here */}
                     <SliderPlusTextboxControl
                       label="ω (rad/s)"
-                      valueNum={magneticField.omega1.toFixed(1)}
-                      onChangeNum={(val) => updateField({ omega1: val })}
+                      valueNum={(-magneticField.omega1 || 0).toFixed(1)}
+                      onChangeNum={(val) => updateField({ omega1: -val })}
                       min={-10.0} max={10.0} step={0.1}
                     />
                     <SliderPlusTextboxControl
