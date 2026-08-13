@@ -94,18 +94,34 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
       ctx.stroke();
     }
 
-    if (hoveredCell && (buildMode?.place || buildMode === 'remove')) {
-      const occupied = components.some((c) => c.col === hoveredCell.col && c.row === hoveredCell.row);
+    let highlightCell = null;
+    let isRemoveHighlight = false;
+    if (draggingId != null && dragPos) {
+      // Same snap math as the drag's own mouseup handler, so the highlight
+      // always matches where the component will actually land.
+      highlightCell = {
+        col: clamp(Math.round(dragPos.x / GRID_SIZE), 0, cols - 1),
+        row: clamp(Math.round(dragPos.y / GRID_SIZE), 0, rows - 1),
+      };
+    } else if (hoveredCell && (buildMode?.place || buildMode === 'remove')) {
+      highlightCell = hoveredCell;
+      isRemoveHighlight = buildMode === 'remove';
+    }
+
+    if (highlightCell) {
+      // Excludes the dragged component's own id -- its origin/current cell
+      // shouldn't read as "occupied" just because it's the thing being moved.
+      const occupied = components.some((c) => c.col === highlightCell.col && c.row === highlightCell.row && c.id !== draggingId);
       let fill;
-      if (buildMode === 'remove') {
+      if (isRemoveHighlight) {
         fill = occupied ? 'rgba(231, 76, 60, 0.35)' : 'rgba(231, 76, 60, 0.12)';
       } else {
         fill = occupied ? 'rgba(231, 76, 60, 0.25)' : 'rgba(52, 152, 219, 0.25)';
       }
       ctx.fillStyle = fill;
-      ctx.fillRect(hoveredCell.col * GRID_SIZE, hoveredCell.row * GRID_SIZE, GRID_SIZE, GRID_SIZE);
+      ctx.fillRect(highlightCell.col * GRID_SIZE, highlightCell.row * GRID_SIZE, GRID_SIZE, GRID_SIZE);
     }
-  }, [components, canvasDims, displayBools, buildMode, hoveredCell]);
+  }, [components, canvasDims, displayBools, buildMode, hoveredCell, draggingId, dragPos, cols, rows]);
 
   const eraseAtClientPos = useCallback((clientX, clientY) => {
     const canvas = canvasRef.current;
