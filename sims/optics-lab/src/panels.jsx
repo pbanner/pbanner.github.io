@@ -25,14 +25,14 @@ function ComponentButton({ type, active, onClick, onMouseEnter, onMouseLeave }) 
 // live elsewhere) and there's no fixed set of "legal" placement sites --
 // any unoccupied grid square works, so LabPanel does all of that checking
 // itself once a component is armed for placement.
-export function BuildPanel({ buildMode, armPlacement, toggleRemoveMode, displayBools, setDisplayBools }) {
+export function BuildPanel({ buildMode, armPlacement, toggleRemoveMode }) {
   const [hovered, setHovered] = useState(null);
   const placingId = buildMode?.place ?? null;
   const removing = buildMode === 'remove';
 
   return (
     <>
-      <h3 style={{ margin: '0 0 0px 0', fontWeight: 'bold' }}>Build Setup</h3>
+      <h3 style={{ margin: '0 0 0px 0', fontWeight: 'bold' }}>Build Experiment</h3>
 
       <p className="add-component-heading">
         {'Add: ' + (COMPONENT_TYPES.find((c) => c.id === hovered)?.label ?? '')}
@@ -72,7 +72,7 @@ export function DataCollectionPanel({ dcMode, setDcMode }) {
       <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Data Collection Controls</h3>
       <div style={{ display: 'flex', flexDirection: 'row', gap: '10px', alignItems: 'center' }}>
         <p style={{ fontSize: '14px', fontWeight: '500' }}>Mode:</p>
-        <div style={{ padding: '0px', display: 'flex', flexDirection: 'column', gap: '0px' }}>
+        <div style={{ padding: '0px 0px 8px 0px', display: 'flex', flexDirection: 'column', gap: '0px' }}>
           <label>
             <input
               type="radio"
@@ -95,7 +95,7 @@ export function DataCollectionPanel({ dcMode, setDcMode }) {
       </div>
 
       {dcMode.mode === 'stream' && (
-        <div className="control-group" style={{ marginBottom: '0.25em' }}>
+        <div className="control-group" style={{ marginBottom: '0.5em' }}>
           <SliderPlusTextboxControl
             label="Photons per Second"
             valueNum={dcMode.rate}
@@ -139,7 +139,7 @@ export function DataPlottingPanel({ chartDisplayBools, setChartDisplayBools }) {
     <div className="data-plotting-row">
       <div className="data-plotting-options">
         <h3 style={{ margin: '0 0 12px 0', fontWeight: 'bold' }}>Chart Options</h3>
-        <div style={{ display: 'flex', flexDirection: 'row', gap: '6px', alignItems: 'center', margin: '0 0 6px 0' }}>
+        <div style={{ display: 'flex', flexDirection: 'row', gap: '6px', alignItems: 'center', margin: '0 0 10px 0' }}>
           <p style={{ padding: '0px 4px 0 0', fontSize: '14px', fontWeight: '500' }}>Show:</p>
           <div style={{ padding: '0px', display: 'flex', flexDirection: 'column', gap: '0px' }}>
             <label>

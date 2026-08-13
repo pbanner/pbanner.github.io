@@ -59,6 +59,19 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
+  // Ctrl/Cmd+G toggles the grid -- not exposed as a student-facing control,
+  // just a quick way to hide the grid lines for clean screenshots. preventDefault
+  // since browsers often bind this to "find next".
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g') {
+        e.preventDefault();
+        setDisplayBools((prev) => ({ ...prev, gridOn: !prev.gridOn }));
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   const armedType = buildMode?.place ? COMPONENT_TYPES.find((c) => c.id === buildMode.place) : null;
 
@@ -87,8 +100,6 @@ export default function App() {
             buildMode={buildMode}
             armPlacement={armPlacement}
             toggleRemoveMode={toggleRemoveMode}
-            displayBools={displayBools}
-            setDisplayBools={setDisplayBools}
           />
         </div>
         <div className="overlay-controls data-collection-panel">
