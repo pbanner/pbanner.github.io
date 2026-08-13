@@ -1,55 +1,116 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import './App.css';
-import LabPanel from './LabPanel.jsx';
+import LabPanel, { GRID_SIZE } from './LabPanel.jsx';
+import { BuildPanel, DataCollectionPanel, DataPlottingPanel } from './panels.jsx';
+import { COMPONENT_TYPES } from './componentTypes.js';
 
 export default function App() {
-  const [activePanel, setActivePanel] = useState(1);
-  
-  // Panel 1 state
   const [displayBools, setDisplayBools] = useState({
     gridOn: true,             // Displaying the grid
   });
 
+  const [components, setComponents] = useState([]);
+
+  // null = normal mode. { place: <componentId> } while a component from the
+  // Build panel is armed and waiting to be dropped on the canvas. 'remove'
+  // while the Remove Components tool is active.
+  const [buildMode, setBuildMode] = useState(null);
+  // Where the placement ghost is currently drawn, in viewport (client) coords.
+  const [ghostPos, setGhostPos] = useState(null);
+
+  const [dcMode, setDcMode] = useState({ mode: 'single', running: false, rate: 20 });
+  const [chartDisplayBools, setChartDisplayBools] = useState({
+    showPercentages: 2,    // 0 = counts only, 1 = percentages only, 2 = both
+    showErrorBars: false,
+    showLegend: true,
+    showTotal: true,
+    showTheory: false,
+  });
+
+  // Arms (or, clicking the same button again, disarms) a component for
+  // placement. Seeded from the click event that triggered it so the ghost
+  // appears immediately under the cursor, right over the Build panel, before
+  // any further mouse movement.
+  const armPlacement = (componentId, e) => {
+    setBuildMode((prev) => (prev?.place === componentId ? null : { place: componentId }));
+    if (e) setGhostPos({ x: e.clientX, y: e.clientY });
+  };
+
+  const toggleRemoveMode = () => {
+    setBuildMode((prev) => (prev === 'remove' ? null : 'remove'));
+  };
+
+  // The ghost has to track the cursor across the whole screen -- including
+  // while it's over the overlay panels, which sit visually on top of the
+  // canvas -- so this listens at the window level rather than on the canvas
+  // itself.
+  useEffect(() => {
+    if (!buildMode?.place) return;
+    const onMove = (e) => setGhostPos({ x: e.clientX, y: e.clientY });
+    window.addEventListener('mousemove', onMove);
+    return () => window.removeEventListener('mousemove', onMove);
+  }, [buildMode]);
+
+  // Escape backs out of placement/remove mode, same as the Stern-Gerlach sim.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setBuildMode((prev) => (prev === null ? prev : null));
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  const armedType = buildMode?.place ? COMPONENT_TYPES.find((c) => c.id === buildMode.place) : null;
+
   return (
     <div className="app-layout">
-      {/* Main Canvas Area */}
+      {/* Main Canvas Area -- now fills the whole screen; the overlay panels
+          float on top of it rather than pushing it into a side column. */}
       <div className="canvas-area">
-        <LabPanel displayBools={displayBools} />
+        <LabPanel
+          displayBools={displayBools}
+          buildMode={buildMode}
+          setBuildMode={setBuildMode}
+          components={components}
+          setComponents={setComponents}
+        />
       </div>
 
-      {/* Right Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-content">
-          {/* Panel-Specific Content */}
-          <div className="panel-controls">
-            <div>
-              <h3>Instructions and Controls</h3>
-              <p>Drag the object or eye around and watch if and where a virtual image is visible!
-              If desired, right-click in the simulation area to save an image of the current setup.
-              Rotate the mirror and explore other controls below!</p>
-
-              <div className="control-group" style={{ marginTop: '1.0em', marginBottom: '1.5em' }}>
-                <label style={{ justifyContent: 'center' }}>Mirror angle </label>
-                <input
-                  type="range"
-                  min={-Math.PI}
-                  max={Math.PI}
-                  step="0.01"
-                  //value={mirrorAngle}
-                  //onChange={(e) => setMirrorAngle(parseFloat(e.target.value))}
-                  style={{ width: '100%' }}
-                />
-              </div>
-
-              <div className="control-group">
-                <button className={`control-button ${displayBools.gridOn ? 'active' : ''}`} onClick={() => setDisplayBools({ ...displayBools, gridOn: !displayBools.gridOn })}>
-                  {displayBools.gridOn ? 'Hide grid' : 'Show grid'}
-                </button>
-              </div>
-            </div>
-          </div>
+      {/* Three overlay panels, stacked from the bottom of the screen along
+          the right edge -- same floating-card look as the Stern-Gerlach
+          sim's on-canvas field controls. The plotting panel gets a fixed
+          height; the build panel grows to fill whatever's left above the
+          (content-sized) data collection panel. */}
+      <div className="overlay-panel-stack">
+        <div className="overlay-controls build-panel">
+          <BuildPanel
+            buildMode={buildMode}
+            armPlacement={armPlacement}
+            toggleRemoveMode={toggleRemoveMode}
+            displayBools={displayBools}
+            setDisplayBools={setDisplayBools}
+          />
         </div>
-      </aside>
+        <div className="overlay-controls data-collection-panel">
+          <DataCollectionPanel dcMode={dcMode} setDcMode={setDcMode} />
+        </div>
+        <div className="overlay-controls data-plotting-panel">
+          <DataPlottingPanel chartDisplayBools={chartDisplayBools} setChartDisplayBools={setChartDisplayBools} />
+        </div>
+      </div>
+
+      {/* Placement ghost: a half-opacity, full-scale preview of the armed
+          component that follows the cursor everywhere, including over the
+          overlay panels, until it's dropped on an empty grid square. */}
+      {armedType && ghostPos && (
+        <img
+          src={armedType.image}
+          alt=""
+          className="placement-ghost"
+          style={{ left: ghostPos.x, top: ghostPos.y, width: GRID_SIZE, height: GRID_SIZE }}
+          draggable="false"
+        />
+      )}
     </div>
   );
 }
