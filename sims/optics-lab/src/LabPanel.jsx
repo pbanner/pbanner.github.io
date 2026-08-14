@@ -517,11 +517,25 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
         };
 
         if (comp.type === 'detector') {
-          // The text block counter-rotates against the card's own rotation
-          // so it reads right-side up at 0°/180° -- and, left alone (no
-          // counter-rotation) at 90°/270°, comes out with its "down"
-          // direction pointing left/right respectively, which is exactly
-          // the "bottom points left or right" look asked for there.
+          // Each text element counter-rotates individually (not a shared
+          // wrapper around both) so it reads right-side up at 0°/180° --
+          // and, left alone (no counter-rotation) at 90°/270°, comes out
+          // with its "down" direction pointing left/right respectively,
+          // which is exactly the "bottom points left or right" look asked
+          // for there. Has to be per-element: label and count each sit off
+          // to the side of detector-content's own center, but that center
+          // is exactly the *card's* own rotation center too (detector-
+          // content is symmetrically inset -- see DETECTOR_OFFSET_X/Y), so
+          // a rotation shared by both around that one point would, at
+          // 180°, cancel the card's own rotation entirely -- flipping the
+          // text's orientation back upright as intended, but *also*
+          // flipping its position back to where it sits at 0°, leaving it
+          // stranded over whatever part of the now-upside-down image
+          // happens to be there instead of following the image the way
+          // the stripe does. Rotating each element around its own (small,
+          // off-center) box instead only ever spins the glyphs in place;
+          // their anchor point still moves whever the card's own rotation
+          // carries it, same as the stripe.
           const textRotation = comp.rotation === 180 ? 180 : 0;
           const color = comp.colorId != null ? PC_COLORS[comp.colorId] : '#303030';
           // Chart-hover is a class-driven echo of the same blue glow
@@ -562,11 +576,17 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
                     }}
                   />
                 )}
-                <div className="detector-text" style={{ transform: `rotate(${textRotation}deg)` }}>
-                  <div className="detector-label" style={{ left: DETECTOR_TEXT_CENTER_X, top: DETECTOR_LABEL_TOP }}>
+                <div className="detector-text">
+                  <div
+                    className="detector-label"
+                    style={{ left: DETECTOR_TEXT_CENTER_X, top: DETECTOR_LABEL_TOP, transform: `translate(-50%, -50%) rotate(${textRotation}deg)` }}
+                  >
                     {`D${detectorNumbers.get(comp.id)}`}
                   </div>
-                  <div className="detector-count" style={{ left: DETECTOR_TEXT_CENTER_X, top: DETECTOR_COUNT_TOP, color }}>
+                  <div
+                    className="detector-count"
+                    style={{ left: DETECTOR_TEXT_CENTER_X, top: DETECTOR_COUNT_TOP, color, transform: `translate(-50%, -50%) rotate(${textRotation}deg)` }}
+                  >
                     {comp.count ?? 0}
                   </div>
                 </div>

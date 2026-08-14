@@ -245,6 +245,26 @@
   z-index: 1000;
 }
 
+/* Guidance message under the placement ghost (see getPlacementMessage in
+   componentTypes.js) -- same floating-card look as .rotate-blocked-message,
+   but neutral gray rather than dark red since it's informational, not a
+   warning. */
+.placement-message {
+  position: fixed;
+  pointer-events: none;
+  transform: translate(-50%, 0);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #999;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: #333;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  text-align: center;
+}
+
 /* Components already placed on the grid. */
 .placed-component {
   position: absolute;
@@ -318,10 +338,13 @@
   pointer-events: none;
 }
 
+/* transform (translate to center on left/top, plus the counter-rotation)
+   is set inline per-element in LabPanel.jsx -- see the comment on
+   textRotation there for why each needs its own rotation origin rather
+   than sharing one on a wrapper. */
 .detector-label,
 .detector-count {
   position: absolute;
-  transform: translate(-50%, -50%);
   white-space: nowrap;
   font-family: Arial, sans-serif;
   font-size: 12px;

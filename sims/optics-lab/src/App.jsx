@@ -2,7 +2,11 @@ import { useState, useEffect } from 'react';
 import './App.css';
 import LabPanel, { GRID_SIZE } from './LabPanel.jsx';
 import { BuildPanel, DataCollectionPanel, DataPlottingPanel } from './panels.jsx';
-import { COMPONENT_TYPES, getDefaultFootprint } from './componentTypes.js';
+import { COMPONENT_TYPES, getDefaultFootprint, getPlacementMessage } from './componentTypes.js';
+
+// Gap between the placement ghost's own bottom edge and the guidance
+// message below it.
+const PLACEMENT_MESSAGE_GAP = 8;
 
 export default function App() {
   const [displayBools, setDisplayBools] = useState({
@@ -135,14 +139,23 @@ export default function App() {
           overlay panels, until it's dropped on an empty grid square. */}
       {armedType && ghostPos && (() => {
         const footprint = getDefaultFootprint(armedType); // always unrotated -- a fresh placement starts at rotation 0
+        const ghostHeight = footprint.h * GRID_SIZE;
         return (
-          <img
-            src={armedType.image}
-            alt=""
-            className="placement-ghost"
-            style={{ left: ghostPos.x, top: ghostPos.y, width: footprint.w * GRID_SIZE, height: footprint.h * GRID_SIZE }}
-            draggable="false"
-          />
+          <>
+            <img
+              src={armedType.image}
+              alt=""
+              className="placement-ghost"
+              style={{ left: ghostPos.x, top: ghostPos.y, width: footprint.w * GRID_SIZE, height: ghostHeight }}
+              draggable="false"
+            />
+            <div
+              className="placement-message"
+              style={{ left: ghostPos.x, top: ghostPos.y + ghostHeight / 2 + PLACEMENT_MESSAGE_GAP }}
+            >
+              {getPlacementMessage(armedType)}
+            </div>
+          </>
         );
       })()}
     </div>
