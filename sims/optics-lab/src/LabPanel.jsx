@@ -444,7 +444,7 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
             key={comp.id}
             src={type.image}
             alt={type.label}
-            className={`placed-component ${isDragging ? 'dragging' : ''}`}
+            className={`placed-component ${isDragging ? 'dragging' : ''} ${buildMode === 'remove' ? 'remove-mode' : ''}`}
             style={{
               left: anchorX + offset.x,
               top: anchorY + offset.y,
