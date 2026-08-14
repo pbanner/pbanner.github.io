@@ -9,12 +9,25 @@ import { PC_COLORS } from './colors.js';
 export const GRID_SIZE = 50;
 
 // Detector card layout. detector.png is byte-identical to the Stern-Gerlach
-// sim's PC.png (both 400x200), and the detector's 2x1 footprint renders it
-// at exactly 100x50px at GRID_SIZE=50 -- the same box size that sim's own
-// PC_WIDTH/PC_HEIGHT use -- so its exact fractional stripe/label/count
-// layout carries over unchanged, just re-expressed against this box size.
-const DETECTOR_BOX_WIDTH = 2 * GRID_SIZE;
-const DETECTOR_BOX_HEIGHT = 1 * GRID_SIZE;
+// sim's PC.png (both 400x200, a 2:1 image). The detector gets the same 6px
+// padding every other placed component has (see .placed-component in
+// App.css) -- within that padded space the image is fit the same way
+// object-fit: contain would fit it, preserving its own 2:1 aspect ratio
+// rather than stretching to the padded box's own (wider) one. The values
+// below are that resulting on-screen rect: fit-by-height, since the padded
+// box is relatively wider than the image, with the leftover width split
+// evenly as a letterboxing margin on each side. SG's exact fractional
+// stripe/label/count layout then carries over unchanged, just re-expressed
+// against this (rather than the full unpadded) box size.
+const DETECTOR_PADDING = 6; // matches .placed-component's padding
+const DETECTOR_FULL_WIDTH = 2 * GRID_SIZE;
+const DETECTOR_FULL_HEIGHT = 1 * GRID_SIZE;
+const DETECTOR_PADDED_WIDTH = DETECTOR_FULL_WIDTH - 2 * DETECTOR_PADDING;
+const DETECTOR_PADDED_HEIGHT = DETECTOR_FULL_HEIGHT - 2 * DETECTOR_PADDING;
+const DETECTOR_BOX_HEIGHT = DETECTOR_PADDED_HEIGHT; // fits by height -- the padded box is wider (proportionally) than the image
+const DETECTOR_BOX_WIDTH = DETECTOR_BOX_HEIGHT * 2; // detector.png's own 2:1 aspect ratio
+const DETECTOR_OFFSET_X = DETECTOR_PADDING + (DETECTOR_PADDED_WIDTH - DETECTOR_BOX_WIDTH) / 2;
+const DETECTOR_OFFSET_Y = DETECTOR_PADDING; // no vertical letterboxing -- fits exactly
 const DETECTOR_STRIPE_CENTER_X = 330 * (DETECTOR_BOX_WIDTH / 400);
 const DETECTOR_STRIPE_WIDTH = 50 * (DETECTOR_BOX_WIDTH / 400);
 const DETECTOR_TEXT_CENTER_X = 190 * (DETECTOR_BOX_WIDTH / 400);
@@ -518,23 +531,32 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
               style={componentStyle}
               onMouseDown={(e) => handleComponentMouseDown(e, comp)}
             >
-              <img src={type.image} alt={type.label} className="placed-component-image" draggable="false" />
-              {comp.colorId != null && (
-                <div
-                  className="detector-stripe"
-                  style={{
-                    left: DETECTOR_STRIPE_CENTER_X - DETECTOR_STRIPE_WIDTH / 2,
-                    width: DETECTOR_STRIPE_WIDTH,
-                    background: PC_COLORS[comp.colorId],
-                  }}
-                />
-              )}
-              <div className="detector-text" style={{ transform: `rotate(${textRotation}deg)` }}>
-                <div className="detector-label" style={{ left: DETECTOR_TEXT_CENTER_X, top: DETECTOR_LABEL_TOP }}>
-                  {`D${detectorNumbers.get(comp.id)}`}
-                </div>
-                <div className="detector-count" style={{ left: DETECTOR_TEXT_CENTER_X, top: DETECTOR_COUNT_TOP, color }}>
-                  {comp.count ?? 0}
+              {/* Inset by the same 6px padding every other component gets,
+                  sized to the image's actual rendered rect there (see the
+                  DETECTOR_* constants) -- everything inside is positioned
+                  against *this* box, not the full unpadded footprint. */}
+              <div
+                className="detector-content"
+                style={{ left: DETECTOR_OFFSET_X, top: DETECTOR_OFFSET_Y, width: DETECTOR_BOX_WIDTH, height: DETECTOR_BOX_HEIGHT }}
+              >
+                <img src={type.image} alt={type.label} className="placed-component-image" draggable="false" />
+                {comp.colorId != null && (
+                  <div
+                    className="detector-stripe"
+                    style={{
+                      left: DETECTOR_STRIPE_CENTER_X - DETECTOR_STRIPE_WIDTH / 2,
+                      width: DETECTOR_STRIPE_WIDTH,
+                      background: PC_COLORS[comp.colorId],
+                    }}
+                  />
+                )}
+                <div className="detector-text" style={{ transform: `rotate(${textRotation}deg)` }}>
+                  <div className="detector-label" style={{ left: DETECTOR_TEXT_CENTER_X, top: DETECTOR_LABEL_TOP }}>
+                    {`D${detectorNumbers.get(comp.id)}`}
+                  </div>
+                  <div className="detector-count" style={{ left: DETECTOR_TEXT_CENTER_X, top: DETECTOR_COUNT_TOP, color }}>
+                    {comp.count ?? 0}
+                  </div>
                 </div>
               </div>
             </div>
