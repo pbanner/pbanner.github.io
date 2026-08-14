@@ -169,7 +169,7 @@ export default function WaveplateAngleControl({ angle, onChangeAngle }) {
             if (e.key === 'Enter') e.currentTarget.blur();
           }}
         />
-        <span>°</span>
+        <span style={{ fontSize: '18px' }}>°</span>
       </div>
     </div>
   );
