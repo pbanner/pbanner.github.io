@@ -15,6 +15,10 @@ let nextId = 1;
 function makeComponentId() {
   return `c${nextId++}`;
 }
+// If weird component bugs persis, can try this alternative:
+// function makeComponentId() {
+//   return crypto.randomUUID();
+// }
 
 // Pixel -> grid-cell conversion, clamped to whatever grid currently fits in
 // the canvas. Returns null if the point falls outside the grid entirely.
@@ -379,9 +383,13 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
           return prev.map((c) => (c.id === draggingId && free ? { ...c, col, row } : c));
         });
       }
-      // Never actually dragged -- this was a click. Toggle selection instead
-      // (the same component again deselects it, a different one switches to it).
-      if (!dragMovedRef.current) {
+      if (dragMovedRef.current) {
+        // An actual drag -- the component just moved becomes the selected
+        // one, replacing whatever was selected before (if anything).
+        setSelectedId(draggingId);
+      } else {
+        // Never actually dragged -- this was a click. Toggle selection instead
+        // (the same component again deselects it, a different one switches to it).
         setSelectedId((prev) => (prev === draggingId ? null : draggingId));
       }
       setDragPosBoth(null);
