@@ -85,6 +85,15 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
   const cols = Math.max(1, Math.floor(canvasDims.width / GRID_SIZE));
   const rows = Math.max(1, Math.floor(canvasDims.height / GRID_SIZE));
 
+  // Inert (no highlight, no button) while build/remove mode is active or a
+  // drag is in progress -- even for a drag of the selected component itself,
+  // so the button doesn't have to chase its free-following drag position.
+  // It reappears once that mode/drag ends, right where it was.
+  const selectionActive = !buildMode && draggingId == null;
+  const selectedComp = selectionActive && selectedId != null
+    ? components.find((c) => c.id === selectedId)
+    : null;
+
   // Resize canvas to fill container
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -129,34 +138,42 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
       ctx.stroke();
     }
 
-    let highlightCell = null;
-    let isRemoveHighlight = false;
+        let highlightCell = null;
+    let highlightKind = null; // 'place' | 'remove' | 'drag' | 'select'
     if (draggingId != null && dragPos) {
-      // Same snap math as the drag's own mouseup handler, so the highlight
-      // always matches where the component will actually land.
       highlightCell = {
         col: clamp(Math.round(dragPos.x / GRID_SIZE), 0, cols - 1),
         row: clamp(Math.round(dragPos.y / GRID_SIZE), 0, rows - 1),
       };
+      highlightKind = 'drag';
     } else if (hoveredCell && (buildMode?.place || buildMode === 'remove')) {
       highlightCell = hoveredCell;
-      isRemoveHighlight = buildMode === 'remove';
+      highlightKind = buildMode === 'remove' ? 'remove' : 'place';
+    } else if (selectedComp) {
+      // Selection uses this same cell highlight (rather than a glow on the
+      // component itself) so there's no flash-of-blue-then-red as a click
+      // transitions from "maybe a drag" (which shows this highlight too)
+      // into "just a selection" once mouseup confirms it never moved.
+      highlightCell = { col: selectedComp.col, row: selectedComp.row };
+      highlightKind = 'select';
     }
 
     if (highlightCell) {
-      // Excludes the dragged component's own id -- its origin/current cell
-      // shouldn't read as "occupied" just because it's the thing being moved.
-      const occupied = components.some((c) => c.col === highlightCell.col && c.row === highlightCell.row && c.id !== draggingId);
       let fill;
-      if (isRemoveHighlight) {
-        fill = occupied ? 'rgba(231, 76, 60, 0.35)' : 'rgba(231, 76, 60, 0.12)';
+      if (highlightKind === 'select') {
+        fill = 'rgba(52, 152, 219, 0.25)';
       } else {
-        fill = occupied ? 'rgba(231, 76, 60, 0.25)' : 'rgba(52, 152, 219, 0.25)';
+        const occupied = components.some((c) => c.col === highlightCell.col && c.row === highlightCell.row && c.id !== draggingId);
+        if (highlightKind === 'remove') {
+          fill = occupied ? 'rgba(231, 76, 60, 0.35)' : 'rgba(231, 76, 60, 0.12)';
+        } else {
+          fill = occupied ? 'rgba(231, 76, 60, 0.25)' : 'rgba(52, 152, 219, 0.25)';
+        }
       }
       ctx.fillStyle = fill;
       ctx.fillRect(highlightCell.col * GRID_SIZE, highlightCell.row * GRID_SIZE, GRID_SIZE, GRID_SIZE);
     }
-  }, [components, canvasDims, displayBools, buildMode, hoveredCell, draggingId, dragPos, cols, rows]);
+  }, [components, canvasDims, displayBools, buildMode, hoveredCell, draggingId, dragPos, cols, rows, selectedComp]);
 
   const eraseAtClientPos = useCallback((clientX, clientY) => {
     const canvas = canvasRef.current;
@@ -186,6 +203,7 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
       if (components.some((c) => c.col === cell.col && c.row === cell.row)) return; // occupied
       setComponents((prev) => [...prev, { id: makeComponentId(), type: buildMode.place, col: cell.col, row: cell.row, rotation: 0 }]);
       setBuildMode(null); // single-shot placement, same as the Stern-Gerlach sim's build mode
+      setSelectedId(null); // a fresh placement always starts deselected, not whatever was selected before
       return;
     }
     // A click that lands on empty canvas (not on a component -- see
@@ -303,15 +321,6 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
     setComponents((prev) => prev.map((c) => (c.id === selectedId ? { ...c, rotation: (c.rotation + 90) % 360 } : c)));
   };
 
-  // Inert (no glow, no button) while build/remove mode is active or a drag
-  // is in progress -- even for a drag of the selected component itself, so
-  // the button doesn't have to chase its free-following drag position. It
-  // reappears once that mode/drag ends, right where it was.
-  const selectionActive = !buildMode && draggingId == null;
-  const selectedComp = selectionActive && selectedId != null
-    ? components.find((c) => c.id === selectedId)
-    : null;
-
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
       <canvas
@@ -332,7 +341,7 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
             key={comp.id}
             src={type.image}
             alt={type.label}
-            className={`placed-component ${isDragging ? 'dragging' : ''} ${selectionActive && comp.id === selectedId ? 'selected' : ''}`}
+            className={`placed-component ${isDragging ? 'dragging' : ''}`}
             style={{ left: x, top: y, width: GRID_SIZE, height: GRID_SIZE, transform: `rotate(${comp.rotation}deg)` }}
             draggable="false"
             onMouseDown={(e) => handleComponentMouseDown(e, comp)}
