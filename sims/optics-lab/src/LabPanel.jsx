@@ -5,7 +5,7 @@ import { getComponentType, getDefaultFootprint, getRotatedFootprint } from './co
 // cell component, and the size of the placement ghost in App.jsx. Larger
 // components (see COMPONENT_TYPES' footprint) are placed sized in multiples
 // of this.
-export const GRID_SIZE = 64;
+export const GRID_SIZE = 50;
 
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
