@@ -250,14 +250,19 @@
 
 /* Detector card -- a wrapper div (instead of a bare <img>, since an <img>
    can't have children) holding the detector image plus a colored stripe
-   and a label/count text overlay, both positioned in the box's own
-   unrotated coordinate frame (see LabPanel's DETECTOR_* constants). Unlike
-   the other placed components, it isn't inset with padding -- the box's
-   2:1 aspect ratio already matches detector.png exactly, so the image
-   fills it edge to edge, same as the Stern-Gerlach sim's PC.png does on
-   its canvas. */
+   and a label/count text overlay. .placed-component's own padding is inert
+   here (it isn't the containing block for absolutely positioned children),
+   so it's turned off and replicated by .detector-content instead, sized
+   and positioned to land exactly where that 6px padding plus the image's
+   own object-fit: contain letterboxing would put it (see LabPanel's
+   DETECTOR_* constants) -- everything below is positioned in that box's
+   own unrotated coordinate frame, not the full unpadded footprint. */
 .placed-component.detector-component {
   padding: 0;
+}
+
+.detector-content {
+  position: absolute;
 }
 
 .placed-component-image {
@@ -347,20 +352,54 @@
   text-align: center;
 }
 
-/* Stand-in for the eventual chart in the data-plotting panel -- sits beside
-   .data-plotting-options rather than below it, so it stretches to fill
-   the row's full height instead of needing its own min-height. */
-.plot-placeholder {
-  flex: 1;
+/* Histogram -- sits beside .data-plotting-options rather than below it, so
+   it stretches to fill the row's full height instead of needing its own
+   min-height. Same layout as the Stern-Gerlach sim's .histogram-panel/
+   .histogram-canvas-wrap/.histogram-loupe. */
+.histogram-panel {
+  flex: 1 1 auto;
   min-width: 0;
-  border: 1px dashed #ccc;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #999;
-  font-size: 0.85rem;
-  background: #fafafa;
+  padding: 8px 10px;
+}
+
+.histogram-canvas-wrap {
+  width: 100%;
+  height: 100%;
+}
+
+.histogram-canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.histogram-magnifier-toggle {
+  position: absolute;
+  top: 6px;
+  left: -24px;
+  z-index: 2;
+}
+
+/* The magnifier loupe -- a small, separate canvas showing a zoomed crop of
+   the chart under the cursor. The circular shape and thick ring are plain
+   CSS (not canvas clipping): simpler, and avoids drawImage self-copy
+   ambiguity since the loupe is always a distinct canvas element from the
+   main chart it's sampling from. */
+.histogram-loupe {
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  border: 4px solid #333;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.histogram-loupe canvas {
+  display: block;
 }
 
 /* Responsive for smaller screens */

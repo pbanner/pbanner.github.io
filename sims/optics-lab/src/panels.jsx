@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { COMPONENT_TYPES } from './componentTypes.js';
 import { SliderPlusTextboxControl, PlayIcon, StopIcon } from './controls.jsx';
+import Histogram from './Histogram.jsx';
 
 // One icon-only button in the Build panel's component row, plus the space
 // above it (in BuildPanel) where its hover label appears -- same pattern as
@@ -132,9 +133,11 @@ export function DataCollectionPanel({ dcMode, setDcMode }) {
 }
 
 // Bottom overlay panel -- controls identical in kind to the Stern-Gerlach
-// sim's "Chart Options" group, plus a placeholder plot area in place of an
-// actual Histogram (there's nothing to plot yet).
-export function DataPlottingPanel({ chartDisplayBools, setChartDisplayBools }) {
+// sim's "Chart Options" group, plus the Histogram itself (ported from that
+// sim -- see Histogram.jsx for what's different: no SG/arm grouping or
+// theory line, since there's nothing here yet to group detectors by or
+// compute a theoretical prediction from).
+export function DataPlottingPanel({ chartDisplayBools, setChartDisplayBools, components }) {
   return (
     <div className="data-plotting-row">
       <div className="data-plotting-options">
@@ -190,8 +193,10 @@ export function DataPlottingPanel({ chartDisplayBools, setChartDisplayBools }) {
         </label>
       </div>
 
-      <div className="plot-placeholder">
-        <span>Plot preview</span>
+      <div className="histogram-panel">
+        <div className="histogram-canvas-wrap">
+          <Histogram components={components} displayBools={chartDisplayBools} />
+        </div>
       </div>
     </div>
   );

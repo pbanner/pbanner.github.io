@@ -106,7 +106,7 @@ export default function App() {
           <DataCollectionPanel dcMode={dcMode} setDcMode={setDcMode} />
         </div>
         <div className="overlay-controls data-plotting-panel">
-          <DataPlottingPanel chartDisplayBools={chartDisplayBools} setChartDisplayBools={setChartDisplayBools} />
+          <DataPlottingPanel chartDisplayBools={chartDisplayBools} setChartDisplayBools={setChartDisplayBools} components={components} />
         </div>
       </div>
 
