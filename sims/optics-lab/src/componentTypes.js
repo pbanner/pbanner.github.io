@@ -8,6 +8,8 @@ import hwpImage from './assets/hwp.png';
 import qwpImage from './assets/qwp.png';
 import mirrorImage from './assets/mirror.png';
 import pbsImage from './assets/pbs.png';
+import npbsImage from './assets/npbs.png';
+import blockImage from './assets/beam-block.png';
 import detectorImage from './assets/detector.png';
 
 // Shown under the placement ghost while a component is armed (see App.jsx) --
@@ -19,15 +21,22 @@ const DEFAULT_PLACEMENT_MESSAGE = 'After placing, click to\nrotate component.';
 const WAVE_PLATE_PLACEMENT_MESSAGE = 'After placing, click to\nrotate component or\nchange angle.';
 
 // footprint is in grid cells at rotation 0 -- {w: 1, h: 1} (a single square)
-// unless given otherwise. The laser is the one exception so far: 2 cells
-// wide, 1 tall, i.e. it extends across two cells in the same row.
+// unless given otherwise. The laser and detector are the exceptions: 2 cells
+// wide, 1 tall, i.e. they extend across two cells in the same row.
+//
+// Order here is also the Build panel's own icon grid order (see BuildPanel
+// in panels.jsx, and .add-component-row's 4-column grid in App.css) -- two
+// rows of four: laser/mirror/beam block/detector, then the two wave plates/
+// NPBS/PBS.
 export const COMPONENT_TYPES = [
   { id: 'laser', label: 'Laser', image: laserImage, footprint: { w: 2, h: 1 }, hasPower: true },
+  { id: 'mirror', label: 'Mirror', image: mirrorImage },
+  { id: 'block', label: 'Beam Block', image: blockImage },
+  { id: 'detector', label: 'Detector', image: detectorImage, footprint: { w: 2, h: 1 } },
   { id: 'hwp', label: 'Half-Wave Plate', image: hwpImage, placementMessage: WAVE_PLATE_PLACEMENT_MESSAGE, hasAngle: true },
   { id: 'qwp', label: 'Quarter-Wave Plate', image: qwpImage, placementMessage: WAVE_PLATE_PLACEMENT_MESSAGE, hasAngle: true },
-  { id: 'mirror', label: 'Mirror', image: mirrorImage },
+  { id: 'npbs', label: 'Non-Polarizing Beam Splitter', image: npbsImage },
   { id: 'pbs', label: 'Polarizing Beam Splitter', image: pbsImage },
-  { id: 'detector', label: 'Detector', image: detectorImage, footprint: { w: 2, h: 1 } },
 ];
 
 export function getComponentType(id) {

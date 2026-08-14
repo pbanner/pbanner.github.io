@@ -60,7 +60,7 @@
 }
 
 .build-panel {
-  flex: 0 0 165px;
+  flex: 0 0 210px;
   width: 320px;
   overflow-y: auto;
 }
@@ -201,12 +201,14 @@
   white-space: nowrap;
 }
 
+/* Fixed 4-column grid (2 rows of 4, given COMPONENT_TYPES' 8 entries) --
+   deliberately not flex-wrap, which would reflow to whatever fits a given
+   width rather than the specific two rows wanted here (see COMPONENT_TYPES'
+   own ordering comment in componentTypes.js). */
 .add-component-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
-  row-gap: 8px;
   margin: 0 0 0px 0;
 }
 
@@ -219,7 +221,6 @@
 }
 
 .icon-only-button-square {
-  flex: 1;
   min-width: 36px;
   padding: 4px;
 }
@@ -487,7 +488,7 @@ input.waveplate-angle-readout[type=number] {
   -moz-appearance: textfield;
 }
 
-/* LaserPowerControl -- the label/slider/textbox shown to the right of a
+/* LaserPowerControl -- the label/slider/textbox shown centered below a
    selected laser (see LabPanel's selectedComp block), reusing the same
    SliderPlusTextboxControl the old Data Collection Controls rate slider
    did. Unlike the wave plate's own (borderless) control, this keeps the
@@ -495,7 +496,6 @@ input.waveplate-angle-readout[type=number] {
    panels, since there's no ruler/canvas here competing with it visually. */
 .laser-power-control-anchor {
   position: absolute;
-  transform: translateY(-50%);
   z-index: 7;
 }
 

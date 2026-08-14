@@ -54,8 +54,7 @@ const ROTATE_BUTTON_SIZE = 26; // px
 // WaveplateAngleControl: sits to the right of a selected wave plate's cell.
 const WAVEPLATE_CONTROL_GAP = 12; // px
 
-// Laser Power control: sits to the right of a selected laser's cell.
-const LASER_POWER_CONTROL_GAP = 12; // px
+// Laser Power control: sits centered below a selected laser's cell.
 const LASER_POWER_CONTROL_WIDTH = 200; // px
 
 // On-canvas angle indicator: how far in (as a % of the component's own
@@ -727,7 +726,7 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
       {selectedComp && hasPowerControl(getComponentType(selectedComp.type)) && (() => {
         const ft = getRotatedFootprint(getComponentType(selectedComp.type), selectedComp.rotation);
         const anchorX = (selectedComp.col + ft.w/2) * GRID_SIZE - LASER_POWER_CONTROL_WIDTH / 2;
-        const anchorY = (selectedComp.row + 1 + ft.h) * GRID_SIZE;
+        const anchorY = (selectedComp.row + ft.h) * GRID_SIZE + 10;
         return (
           <div className="laser-power-control-anchor" style={{ left: anchorX, top: anchorY }}>
             <div className="laser-power-control" style={{ width: LASER_POWER_CONTROL_WIDTH }}>
