@@ -22,7 +22,7 @@ const WAVE_PLATE_PLACEMENT_MESSAGE = 'After placing, click to\nrotate component 
 // unless given otherwise. The laser is the one exception so far: 2 cells
 // wide, 1 tall, i.e. it extends across two cells in the same row.
 export const COMPONENT_TYPES = [
-  { id: 'laser', label: 'Laser', image: laserImage, footprint: { w: 2, h: 1 } },
+  { id: 'laser', label: 'Laser', image: laserImage, footprint: { w: 2, h: 1 }, hasPower: true },
   { id: 'hwp', label: 'Half-Wave Plate', image: hwpImage, placementMessage: WAVE_PLATE_PLACEMENT_MESSAGE, hasAngle: true },
   { id: 'qwp', label: 'Quarter-Wave Plate', image: qwpImage, placementMessage: WAVE_PLATE_PLACEMENT_MESSAGE, hasAngle: true },
   { id: 'mirror', label: 'Mirror', image: mirrorImage },
@@ -46,6 +46,11 @@ export function getPlacementMessage(type) {
 // WaveplateAngleControl usage and the comp.angle field it reads/writes.
 export function hasAngleControl(type) {
   return !!type.hasAngle;
+}
+// Whether a type has a Laser Power control -- currently just the laser. See
+// LabPanel's use of it and the comp.power field it reads/writes.
+export function hasPowerControl(type) {
+  return !!type.hasPower;
 }
 
 // A type's footprint at rotation 0 -- defaults to a single cell.

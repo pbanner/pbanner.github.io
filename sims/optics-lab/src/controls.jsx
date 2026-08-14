@@ -5,7 +5,7 @@
 export function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step, disabled = false }) {
   return (
     <div className="control-group">
-      <label style={{ margin: '-0.25em 0em' }}>{label}</label>
+      <label style={{ margin: '0em 0em -0.5em 0', fontSize: '14px' }}>{label}</label>
       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
         <input
           type="range"
@@ -27,7 +27,7 @@ export function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, ma
             const v = parseFloat(e.target.value);
             if (!Number.isNaN(v)) onChangeNum(v);
           }}
-          style={{ width: '70px', padding: '2px' }}
+          style={{ width: '55px', padding: '2px' }}
           disabled={disabled}
         />
       </div>

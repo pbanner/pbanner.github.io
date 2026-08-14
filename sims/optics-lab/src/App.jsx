@@ -22,7 +22,7 @@ export default function App() {
   // Where the placement ghost is currently drawn, in viewport (client) coords.
   const [ghostPos, setGhostPos] = useState(null);
 
-  const [dcMode, setDcMode] = useState({ mode: 'single', running: false, rate: 20 });
+  const [dcMode, setDcMode] = useState({ mode: 'single', running: false });
   const [chartDisplayBools, setChartDisplayBools] = useState({
     showPercentages: 2,    // 0 = counts only, 1 = percentages only, 2 = both
     showErrorBars: false,
@@ -119,6 +119,7 @@ export default function App() {
             buildMode={buildMode}
             armPlacement={armPlacement}
             toggleRemoveMode={toggleRemoveMode}
+            components={components}
           />
         </div>
         <div className="overlay-controls data-collection-panel">

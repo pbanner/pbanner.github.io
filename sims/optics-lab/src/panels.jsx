@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import { COMPONENT_TYPES } from './componentTypes.js';
-import { SliderPlusTextboxControl, PlayIcon, StopIcon } from './controls.jsx';
+import { PlayIcon, StopIcon } from './controls.jsx';
 import Histogram from './Histogram.jsx';
 
 // One icon-only button in the Build panel's component row, plus the space
 // above it (in BuildPanel) where its hover label appears -- same pattern as
 // AddComponentButton in the Stern-Gerlach sim's App.jsx.
-function ComponentButton({ type, active, onClick, onMouseEnter, onMouseLeave }) {
+function ComponentButton({ type, active, disabled, title, onClick, onMouseEnter, onMouseLeave }) {
   return (
     <button
       type="button"
       className={`control-bar-button icon-only-button icon-only-button-square ${active ? 'active' : ''}`}
       aria-label={`Add ${type.label}`}
+      title={title}
+      disabled={disabled}
       onClick={onClick}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
@@ -26,10 +28,14 @@ function ComponentButton({ type, active, onClick, onMouseEnter, onMouseLeave }) 
 // live elsewhere) and there's no fixed set of "legal" placement sites --
 // any unoccupied grid square works, so LabPanel does all of that checking
 // itself once a component is armed for placement.
-export function BuildPanel({ buildMode, armPlacement, toggleRemoveMode }) {
+// Capped at one laser -- see LabPanel's own enforcement of this at
+// the actual placement site; this is just what keeps a second one from
+// ever getting armed.
+export function BuildPanel({ buildMode, armPlacement, toggleRemoveMode, components }) {
   const [hovered, setHovered] = useState(null);
   const placingId = buildMode?.place ?? null;
   const removing = buildMode === 'remove';
+  const hasLaser = components.some((c) => c.type === 'laser');
 
   return (
     <>
@@ -39,16 +45,21 @@ export function BuildPanel({ buildMode, armPlacement, toggleRemoveMode }) {
         {'Add: ' + (COMPONENT_TYPES.find((c) => c.id === hovered)?.label ?? '')}
       </p>
       <div className="add-component-row">
-        {COMPONENT_TYPES.map((type) => (
-          <ComponentButton
-            key={type.id}
-            type={type}
-            active={placingId === type.id}
-            onMouseEnter={() => setHovered(type.id)}
-            onMouseLeave={() => setHovered(null)}
-            onClick={(e) => armPlacement(type.id, e)}
-          />
-        ))}
+        {COMPONENT_TYPES.map((type) => {
+          const disabled = type.id === 'laser' && hasLaser;
+          return (
+            <ComponentButton
+              key={type.id}
+              type={type}
+              active={placingId === type.id}
+              disabled={disabled}
+              title={disabled ? 'Only one laser allowed' : undefined}
+              onMouseEnter={() => setHovered(type.id)}
+              onMouseLeave={() => setHovered(null)}
+              onClick={(e) => armPlacement(type.id, e)}
+            />
+          );
+        })}
       </div>
 
       <button
@@ -94,19 +105,6 @@ export function DataCollectionPanel({ dcMode, setDcMode }) {
           </label>
         </div>
       </div>
-
-      {dcMode.mode === 'stream' && (
-        <div className="control-group" style={{ marginBottom: '0.5em' }}>
-          <SliderPlusTextboxControl
-            label="Photons per Second"
-            valueNum={dcMode.rate}
-            onChangeNum={(val) => setDcMode({ ...dcMode, rate: val })}
-            min={0.0}
-            max={100}
-            step={1.0}
-          />
-        </div>
-      )}
 
       <div style={{ display: 'flex', flexDirection: 'row', gap: '10px' }}>
         <button

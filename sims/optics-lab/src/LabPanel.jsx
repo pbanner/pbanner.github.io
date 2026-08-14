@@ -1,7 +1,8 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { getComponentType, getDefaultFootprint, getRotatedFootprint, hasAngleControl } from './componentTypes.js';
+import { getComponentType, getDefaultFootprint, getRotatedFootprint, hasAngleControl, hasPowerControl } from './componentTypes.js';
 import { PC_COLORS } from './colors.js';
 import WaveplateAngleControl from './WaveplateAngleControl.jsx';
+import { SliderPlusTextboxControl } from './controls.jsx';
 
 // Side length (px) of one grid square -- also the placed size of a single-
 // cell component, and the size of the placement ghost in App.jsx. Larger
@@ -52,6 +53,10 @@ const ROTATE_BUTTON_SIZE = 26; // px
 
 // WaveplateAngleControl: sits to the right of a selected wave plate's cell.
 const WAVEPLATE_CONTROL_GAP = 12; // px
+
+// Laser Power control: sits to the right of a selected laser's cell.
+const LASER_POWER_CONTROL_GAP = 12; // px
+const LASER_POWER_CONTROL_WIDTH = 200; // px
 
 // On-canvas angle indicator: how far in (as a % of the component's own
 // height) it stays clear of the top/bottom edge, so it never sits flush
@@ -345,6 +350,9 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
       const cell = cellFromPoint(e.clientX - rect.left, e.clientY - rect.top, cols, rows);
       if (!cell) return;
       const type = getComponentType(buildMode.place);
+      // Capped at one laser -- BuildPanel already disables the Add Laser
+      // button once one's placed, but this is the actual enforcement point.
+      if (buildMode.place === 'laser' && components.some((c) => c.type === 'laser')) return;
       const ft = getRotatedFootprint(type, 0); // freshly placed, always starts unrotated
       if (!isFootprintFree(components, cell.col, cell.row, ft.w, ft.h, null, cols, rows)) return;
       setComponents((prev) => {
@@ -355,6 +363,9 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
         }
         if (hasAngleControl(type)) {
           newComp.angle = 0;
+        }
+        if (hasPowerControl(type)) {
+          newComp.power = 20; // matches the old Data Collection Controls rate slider's own default
         }
         return [...prev, newComp];
       });
@@ -710,6 +721,27 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
                 setComponents((prev) => prev.map((c) => (c.id === selectedComp.id ? { ...c, angle: newAngle } : c)));
               }}
             />
+          </div>
+        );
+      })()}
+      {selectedComp && hasPowerControl(getComponentType(selectedComp.type)) && (() => {
+        const ft = getRotatedFootprint(getComponentType(selectedComp.type), selectedComp.rotation);
+        const anchorX = (selectedComp.col + ft.w/2) * GRID_SIZE - LASER_POWER_CONTROL_WIDTH / 2;
+        const anchorY = (selectedComp.row + 1 + ft.h) * GRID_SIZE;
+        return (
+          <div className="laser-power-control-anchor" style={{ left: anchorX, top: anchorY }}>
+            <div className="laser-power-control" style={{ width: LASER_POWER_CONTROL_WIDTH }}>
+              <SliderPlusTextboxControl
+                label="Laser Power"
+                valueNum={selectedComp.power ?? 20}
+                onChangeNum={(newPower) => {
+                  setComponents((prev) => prev.map((c) => (c.id === selectedComp.id ? { ...c, power: newPower } : c)));
+                }}
+                min={0.0}
+                max={100}
+                step={1.0}
+              />
+            </div>
           </div>
         );
       })()}
