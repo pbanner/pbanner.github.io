@@ -5,6 +5,28 @@ import { getComponentType } from './componentTypes.js';
 // every component image, and the size of the placement ghost in App.jsx.
 export const GRID_SIZE = 64;
 
+// A mousedown/mouseup pair on a placed component counts as a "click" (select
+// it) rather than a drag as long as the cursor never moved more than this
+// far in between -- keeps a slightly-shaky click from being misread as an
+// intent to move the component.
+const CLICK_MOVE_THRESHOLD = 4; // px
+
+// Rotate button: sits just off the selected component's cell, offset by this
+// gap -- same idea as the Stern-Gerlach sim's field-overlay anchoring.
+const ROTATE_BUTTON_GAP = 8; // px
+const ROTATE_BUTTON_SIZE = 26; // px
+
+// Clockwise rotate glyph (Feather icons' "rotate-cw"): a ~270° arc plus a
+// short hooked line at its open end that reads as the arrowhead.
+function RotateIcon({ size = 15 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#8b0000" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M23 4v6h-6" />
+      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+    </svg>
+  );
+}
+
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
 }
@@ -37,11 +59,24 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
   const [dragPos, setDragPos] = useState(null);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const dragPosRef = useRef(null); // mirrors dragPos, read from the mouseup handler directly
+  // Whether the mouse has moved past CLICK_MOVE_THRESHOLD since the current
+  // drag started -- distinguishes "clicked to select" from "dragged to move"
+  // on mouseup, since both start the same way (mousedown on the component).
+  const dragStartClientRef = useRef({ x: 0, y: 0 });
+  const dragMovedRef = useRef(false);
 
   const setDragPosBoth = (pos) => {
     dragPosRef.current = pos;
     setDragPos(pos);
   };
+
+  // Which placed component (by id) is currently selected -- shows the red
+  // selection glow and the rotate button. Only one at a time. Left as-is
+  // (not cleared) while build/remove mode is active -- selection just goes
+  // inert (see isSelected/selectedComp below) so the rotate button can't
+  // float over whatever's being placed/removed, and picks back up right
+  // where it was once that mode is left again.
+  const [selectedId, setSelectedId] = useState(null);
 
   // Remove-mode drag-erase is tracked in a ref (not state) since it doesn't
   // need to trigger a re-render by itself -- only the resulting setComponents does.
@@ -143,14 +178,20 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
   };
 
   const handleCanvasClick = (e) => {
-    if (!buildMode?.place) return;
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const cell = cellFromPoint(e.clientX - rect.left, e.clientY - rect.top, cols, rows);
-    if (!cell) return;
-    if (components.some((c) => c.col === cell.col && c.row === cell.row)) return; // occupied
-    setComponents((prev) => [...prev, { id: makeComponentId(), type: buildMode.place, col: cell.col, row: cell.row }]);
-    setBuildMode(null); // single-shot placement, same as the Stern-Gerlach sim's build mode
+    if (buildMode?.place) {
+      const canvas = canvasRef.current;
+      const rect = canvas.getBoundingClientRect();
+      const cell = cellFromPoint(e.clientX - rect.left, e.clientY - rect.top, cols, rows);
+      if (!cell) return;
+      if (components.some((c) => c.col === cell.col && c.row === cell.row)) return; // occupied
+      setComponents((prev) => [...prev, { id: makeComponentId(), type: buildMode.place, col: cell.col, row: cell.row, rotation: 0 }]);
+      setBuildMode(null); // single-shot placement, same as the Stern-Gerlach sim's build mode
+      return;
+    }
+    // A click that lands on empty canvas (not on a component -- see
+    // handleComponentMouseDown, which never lets this fire for those)
+    // deselects, same as clicking a selected component a second time.
+    if (!buildMode) setSelectedId(null);
   };
 
   const handleCanvasMouseMove = (e) => {
@@ -204,6 +245,8 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
       x: (e.clientX - rect.left) - comp.col * GRID_SIZE,
       y: (e.clientY - rect.top) - comp.row * GRID_SIZE,
     };
+    dragStartClientRef.current = { x: e.clientX, y: e.clientY };
+    dragMovedRef.current = false;
     setDraggingId(comp.id);
     setDragPosBoth({ x: comp.col * GRID_SIZE, y: comp.row * GRID_SIZE });
   };
@@ -214,6 +257,9 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
     const onMove = (e) => {
       const canvas = canvasRef.current;
       if (!canvas) return;
+      const dx = e.clientX - dragStartClientRef.current.x;
+      const dy = e.clientY - dragStartClientRef.current.y;
+      if (Math.hypot(dx, dy) > CLICK_MOVE_THRESHOLD) dragMovedRef.current = true;
       const rect = canvas.getBoundingClientRect();
       setDragPosBoth({
         x: (e.clientX - rect.left) - dragOffsetRef.current.x,
@@ -221,10 +267,6 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
       });
     };
 
-    // Reads dragPosRef directly rather than a setDragPos functional updater --
-    // updater functions must stay pure (React may invoke them speculatively,
-    // e.g. under StrictMode), so the setComponents side effect below can't
-    // safely live inside one.
     const onUp = () => {
       const pos = dragPosRef.current;
       if (pos) {
@@ -234,6 +276,11 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
           const occupied = prev.some((c) => c.id !== draggingId && c.col === col && c.row === row);
           return prev.map((c) => (c.id === draggingId && !occupied ? { ...c, col, row } : c));
         });
+      }
+      // Never actually dragged -- this was a click. Toggle selection instead
+      // (the same component again deselects it, a different one switches to it).
+      if (!dragMovedRef.current) {
+        setSelectedId((prev) => (prev === draggingId ? null : draggingId));
       }
       setDragPosBoth(null);
       setDraggingId(null);
@@ -248,6 +295,22 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
   }, [draggingId, cols, rows, setComponents]);
 
   const cursor = buildMode?.place || buildMode === 'remove' ? 'crosshair' : 'default';
+
+  // Rotates the selected component 90° clockwise. WPs/PBSs are visually
+  // (and eventually optically) identical at 0°/180°, but the state itself
+  // still just cycles through all four -- no special-casing needed here.
+  const rotateSelected = () => {
+    setComponents((prev) => prev.map((c) => (c.id === selectedId ? { ...c, rotation: (c.rotation + 90) % 360 } : c)));
+  };
+
+  // Inert (no glow, no button) while build/remove mode is active or a drag
+  // is in progress -- even for a drag of the selected component itself, so
+  // the button doesn't have to chase its free-following drag position. It
+  // reappears once that mode/drag ends, right where it was.
+  const selectionActive = !buildMode && draggingId == null;
+  const selectedComp = selectionActive && selectedId != null
+    ? components.find((c) => c.id === selectedId)
+    : null;
 
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
@@ -269,13 +332,40 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
             key={comp.id}
             src={type.image}
             alt={type.label}
-            className={`placed-component ${isDragging ? 'dragging' : ''}`}
-            style={{ left: x, top: y, width: GRID_SIZE, height: GRID_SIZE }}
+            className={`placed-component ${isDragging ? 'dragging' : ''} ${selectionActive && comp.id === selectedId ? 'selected' : ''}`}
+            style={{ left: x, top: y, width: GRID_SIZE, height: GRID_SIZE, transform: `rotate(${comp.rotation}deg)` }}
             draggable="false"
             onMouseDown={(e) => handleComponentMouseDown(e, comp)}
           />
         );
       })}
+      {selectedComp && (() => {
+        // Anchored above the cell by default, like the SG sim's field
+        // overlays -- except for the top row, where there's no room above,
+        // so it flips to sit just below instead.
+        const growUp = selectedComp.row > 0;
+        const cx = selectedComp.col * GRID_SIZE + GRID_SIZE / 2;
+        const cy = growUp
+          ? selectedComp.row * GRID_SIZE - ROTATE_BUTTON_GAP
+          : (selectedComp.row + 1) * GRID_SIZE + ROTATE_BUTTON_GAP;
+        return (
+          <button
+            type="button"
+            className="rotate-button"
+            aria-label="Rotate component 90°"
+            style={{
+              left: cx,
+              top: cy,
+              width: ROTATE_BUTTON_SIZE,
+              height: ROTATE_BUTTON_SIZE,
+              transform: growUp ? 'translate(-50%, -100%)' : 'translate(-50%, 0%)',
+            }}
+            onClick={(e) => { e.stopPropagation(); rotateSelected(); }}
+          >
+            <RotateIcon />
+          </button>
+        );
+      })()}
     </div>
   );
 }

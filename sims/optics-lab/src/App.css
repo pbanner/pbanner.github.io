@@ -244,6 +244,38 @@
   filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.35));
 }
 
+/* Selected (see LabPanel's selectedId) -- same glow idea as the plain hover
+   above, just red and a wider radius so it reads as a distinctly stronger
+   state. Repeated with :hover so hovering a selected component doesn't
+   flip it back to the blue hover glow. */
+.placed-component.selected,
+.placed-component.selected:hover {
+  filter: drop-shadow(0 0 7px rgba(231, 76, 60, 0.9));
+}
+
+/* Rotate button -- floats just off the selected component's cell (see
+   ROTATE_BUTTON_GAP in LabPanel.jsx). Dark red is deliberately a different
+   red than the selection glow/occupied-cell highlight above, so the control
+   itself doesn't blend into either of those. */
+.rotate-button {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid #8b0000;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+  z-index: 6;
+}
+
+.rotate-button:hover {
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
 /* Stand-in for the eventual chart in the data-plotting panel -- sits beside
    .data-plotting-options rather than below it, so it stretches to fill
    the row's full height instead of needing its own min-height. */
