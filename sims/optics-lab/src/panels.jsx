@@ -76,9 +76,13 @@ export function BuildPanel({ buildMode, armPlacement, toggleRemoveMode, componen
 
 // Middle overlay panel -- controls identical in kind to the Stern-Gerlach
 // sim's "Data Collection Controls" group (App.jsx): single-shot vs.
-// continuous mode, a rate slider, a start/stop button, and a reset button.
-// Inert for now -- dcMode.running just toggles the button's own label.
-export function DataCollectionPanel({ dcMode, setDcMode }) {
+// continuous mode, a start/stop button, and a reset button. The rate itself
+// lives on the laser component (see LabPanel's Laser Power control), not
+// here -- App.jsx's continuous-mode timer reads it directly. This panel
+// stays presentational: onMakeOnePhoton/onToggleRunning/onResetData are
+// App.jsx's own handlers, which are the ones that actually reach into
+// LabPanel's particle animation (via its ref) and component state.
+export function DataCollectionPanel({ dcMode, setDcMode, onMakeOnePhoton, onToggleRunning, onResetData }) {
   return (
     <>
       <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Data Collection Controls</h3>
@@ -110,7 +114,7 @@ export function DataCollectionPanel({ dcMode, setDcMode }) {
         <button
           className="control-bar-button"
           style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flex: '1 1 auto', minWidth: '80px' }}
-          onClick={() => setDcMode({ ...dcMode, running: dcMode.mode === 'single' ? dcMode.running : !dcMode.running })}
+          onClick={dcMode.mode === 'single' ? onMakeOnePhoton : onToggleRunning}
         >
           {dcMode.mode === 'single'
             ? (<><PlayIcon /> Make One Photon</>)
@@ -121,7 +125,7 @@ export function DataCollectionPanel({ dcMode, setDcMode }) {
         <button
           className="control-bar-button"
           style={{ flex: '1 1 auto', minWidth: '80px' }}
-          onClick={() => setDcMode({ ...dcMode, running: false })}
+          onClick={onResetData}
         >
           Reset Data
         </button>

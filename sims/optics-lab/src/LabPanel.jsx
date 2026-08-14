@@ -1,8 +1,9 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
-import { getComponentType, getDefaultFootprint, getRotatedFootprint, hasAngleControl, hasPowerControl } from './componentTypes.js';
+import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { getComponentType, getDefaultFootprint, getRotatedFootprint, hasAngleControl, hasPowerControl, isPhotonDrawnUnder } from './componentTypes.js';
 import { PC_COLORS } from './colors.js';
 import WaveplateAngleControl from './WaveplateAngleControl.jsx';
 import { SliderPlusTextboxControl } from './controls.jsx';
+import { H_STATE, V_STATE, applyJones, hwpMatrix, qwpMatrix, cAbs2 } from './physics.js';
 
 // Side length (px) of one grid square -- also the placed size of a single-
 // cell component, and the size of the placement ghost in App.jsx. Larger
@@ -138,6 +139,292 @@ function getRotationOffset(type, rotation) {
   };
 }
 
+// --- Photon physics/animation -----------------------------------------
+//
+// A photon's path is a stochastic walk through the placed components, in
+// the same spirit as the Stern-Gerlach sim's samplePath: it samples every
+// probabilistic branch (a beamsplitter) via the Born rule and collapses
+// state accordingly, and the result is a polyline of vertices -- start,
+// one per reflection, and wherever it finally stops -- that the animation
+// loop then just walks at a constant speed. Unlike that sim, there's no
+// separate "theoretical probability" exact companion here; the histogram
+// only ever shows accumulated counts.
+
+const PARTICLE_SPEED = 300; // px/sec, matches the Stern-Gerlach sim's own particles
+const PARTICLE_RADIUS = 4;
+const PARTICLE_COLOR = '#3498db'; // same blue as .control-bar-button etc.
+// Extra straight travel (px), in the same direction, tacked onto an
+// unterminated photon's final segment so it visibly continues past the
+// canvas edge before being destroyed, rather than stopping right at the
+// boundary line.
+const ESCAPE_RUN_LENGTH = 70;
+// Safety cap on how many components a single photon may interact with --
+// guards against a closed loop of mirrors/beamsplitters the student built
+// (by accident or otherwise) hanging the animation loop forever.
+const MAX_HOPS = 500;
+
+// Laser emission geometry, read directly off laser.png: the small nozzle at
+// the barrel's right end -- its actual "opening" -- sits at the unrotated
+// image's own right edge, close to vertically centered but for the slight
+// letterboxing object-fit: contain gives this wider-than-image footprint
+// (see the DETECTOR_* constants above for the same kind of measurement
+// against detector.png). LASER_APERTURE_WIDTH is that nozzle's own cross-
+// section, converted from image pixels to the footprint's own scale -- the
+// "pretty small opening" the emitted beam's transverse jitter is confined
+// to, rather than the full 50px height of the placed component.
+const LASER_EMIT_LOCAL_X = 87; // px into the unrotated 100px-wide footprint
+const LASER_EMIT_LOCAL_Y = 24; // px into the unrotated 50px-tall footprint
+const LASER_APERTURE_WIDTH = 15; // px, full spread of the beam's transverse jitter
+
+// Rotates a vector by `deg` clockwise on screen -- the same sense CSS
+// transform: rotate(deg) turns a component's own image, so a direction
+// vector rotated this way stays in agreement with where the component
+// itself visibly points. Rounded to the nearest integer afterward: every
+// angle this is ever called with is a multiple of 90°, where cos/sin should
+// land exactly on 0/1/-1 but floating point leaves a residue (~1e-16)
+// that'd otherwise make a direction's "zero" component compare unequal to 0
+// downstream (see samplePhotonPath's dir.x !== 0 checks).
+function rotateVec(v, deg) {
+  const t = (deg * Math.PI) / 180;
+  const c = Math.cos(t), s = Math.sin(t);
+  return { x: Math.round(v.x * c - v.y * s), y: Math.round(v.x * s + v.y * c) };
+}
+
+// Where a laser's beam originates and which cardinal direction it travels
+// in, in canvas pixel coordinates. Computed in the component's own
+// unrotated local frame (LASER_EMIT_LOCAL_X/Y, direction (1, 0)) and then
+// rotated around the unrotated footprint's own center by comp.rotation --
+// exactly the transform CSS itself applies to the rendered image (see
+// getRotationOffset above), so the beam always leaves from the same point
+// the nozzle graphic is actually drawn at, whichever way the laser is
+// rotated.
+function getLaserEmission(comp) {
+  const type = getComponentType(comp.type);
+  const base = getDefaultFootprint(type);
+  const offset = getRotationOffset(type, comp.rotation);
+  const boxX = comp.col * GRID_SIZE + offset.x;
+  const boxY = comp.row * GRID_SIZE + offset.y;
+  const cx = boxX + (base.w * GRID_SIZE) / 2;
+  const cy = boxY + (base.h * GRID_SIZE) / 2;
+  const localOffset = { x: LASER_EMIT_LOCAL_X - (base.w * GRID_SIZE) / 2, y: LASER_EMIT_LOCAL_Y - (base.h * GRID_SIZE) / 2 };
+  const rotatedOffset = rotateVec(localOffset, comp.rotation);
+  const dir = rotateVec({ x: 1, y: 0 }, comp.rotation);
+  return { x: cx + rotatedOffset.x, y: cy + rotatedOffset.y, dir };
+}
+
+// Every grid cell a placed (non-laser) component's footprint covers, keyed
+// "col,row" -> that component -- lets samplePhotonPath's marching loop
+// below test cell occupancy in O(1) rather than scanning `components` at
+// every step. The laser itself is left out: it's a source, not something a
+// photon can hit (including one reflected back into it), so it's simply
+// transparent.
+function buildCellMap(components) {
+  const map = new Map();
+  components.forEach((c) => {
+    if (c.type === 'laser') return;
+    const type = getComponentType(c.type);
+    const ft = getRotatedFootprint(type, c.rotation);
+    for (let dc = 0; dc < ft.w; dc++) {
+      for (let dr = 0; dr < ft.h; dr++) {
+        map.set(`${c.col + dc},${c.row + dr}`, c);
+      }
+    }
+  });
+  return map;
+}
+
+// Which cardinal direction a photon leaves a cell through, given the side
+// it exits by -- the inverse of "which side does this direction enter
+// through" (computed inline in samplePhotonPath, since it's only needed
+// there).
+const SIDE_TO_EXIT_DIR = { top: { x: 0, y: -1 }, bottom: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } };
+
+// A 1x1 cell's own diagonal "mirror face" pairs up two of its four sides --
+// whichever two a beam entering along that diagonal reflects between. Which
+// diagonal is active depends only on rotation's parity: y=x (the "\"
+// diagonal, corner-to-corner through top-left/bottom-right) at rotation
+// 0°/180°, or x+y=GRID_SIZE (the "/" diagonal) at 90°/270° -- see mirror.png
+// itself, drawn along "\" at rotation 0. Each diagonal pairs its two
+// possible entry/exit combinations one specific way; a mirror only ever
+// reflects one of the two, chosen by mirrorReflectivePair below, while a
+// beamsplitter (both faces reflective) uses whichever of the two contains
+// the actual entry side.
+const DIAGONAL_PAIRS_BACKSLASH = [['top', 'right'], ['bottom', 'left']];
+const DIAGONAL_PAIRS_SLASH = [['bottom', 'right'], ['top', 'left']];
+function diagonalPairs(rotation) {
+  return rotation % 180 === 0 ? DIAGONAL_PAIRS_BACKSLASH : DIAGONAL_PAIRS_SLASH;
+}
+function otherSideInPair(pair, side) {
+  return pair[0] === side ? pair[1] : pair[0];
+}
+
+// A one-sided mirror: only one of its diagonal's two side-pairs is
+// reflective (the "not-dark" face); the other is the dark, absorptive back.
+// Which pair is the reflective one turns with the component itself, cycling
+// through all four possible pairs as rotation goes 0->90->180->270. This
+// table is the result of working the specular-reflection formula d' = d -
+// 2(d.n)n through the spec's own worked example (rotation 0: a beam from
+// the top reflects right, a beam from the left is absorbed) for a normal
+// that rotates along with the mirror -- not an independently chosen rule.
+function mirrorReflectivePair(rotation) {
+  const pairs = diagonalPairs(rotation);
+  return rotation === 0 || rotation === 90 ? pairs[0] : pairs[1];
+}
+function mirrorOutcome(rotation, entrySide) {
+  const reflective = mirrorReflectivePair(rotation);
+  if (reflective.includes(entrySide)) {
+    return { type: 'reflect', exitSide: otherSideInPair(reflective, entrySide) };
+  }
+  return { type: 'absorb' };
+}
+
+// A two-sided beamsplitter (NPBS or PBS): reflects at the same rotating
+// diagonal a mirror would, but for every entry side, not just one pair of
+// them -- which of the diagonal's two pairs applies still depends only on
+// the entry side itself. The other branch (not computed here -- see
+// samplePhotonPath) is always straight-through transmission, independent of
+// rotation.
+function beamsplitterReflectExit(rotation, entrySide) {
+  const pair = diagonalPairs(rotation).find((p) => p.includes(entrySide));
+  return otherSideInPair(pair, entrySide);
+}
+
+// The exact pixel point where a photon crosses into cell (col, row) --
+// where a block/detector absorbs it, or (for the far side, via
+// SIDE_TO_EXIT_DIR when it doesn't turn) where it leaves one, on whichever
+// edge `dir` enters through, at the same transverse coordinate (`carried`)
+// the photon has held since its last actual turn.
+function cellEntryPoint(col, row, dir, carried) {
+  if (dir.x !== 0) {
+    const x = dir.x > 0 ? col * GRID_SIZE : (col + 1) * GRID_SIZE;
+    return { x, y: carried.y };
+  }
+  const y = dir.y > 0 ? row * GRID_SIZE : (row + 1) * GRID_SIZE;
+  return { x: carried.x, y };
+}
+// Where a 1x1 cell's diagonal actually is -- the bend point for a mirror's
+// or beamsplitter's reflected branch.
+function cellCenter(col, row) {
+  return { x: (col + 0.5) * GRID_SIZE, y: (row + 0.5) * GRID_SIZE };
+}
+
+// Walks one photon from the laser through the placed components. Returns
+// the polyline of vertices it actually traveled (every straight run's
+// endpoints) and how it stopped: { type: 'detected', detectorId } | {
+// type: 'absorbed' } | { type: 'escaped' } (ran off the canvas, or -- see
+// MAX_HOPS -- got stuck in a loop of mirrors/beamsplitters long enough that
+// this gives up on it same as if it had escaped).
+function samplePhotonPath(laserComp, cellMap, cols, rows) {
+  const emission = getLaserEmission(laserComp);
+  let dir = emission.dir;
+  const jitter = (Math.random() - 0.5) * LASER_APERTURE_WIDTH;
+  let pos = dir.x !== 0 ? { x: emission.x, y: emission.y + jitter } : { x: emission.x + jitter, y: emission.y };
+  let state = H_STATE; // the laser's own fixed emission polarization
+  let col = Math.floor(pos.x / GRID_SIZE);
+  let row = Math.floor(pos.y / GRID_SIZE);
+
+  const points = [pos];
+  let outcome = { type: 'escaped' };
+
+  hopLoop: for (let hop = 0; hop < MAX_HOPS; hop++) {
+    let hitComp;
+    for (;;) {
+      col += dir.x;
+      row += dir.y;
+      if (col < 0 || col >= cols || row < 0 || row >= rows) {
+        const exitPoint = dir.x !== 0
+          ? { x: dir.x > 0 ? cols * GRID_SIZE : 0, y: pos.y }
+          : { x: pos.x, y: dir.y > 0 ? rows * GRID_SIZE : 0 };
+        points.push(exitPoint);
+        outcome = { type: 'escaped' };
+        break hopLoop;
+      }
+      const found = cellMap.get(`${col},${row}`);
+      if (found) { hitComp = found; break; }
+    }
+
+    const type = getComponentType(hitComp.type);
+    const entrySide = dir.x > 0 ? 'left' : dir.x < 0 ? 'right' : dir.y > 0 ? 'top' : 'bottom';
+
+    if (type.physicsKind === 'block') {
+      points.push(cellEntryPoint(col, row, dir, pos));
+      outcome = { type: 'absorbed' };
+      break;
+    }
+    if (type.physicsKind === 'detector') {
+      points.push(cellEntryPoint(col, row, dir, pos));
+      outcome = { type: 'detected', detectorId: hitComp.id };
+      break;
+    }
+    if (type.physicsKind === 'hwp' || type.physicsKind === 'qwp') {
+      const matrix = type.physicsKind === 'hwp' ? hwpMatrix(hitComp.angle ?? 0) : qwpMatrix(hitComp.angle ?? 0);
+      state = applyJones(matrix, state);
+      continue; // straight through -- no bend, no new vertex
+    }
+    if (type.physicsKind === 'mirror') {
+      const res = mirrorOutcome(hitComp.rotation, entrySide);
+      if (res.type === 'absorb') {
+        points.push(cellEntryPoint(col, row, dir, pos));
+        outcome = { type: 'absorbed' };
+        break;
+      }
+      pos = cellCenter(col, row);
+      points.push(pos);
+      dir = SIDE_TO_EXIT_DIR[res.exitSide];
+      continue;
+    }
+    // npbs / pbs: reflect-vs-transmit is a 50/50 coin flip for the
+    // polarization-agnostic NPBS, or a Born-rule draw against the current
+    // state's own V-amplitude for the PBS (which also collapses state to
+    // whichever of H/V that branch corresponds to -- a PBS is a real
+    // projective measurement in the H/V basis, unlike the NPBS).
+    const reflectExitSide = beamsplitterReflectExit(hitComp.rotation, entrySide);
+    const reflectProb = type.physicsKind === 'pbs' ? cAbs2(state.v) : 0.5;
+    if (Math.random() < reflectProb) {
+      if (type.physicsKind === 'pbs') state = V_STATE;
+      pos = cellCenter(col, row);
+      points.push(pos);
+      dir = SIDE_TO_EXIT_DIR[reflectExitSide];
+    } else {
+      if (type.physicsKind === 'pbs') state = H_STATE;
+      // transmits straight through -- no bend, no new vertex
+    }
+  }
+
+  return { points, outcome };
+}
+
+function segmentLength(seg) {
+  return Math.hypot(seg.x1 - seg.x0, seg.y1 - seg.y0);
+}
+function pointOnSegment(seg, t) {
+  return { x: seg.x0 + (seg.x1 - seg.x0) * t, y: seg.y0 + (seg.y1 - seg.y0) * t };
+}
+
+// Converts a sampled photon's polyline of vertices into the segment list
+// the animation loop steps through -- one line segment per consecutive
+// vertex pair, plus (only for a photon that ran off the canvas, rather than
+// having been absorbed or detected) a short final run further in the same
+// direction so it visibly continues past the edge before disappearing,
+// instead of stopping right at the boundary.
+function buildPhotonSegments(sampled) {
+  const { points, outcome } = sampled;
+  const segments = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    segments.push({ x0: points[i].x, y0: points[i].y, x1: points[i + 1].x, y1: points[i + 1].y });
+  }
+  if (outcome.type === 'escaped' && segments.length > 0) {
+    const last = segments[segments.length - 1];
+    const dx = last.x1 - last.x0, dy = last.y1 - last.y0;
+    const len = Math.hypot(dx, dy) || 1;
+    segments.push({
+      x0: last.x1, y0: last.y1,
+      x1: last.x1 + (dx / len) * ESCAPE_RUN_LENGTH, y1: last.y1 + (dy / len) * ESCAPE_RUN_LENGTH,
+    });
+  }
+  return { segments, outcome };
+}
+
 // Lowest-unused-index color assignment for detectors, same scheme as the
 // Stern-Gerlach sim's particle counters -- reused (not re-picked at random)
 // whenever a detector is removed, so colors stay stable and predictable as
@@ -169,11 +456,19 @@ function RotateIcon({ size = 15, color = "#8b0000" }) {
   );
 }
 
-export default function LabPanel({ displayBools, buildMode, setBuildMode, components, setComponents, hoveredDetectorId, setHoveredDetectorId }) {
+const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuildMode, components, setComponents, hoveredDetectorId, setHoveredDetectorId }, ref) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
+  const photonCanvasRef = useRef(null);
   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
   const [hoveredCell, setHoveredCell] = useState(null);
+
+  // In-flight photons -- a mutable ref (not React state) updated every
+  // animation frame, same reasoning as the Stern-Gerlach sim's own
+  // particlesRef: at 60fps this would otherwise mean 60 re-renders/sec.
+  const particlesRef = useRef([]);
+  const rafRef = useRef(null);
+  const lastFrameRef = useRef(null);
 
   // Existing-component dragging (move-after-placement). dragPos is the
   // component's free-following top-left position in canvas-local pixels
@@ -218,7 +513,8 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
     ? components.find((c) => c.id === selectedId)
     : null;
 
-  // Resize canvas to fill container
+  // Resize canvas (plus the photon layer riding on top of it -- see
+  // photonCanvasRef below) to fill container
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -229,6 +525,11 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
       const newHeight = container.clientHeight;
       canvas.width = newWidth;
       canvas.height = newHeight;
+      const photonCanvas = photonCanvasRef.current;
+      if (photonCanvas) {
+        photonCanvas.width = newWidth;
+        photonCanvas.height = newHeight;
+      }
       setCanvasDims({ width: newWidth, height: newHeight });
     };
 
@@ -519,6 +820,258 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
     if (c.type === 'detector') detectorNumbers.set(c.id, nextDetectorNumber++);
   });
 
+  // Draws every currently in-flight photon on the dedicated photon layer
+  // (see photonCanvasRef) -- cleared and redrawn fresh each frame, same as
+  // the Stern-Gerlach sim's own drawParticles.
+  const drawPhotons = useCallback((ctx) => {
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.fillStyle = PARTICLE_COLOR;
+    particlesRef.current.forEach((p) => {
+      const seg = p.segments[p.segmentIndex];
+      if (!seg) return;
+      const dur = (segmentLength(seg) / PARTICLE_SPEED) * 1000;
+      const t = dur > 0 ? Math.min(p.segmentElapsed / dur, 1) : 1;
+      const pos = pointOnSegment(seg, t);
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, PARTICLE_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }, []);
+
+  // tickRef always points at a fresh closure over the current setComponents/
+  // drawPhotons -- refreshed after every render (cheap: just a closure
+  // allocation) -- so the recursive rAF loop below never reads stale props,
+  // however long it's been running. Same reasoning as the Stern-Gerlach
+  // sim's own tickRef.
+  const tickRef = useRef(null);
+  useEffect(() => {
+    const canvas = photonCanvasRef.current;
+    const ctx = canvas ? canvas.getContext('2d') : null;
+
+    tickRef.current = (now) => {
+      if (!ctx) return;
+      const dt = lastFrameRef.current ? now - lastFrameRef.current : 0;
+      lastFrameRef.current = now;
+
+      const finished = [];
+      particlesRef.current.forEach((p) => {
+        let remaining = dt;
+        while (remaining > 0 && p.segmentIndex < p.segments.length) {
+          const seg = p.segments[p.segmentIndex];
+          const dur = (segmentLength(seg) / PARTICLE_SPEED) * 1000;
+          const left = dur - p.segmentElapsed;
+          if (remaining < left) {
+            p.segmentElapsed += remaining;
+            remaining = 0;
+          } else {
+            remaining -= left;
+            p.segmentIndex += 1;
+            p.segmentElapsed = 0;
+          }
+        }
+        if (p.segmentIndex >= p.segments.length) finished.push(p);
+      });
+
+      if (finished.length > 0) {
+        const detected = finished.filter((p) => p.outcome.type === 'detected');
+        if (detected.length > 0) {
+          setComponents((prev) => {
+            const hits = new Map();
+            detected.forEach((p) => hits.set(p.outcome.detectorId, (hits.get(p.outcome.detectorId) ?? 0) + 1));
+            return prev.map((c) => (hits.has(c.id) ? { ...c, count: (c.count ?? 0) + hits.get(c.id) } : c));
+          });
+        }
+        particlesRef.current = particlesRef.current.filter((p) => !finished.includes(p));
+      }
+
+      drawPhotons(ctx);
+
+      if (particlesRef.current.length > 0) {
+        rafRef.current = requestAnimationFrame((n) => tickRef.current(n));
+      } else {
+        rafRef.current = null;
+        lastFrameRef.current = null;
+      }
+    };
+  });
+
+  // Stop the loop if the component unmounts mid-animation
+  useEffect(() => {
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, []);
+
+  // Samples and animates one new photon from the (single, capped) placed
+  // laser -- a no-op if there isn't one yet. Exposed to App.jsx via ref (see
+  // useImperativeHandle below) so the Data Collection panel's "Make One
+  // Photon"/"Start" controls, which don't otherwise touch LabPanel's own
+  // internals, can drive it.
+  const spawnParticle = useCallback(() => {
+    const laserComp = components.find((c) => c.type === 'laser');
+    if (!laserComp) return;
+    const cellMap = buildCellMap(components);
+    const sampled = samplePhotonPath(laserComp, cellMap, cols, rows);
+    const { segments, outcome } = buildPhotonSegments(sampled);
+    if (segments.length === 0) return;
+    particlesRef.current = [...particlesRef.current, { segments, outcome, segmentIndex: 0, segmentElapsed: 0 }];
+    // The loop only advances itself while already running (see tickRef
+    // above) -- if this is the first particle, nothing else will ever
+    // notice it exists, so explicitly wake the loop up here.
+    if (rafRef.current === null) {
+      lastFrameRef.current = null;
+      rafRef.current = requestAnimationFrame((now) => tickRef.current(now));
+    }
+  }, [components, cols, rows]);
+
+  // Clears every in-flight photon -- backs the Data Collection panel's
+  // "Reset Data" button (which separately clears detector counts itself,
+  // via setComponents, since that's App-level state this ref doesn't need
+  // to touch).
+  const resetParticles = useCallback(() => {
+    particlesRef.current = [];
+    const canvas = photonCanvasRef.current;
+    if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+  }, []);
+
+  useImperativeHandle(ref, () => ({ spawnParticle, resetParticles }), [spawnParticle, resetParticles]);
+
+  const renderComponent = (comp) => {
+    const type = getComponentType(comp.type);
+    const base = getDefaultFootprint(type);
+    const offset = getRotationOffset(type, comp.rotation);
+    const isDragging = comp.id === draggingId;
+    const anchorX = isDragging && dragPos ? dragPos.x : comp.col * GRID_SIZE;
+    const anchorY = isDragging && dragPos ? dragPos.y : comp.row * GRID_SIZE;
+    const componentClass = `placed-component ${isDragging ? 'dragging' : ''} ${buildMode === 'remove' ? 'remove-mode' : ''}`;
+    const componentStyle = {
+      left: anchorX + offset.x,
+      top: anchorY + offset.y,
+      width: base.w * GRID_SIZE,
+      height: base.h * GRID_SIZE,
+      transform: `rotate(${comp.rotation}deg)`,
+    };
+
+    if (comp.type === 'detector') {
+      // Each text element counter-rotates individually (not a shared
+      // wrapper around both) so it reads right-side up at 0°/180° --
+      // and, left alone (no counter-rotation) at 90°/270°, comes out
+      // with its "down" direction pointing left/right respectively,
+      // which is exactly the "bottom points left or right" look asked
+      // for there. Has to be per-element: label and count each sit off
+      // to the side of detector-content's own center, but that center
+      // is exactly the *card's* own rotation center too (detector-
+      // content is symmetrically inset -- see DETECTOR_OFFSET_X/Y), so
+      // a rotation shared by both around that one point would, at
+      // 180°, cancel the card's own rotation entirely -- flipping the
+      // text's orientation back upright as intended, but *also*
+      // flipping its position back to where it sits at 0°, leaving it
+      // stranded over whatever part of the now-upside-down image
+      // happens to be there instead of following the image the way
+      // the stripe does. Rotating each element around its own (small,
+      // off-center) box instead only ever spins the glyphs in place;
+      // their anchor point still moves whever the card's own rotation
+      // carries it, same as the stripe.
+      const textRotation = comp.rotation === 180 ? 180 : 0;
+      const color = comp.colorId != null ? PC_COLORS[comp.colorId] : '#303030';
+      // Chart-hover is a class-driven echo of the same blue glow
+      // .placed-component:hover already gives every component for free
+      // on a direct mouse-over -- this just lets the histogram's own
+      // bar hover (see Histogram.jsx) trigger that same glow here too,
+      // and vice versa (see the onMouseEnter/Leave below). Only live
+      // outside build/remove mode, per the user's request -- App.jsx
+      // also clears hoveredDetectorId the moment build mode is entered,
+      // so a hover that was active right as a build button is clicked
+      // doesn't linger into it.
+      const chartHovered = comp.id === hoveredDetectorId;
+      return (
+        <div
+          key={comp.id}
+          className={`${componentClass} detector-component ${chartHovered ? 'chart-hover' : ''}`}
+          style={componentStyle}
+          onMouseDown={(e) => handleComponentMouseDown(e, comp)}
+          onMouseEnter={() => { if (!buildMode) setHoveredDetectorId(comp.id); }}
+          onMouseLeave={() => { if (!buildMode) setHoveredDetectorId((prev) => (prev === comp.id ? null : prev)); }}
+        >
+          {/* Inset by the same 6px padding every other component gets,
+              sized to the image's actual rendered rect there (see the
+              DETECTOR_* constants) -- everything inside is positioned
+              against *this* box, not the full unpadded footprint. */}
+          <div
+            className="detector-content"
+            style={{ left: DETECTOR_OFFSET_X, top: DETECTOR_OFFSET_Y, width: DETECTOR_BOX_WIDTH, height: DETECTOR_BOX_HEIGHT }}
+          >
+            <img src={type.image} alt={type.label} className="placed-component-image" draggable="false" />
+            {comp.colorId != null && (
+              <div
+                className="detector-stripe"
+                style={{
+                  left: DETECTOR_STRIPE_CENTER_X - DETECTOR_STRIPE_WIDTH / 2,
+                  width: DETECTOR_STRIPE_WIDTH,
+                  background: PC_COLORS[comp.colorId],
+                }}
+              />
+            )}
+            <div className="detector-text">
+              <div
+                className="detector-label"
+                style={{ left: DETECTOR_TEXT_CENTER_X, top: DETECTOR_LABEL_TOP, transform: `translate(-50%, -50%) rotate(${textRotation}deg)` }}
+              >
+                {`D${detectorNumbers.get(comp.id)}`}
+              </div>
+              <div
+                className="detector-count"
+                style={{ left: DETECTOR_TEXT_CENTER_X, top: DETECTOR_COUNT_TOP, color, transform: `translate(-50%, -50%) rotate(${textRotation}deg)` }}
+              >
+                {comp.count ?? 0}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (hasAngleControl(type)) {
+      // Slides vertically within the component's own body as the angle
+      // changes, rather than rotating in place: 0deg sits near the top
+      // edge, sweeping down to near the bottom as the angle approaches
+      // 360deg, then wrapping back to the top. It's just a normal child
+      // of the rotated wrapper below (like the image itself), so it
+      // rotates along with the component's own placement rotation --
+      // no counter-rotation needed here, unlike the old rotating
+      // version (which had to fight the wrapper's rotation to stay in
+      // a fixed lab-frame orientation).
+      const angleFraction = wrapDegrees(comp.angle ?? 0) / 360;
+      const indicatorTopPercent = WAVEPLATE_INDICATOR_MARGIN_PERCENT + angleFraction * (100 - 2 * WAVEPLATE_INDICATOR_MARGIN_PERCENT);
+      return (
+        <div
+          key={comp.id}
+          className={`${componentClass} waveplate-component`}
+          style={componentStyle}
+          onMouseDown={(e) => handleComponentMouseDown(e, comp)}
+        >
+          <img src={type.image} alt={type.label} className="waveplate-image" draggable="false" />
+          <div className="waveplate-indicator" style={{ top: `${indicatorTopPercent}%` }} />
+        </div>
+      );
+    }
+
+    return (
+      <img
+        key={comp.id}
+        src={type.image}
+        alt={type.label}
+        className={componentClass}
+        style={componentStyle}
+        draggable="false"
+        onMouseDown={(e) => handleComponentMouseDown(e, comp)}
+      />
+    );
+  };
+
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
       <canvas
@@ -529,138 +1082,15 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
         onMouseLeave={handleCanvasMouseLeave}
         style={{ cursor, display: 'block', touchAction: 'none' }}
       />
-      {components.map((comp) => {
-        const type = getComponentType(comp.type);
-        const base = getDefaultFootprint(type);
-        const offset = getRotationOffset(type, comp.rotation);
-        const isDragging = comp.id === draggingId;
-        const anchorX = isDragging && dragPos ? dragPos.x : comp.col * GRID_SIZE;
-        const anchorY = isDragging && dragPos ? dragPos.y : comp.row * GRID_SIZE;
-        const componentClass = `placed-component ${isDragging ? 'dragging' : ''} ${buildMode === 'remove' ? 'remove-mode' : ''}`;
-        const componentStyle = {
-          left: anchorX + offset.x,
-          top: anchorY + offset.y,
-          width: base.w * GRID_SIZE,
-          height: base.h * GRID_SIZE,
-          transform: `rotate(${comp.rotation}deg)`,
-        };
-
-        if (comp.type === 'detector') {
-          // Each text element counter-rotates individually (not a shared
-          // wrapper around both) so it reads right-side up at 0°/180° --
-          // and, left alone (no counter-rotation) at 90°/270°, comes out
-          // with its "down" direction pointing left/right respectively,
-          // which is exactly the "bottom points left or right" look asked
-          // for there. Has to be per-element: label and count each sit off
-          // to the side of detector-content's own center, but that center
-          // is exactly the *card's* own rotation center too (detector-
-          // content is symmetrically inset -- see DETECTOR_OFFSET_X/Y), so
-          // a rotation shared by both around that one point would, at
-          // 180°, cancel the card's own rotation entirely -- flipping the
-          // text's orientation back upright as intended, but *also*
-          // flipping its position back to where it sits at 0°, leaving it
-          // stranded over whatever part of the now-upside-down image
-          // happens to be there instead of following the image the way
-          // the stripe does. Rotating each element around its own (small,
-          // off-center) box instead only ever spins the glyphs in place;
-          // their anchor point still moves whever the card's own rotation
-          // carries it, same as the stripe.
-          const textRotation = comp.rotation === 180 ? 180 : 0;
-          const color = comp.colorId != null ? PC_COLORS[comp.colorId] : '#303030';
-          // Chart-hover is a class-driven echo of the same blue glow
-          // .placed-component:hover already gives every component for free
-          // on a direct mouse-over -- this just lets the histogram's own
-          // bar hover (see Histogram.jsx) trigger that same glow here too,
-          // and vice versa (see the onMouseEnter/Leave below). Only live
-          // outside build/remove mode, per the user's request -- App.jsx
-          // also clears hoveredDetectorId the moment build mode is entered,
-          // so a hover that was active right as a build button is clicked
-          // doesn't linger into it.
-          const chartHovered = comp.id === hoveredDetectorId;
-          return (
-            <div
-              key={comp.id}
-              className={`${componentClass} detector-component ${chartHovered ? 'chart-hover' : ''}`}
-              style={componentStyle}
-              onMouseDown={(e) => handleComponentMouseDown(e, comp)}
-              onMouseEnter={() => { if (!buildMode) setHoveredDetectorId(comp.id); }}
-              onMouseLeave={() => { if (!buildMode) setHoveredDetectorId((prev) => (prev === comp.id ? null : prev)); }}
-            >
-              {/* Inset by the same 6px padding every other component gets,
-                  sized to the image's actual rendered rect there (see the
-                  DETECTOR_* constants) -- everything inside is positioned
-                  against *this* box, not the full unpadded footprint. */}
-              <div
-                className="detector-content"
-                style={{ left: DETECTOR_OFFSET_X, top: DETECTOR_OFFSET_Y, width: DETECTOR_BOX_WIDTH, height: DETECTOR_BOX_HEIGHT }}
-              >
-                <img src={type.image} alt={type.label} className="placed-component-image" draggable="false" />
-                {comp.colorId != null && (
-                  <div
-                    className="detector-stripe"
-                    style={{
-                      left: DETECTOR_STRIPE_CENTER_X - DETECTOR_STRIPE_WIDTH / 2,
-                      width: DETECTOR_STRIPE_WIDTH,
-                      background: PC_COLORS[comp.colorId],
-                    }}
-                  />
-                )}
-                <div className="detector-text">
-                  <div
-                    className="detector-label"
-                    style={{ left: DETECTOR_TEXT_CENTER_X, top: DETECTOR_LABEL_TOP, transform: `translate(-50%, -50%) rotate(${textRotation}deg)` }}
-                  >
-                    {`D${detectorNumbers.get(comp.id)}`}
-                  </div>
-                  <div
-                    className="detector-count"
-                    style={{ left: DETECTOR_TEXT_CENTER_X, top: DETECTOR_COUNT_TOP, color, transform: `translate(-50%, -50%) rotate(${textRotation}deg)` }}
-                  >
-                    {comp.count ?? 0}
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        }
-
-        if (hasAngleControl(type)) {
-          // Slides vertically within the component's own body as the angle
-          // changes, rather than rotating in place: 0deg sits near the top
-          // edge, sweeping down to near the bottom as the angle approaches
-          // 360deg, then wrapping back to the top. It's just a normal child
-          // of the rotated wrapper below (like the image itself), so it
-          // rotates along with the component's own placement rotation --
-          // no counter-rotation needed here, unlike the old rotating
-          // version (which had to fight the wrapper's rotation to stay in
-          // a fixed lab-frame orientation).
-          const angleFraction = wrapDegrees(comp.angle ?? 0) / 360;
-          const indicatorTopPercent = WAVEPLATE_INDICATOR_MARGIN_PERCENT + angleFraction * (100 - 2 * WAVEPLATE_INDICATOR_MARGIN_PERCENT);
-          return (
-            <div
-              key={comp.id}
-              className={`${componentClass} waveplate-component`}
-              style={componentStyle}
-              onMouseDown={(e) => handleComponentMouseDown(e, comp)}
-            >
-              <img src={type.image} alt={type.label} className="waveplate-image" draggable="false" />
-              <div className="waveplate-indicator" style={{ top: `${indicatorTopPercent}%` }} />
-            </div>
-          );
-        }
-
-        return (
-          <img
-            key={comp.id}
-            src={type.image}
-            alt={type.label}
-            className={componentClass}
-            style={componentStyle}
-            draggable="false"
-            onMouseDown={(e) => handleComponentMouseDown(e, comp)}
-          />
-        );
-      })}
+      {/* Everything that stops or redirects a photon outside of itself
+          (laser/mirror/block/detector) renders here, below the photon
+          layer -- then wave plates/beamsplitters render *above* it, so a
+          photon passing through or off one of those is drawn underneath its
+          (mostly transparent, glass-like) icon rather than on top of it.
+          See isPhotonDrawnUnder. */}
+      {components.filter((c) => !isPhotonDrawnUnder(getComponentType(c.type))).map(renderComponent)}
+      <canvas ref={photonCanvasRef} className="photon-canvas" />
+      {components.filter((c) => isPhotonDrawnUnder(getComponentType(c.type))).map(renderComponent)}
       {selectedComp && (() => {
         const ft = getRotatedFootprint(getComponentType(selectedComp.type), selectedComp.rotation);
         const growUp = selectedComp.row > 0;
@@ -746,4 +1176,6 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
       })()}
     </div>
   );
-}
+});
+
+export default LabPanel;

@@ -28,16 +28,31 @@ const WAVE_PLATE_PLACEMENT_MESSAGE = 'After placing, click to\nrotate component 
 // in panels.jsx, and .add-component-row's 4-column grid in App.css) -- two
 // rows of four: laser/mirror/beam block/detector, then the two wave plates/
 // NPBS/PBS.
+//
+// physicsKind is how LabPanel's photon simulation (samplePhotonPath) tells
+// these apart -- it's a separate field from id purely so that dispatch
+// reads as "what does this do to a photon" rather than "which build-panel
+// button was this", even though today the two happen to line up one-to-one.
 export const COMPONENT_TYPES = [
-  { id: 'laser', label: 'Laser', image: laserImage, footprint: { w: 2, h: 1 }, hasPower: true },
-  { id: 'mirror', label: 'Mirror', image: mirrorImage },
-  { id: 'block', label: 'Beam Block', image: blockImage },
-  { id: 'detector', label: 'Detector', image: detectorImage, footprint: { w: 2, h: 1 } },
-  { id: 'hwp', label: 'Half-Wave Plate', image: hwpImage, placementMessage: WAVE_PLATE_PLACEMENT_MESSAGE, hasAngle: true },
-  { id: 'qwp', label: 'Quarter-Wave Plate', image: qwpImage, placementMessage: WAVE_PLATE_PLACEMENT_MESSAGE, hasAngle: true },
-  { id: 'npbs', label: 'Non-Polarizing Beam Splitter', image: npbsImage },
-  { id: 'pbs', label: 'Polarizing Beam Splitter', image: pbsImage },
+  { id: 'laser', label: 'Laser', image: laserImage, footprint: { w: 2, h: 1 }, hasPower: true, physicsKind: 'laser' },
+  { id: 'mirror', label: 'Mirror', image: mirrorImage, physicsKind: 'mirror' },
+  { id: 'block', label: 'Beam Block', image: blockImage, physicsKind: 'block' },
+  { id: 'detector', label: 'Detector', image: detectorImage, footprint: { w: 2, h: 1 }, physicsKind: 'detector' },
+  { id: 'hwp', label: 'Half-Wave Plate', image: hwpImage, placementMessage: WAVE_PLATE_PLACEMENT_MESSAGE, hasAngle: true, physicsKind: 'hwp' },
+  { id: 'qwp', label: 'Quarter-Wave Plate', image: qwpImage, placementMessage: WAVE_PLATE_PLACEMENT_MESSAGE, hasAngle: true, physicsKind: 'qwp' },
+  { id: 'npbs', label: 'Non-Polarizing Beam Splitter', image: npbsImage, physicsKind: 'npbs' },
+  { id: 'pbs', label: 'Polarizing Beam Splitter', image: pbsImage, physicsKind: 'pbs' },
 ];
+
+// Wave plates and beamsplitters don't stop a photon -- it passes through (or
+// off) them coherently, same z-order idea as looking through a pane of
+// glass -- so LabPanel draws its photon layer *above* the other component
+// types (mirror/block/detector/laser, which either end or redirect a photon
+// outside of themselves) but *below* these, rather than always on top.
+const PHOTON_UNDER_KINDS = new Set(['hwp', 'qwp', 'npbs', 'pbs']);
+export function isPhotonDrawnUnder(type) {
+  return PHOTON_UNDER_KINDS.has(type.physicsKind);
+}
 
 export function getComponentType(id) {
   return COMPONENT_TYPES.find((c) => c.id === id);

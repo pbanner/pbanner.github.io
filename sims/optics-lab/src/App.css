@@ -267,6 +267,18 @@
   line-height: 1.2;
 }
 
+/* Photon layer -- a dedicated canvas (see LabPanel's photonCanvasRef)
+   sandwiched between the "under" and "over" tiers of placed components (see
+   isPhotonDrawnUnder in componentTypes.js) so a photon animates beneath a
+   wave plate/beamsplitter's own icon but in front of everything else.
+   pointer-events: none so it never intercepts clicks/drags meant for the
+   components on either side of it. */
+.photon-canvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 /* Components already placed on the grid. */
 .placed-component {
   position: absolute;

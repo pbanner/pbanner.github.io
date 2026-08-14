@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './App.css';
 import LabPanel, { GRID_SIZE } from './LabPanel.jsx';
 import { BuildPanel, DataCollectionPanel, DataPlottingPanel } from './panels.jsx';
@@ -23,6 +23,12 @@ export default function App() {
   const [ghostPos, setGhostPos] = useState(null);
 
   const [dcMode, setDcMode] = useState({ mode: 'single', running: false });
+  // Imperative handle onto LabPanel's own particle animation -- see
+  // LabPanel's useImperativeHandle(spawnParticle, resetParticles). Data
+  // collection (spawning/resetting photons) is driven from here rather than
+  // from inside LabPanel itself, since the Data Collection panel that
+  // triggers it is a sibling, not a child, of LabPanel.
+  const labPanelRef = useRef(null);
   const [chartDisplayBools, setChartDisplayBools] = useState({
     showPercentages: 2,    // 0 = counts only, 1 = percentages only, 2 = both
     showErrorBars: false,
@@ -83,6 +89,38 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  // Continuous mode's spawn timer -- fires at the placed laser's own Laser
+  // Power (photons/sec; see LabPanel's Laser Power control, which is where
+  // that field actually lives). Keyed on laserPower rather than the whole
+  // components array so dragging/rotating/placing unrelated components
+  // doesn't restart -- and thereby reset the phase of -- an already-running
+  // timer.
+  const laserPower = components.find((c) => c.type === 'laser')?.power;
+  useEffect(() => {
+    if (dcMode.mode !== 'stream' || !dcMode.running) return;
+    if (!laserPower || laserPower <= 0) return;
+    const intervalMs = 1000 / laserPower;
+    const id = setInterval(() => { labPanelRef.current?.spawnParticle(); }, intervalMs);
+    return () => clearInterval(id);
+  }, [dcMode.mode, dcMode.running, laserPower]);
+
+  const handleMakeOnePhoton = () => {
+    labPanelRef.current?.spawnParticle();
+  };
+
+  const handleToggleRunning = () => {
+    setDcMode((prev) => ({ ...prev, running: !prev.running }));
+  };
+
+  // Clears every in-flight photon, every detector's running count, and
+  // stops continuous mode -- LabPanel owns the first (its own particlesRef,
+  // via the ref above), this component owns the second (component state).
+  const handleResetData = () => {
+    labPanelRef.current?.resetParticles();
+    setComponents((prev) => prev.map((c) => (c.type === 'detector' ? { ...c, count: 0 } : c)));
+    setDcMode((prev) => ({ ...prev, running: false }));
+  };
+
   const armedType = buildMode?.place ? COMPONENT_TYPES.find((c) => c.id === buildMode.place) : null;
 
   // Detector<->histogram cross-highlighting is only meant to apply outside
@@ -98,6 +136,7 @@ export default function App() {
           float on top of it rather than pushing it into a side column. */}
       <div className="canvas-area">
         <LabPanel
+          ref={labPanelRef}
           displayBools={displayBools}
           buildMode={buildMode}
           setBuildMode={setBuildMode}
@@ -123,7 +162,13 @@ export default function App() {
           />
         </div>
         <div className="overlay-controls data-collection-panel">
-          <DataCollectionPanel dcMode={dcMode} setDcMode={setDcMode} />
+          <DataCollectionPanel
+            dcMode={dcMode}
+            setDcMode={setDcMode}
+            onMakeOnePhoton={handleMakeOnePhoton}
+            onToggleRunning={handleToggleRunning}
+            onResetData={handleResetData}
+          />
         </div>
         <DataPlottingPanel
           chartDisplayBools={chartDisplayBools}
