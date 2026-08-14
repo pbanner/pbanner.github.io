@@ -19,7 +19,7 @@ export const COMPONENT_TYPES = [
   { id: 'qwp', label: 'Quarter-Wave Plate', image: qwpImage },
   { id: 'mirror', label: 'Mirror', image: mirrorImage },
   { id: 'pbs', label: 'Polarizing Beam Splitter', image: pbsImage },
-  { id: 'detector', label: 'Detector', image: detectorImage },
+  { id: 'detector', label: 'Detector', image: detectorImage, footprint: { w: 2, h: 1 } },
 ];
 
 export function getComponentType(id) {

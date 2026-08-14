@@ -248,6 +248,55 @@
   filter: drop-shadow(0 0 5px rgba(255, 0, 0, 0.85));
 }
 
+/* Detector card -- a wrapper div (instead of a bare <img>, since an <img>
+   can't have children) holding the detector image plus a colored stripe
+   and a label/count text overlay, both positioned in the box's own
+   unrotated coordinate frame (see LabPanel's DETECTOR_* constants). Unlike
+   the other placed components, it isn't inset with padding -- the box's
+   2:1 aspect ratio already matches detector.png exactly, so the image
+   fills it edge to edge, same as the Stern-Gerlach sim's PC.png does on
+   its canvas. */
+.placed-component.detector-component {
+  padding: 0;
+}
+
+.placed-component-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.detector-stripe {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.detector-text {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.detector-label,
+.detector-count {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+}
+
+.detector-label {
+  font-weight: bold;
+  color: #666;
+}
+
 /* Rotate button -- floats just off the selected component's cell (see
    ROTATE_BUTTON_GAP in LabPanel.jsx). Dark red is deliberately a different
    red than the selection glow/occupied-cell highlight above, so the control

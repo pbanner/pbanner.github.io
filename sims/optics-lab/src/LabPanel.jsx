@@ -1,11 +1,29 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { getComponentType, getDefaultFootprint, getRotatedFootprint } from './componentTypes.js';
+import { PC_COLORS } from './colors.js';
 
 // Side length (px) of one grid square -- also the placed size of a single-
 // cell component, and the size of the placement ghost in App.jsx. Larger
 // components (see COMPONENT_TYPES' footprint) are placed sized in multiples
 // of this.
 export const GRID_SIZE = 50;
+
+// Detector card layout. detector.png is byte-identical to the Stern-Gerlach
+// sim's PC.png (both 400x200), and the detector's 2x1 footprint renders it
+// at exactly 100x50px at GRID_SIZE=50 -- the same box size that sim's own
+// PC_WIDTH/PC_HEIGHT use -- so its exact fractional stripe/label/count
+// layout carries over unchanged, just re-expressed against this box size.
+const DETECTOR_BOX_WIDTH = 2 * GRID_SIZE;
+const DETECTOR_BOX_HEIGHT = 1 * GRID_SIZE;
+const DETECTOR_STRIPE_CENTER_X = 330 * (DETECTOR_BOX_WIDTH / 400);
+const DETECTOR_STRIPE_WIDTH = 50 * (DETECTOR_BOX_WIDTH / 400);
+const DETECTOR_TEXT_CENTER_X = 190 * (DETECTOR_BOX_WIDTH / 400);
+// Distance from the box's top edge to the vertical center of each text
+// line (not an offset from the box's own center, unlike the Stern-Gerlach
+// sim's PC_LABEL_CENTER_Y/PC_COUNT_CENTER_Y) -- what a translate(-50%,-50%)
+// centered element's own `top` needs directly.
+const DETECTOR_LABEL_TOP = 50 * (DETECTOR_BOX_HEIGHT / 200);
+const DETECTOR_COUNT_TOP = 132 * (DETECTOR_BOX_HEIGHT / 200);
 
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
@@ -74,6 +92,26 @@ function getRotationOffset(type, rotation) {
     x: (base.h - base.w) * GRID_SIZE / 2,
     y: (base.w - base.h) * GRID_SIZE / 2,
   };
+}
+
+// Lowest-unused-index color assignment for detectors, same scheme as the
+// Stern-Gerlach sim's particle counters -- reused (not re-picked at random)
+// whenever a detector is removed, so colors stay stable and predictable as
+// detectors come and go.
+function getUsedDetectorColorIds(components) {
+  const used = new Set();
+  components.forEach((c) => {
+    if (c.type === 'detector' && c.colorId != null) used.add(c.colorId);
+  });
+  return used;
+}
+
+function getNextDetectorColorId(components) {
+  const used = getUsedDetectorColorIds(components);
+  for (let i = 0; i < PC_COLORS.length; i++) {
+    if (!used.has(i)) return i;
+  }
+  return null; // more detectors placed at once than the palette has colors
 }
 
 // A mousedown/mouseup pair on a placed component counts as a "click" (select
@@ -280,7 +318,14 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
       const type = getComponentType(buildMode.place);
       const ft = getRotatedFootprint(type, 0); // freshly placed, always starts unrotated
       if (!isFootprintFree(components, cell.col, cell.row, ft.w, ft.h, null, cols, rows)) return;
-      setComponents((prev) => [...prev, { id: makeComponentId(), type: buildMode.place, col: cell.col, row: cell.row, rotation: 0 }]);
+      setComponents((prev) => {
+        const newComp = { id: makeComponentId(), type: buildMode.place, col: cell.col, row: cell.row, rotation: 0 };
+        if (buildMode.place === 'detector') {
+          newComp.colorId = getNextDetectorColorId(prev);
+          newComp.count = 0;
+        }
+        return [...prev, newComp];
+      });
       setBuildMode(null); // single-shot placement, same as the Stern-Gerlach sim's build mode
       setSelectedId(null); // a fresh placement always starts deselected, not whatever was selected before
       return;
@@ -423,6 +468,15 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
     });
   };
 
+  // Detector labels (D1, D2, ...) are derived from placement order among
+  // just the detector-type components, not stored on the component itself --
+  // recomputed on every render (cheap; components lists here run small).
+  const detectorNumbers = new Map();
+  let nextDetectorNumber = 1;
+  components.forEach((c) => {
+    if (c.type === 'detector') detectorNumbers.set(c.id, nextDetectorNumber++);
+  });
+
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
       <canvas
@@ -440,19 +494,60 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
         const isDragging = comp.id === draggingId;
         const anchorX = isDragging && dragPos ? dragPos.x : comp.col * GRID_SIZE;
         const anchorY = isDragging && dragPos ? dragPos.y : comp.row * GRID_SIZE;
+        const componentClass = `placed-component ${isDragging ? 'dragging' : ''} ${buildMode === 'remove' ? 'remove-mode' : ''}`;
+        const componentStyle = {
+          left: anchorX + offset.x,
+          top: anchorY + offset.y,
+          width: base.w * GRID_SIZE,
+          height: base.h * GRID_SIZE,
+          transform: `rotate(${comp.rotation}deg)`,
+        };
+
+        if (comp.type === 'detector') {
+          // The text block counter-rotates against the card's own rotation
+          // so it reads right-side up at 0°/180° -- and, left alone (no
+          // counter-rotation) at 90°/270°, comes out with its "down"
+          // direction pointing left/right respectively, which is exactly
+          // the "bottom points left or right" look asked for there.
+          const textRotation = comp.rotation === 180 ? 180 : 0;
+          const color = comp.colorId != null ? PC_COLORS[comp.colorId] : '#303030';
+          return (
+            <div
+              key={comp.id}
+              className={`${componentClass} detector-component`}
+              style={componentStyle}
+              onMouseDown={(e) => handleComponentMouseDown(e, comp)}
+            >
+              <img src={type.image} alt={type.label} className="placed-component-image" draggable="false" />
+              {comp.colorId != null && (
+                <div
+                  className="detector-stripe"
+                  style={{
+                    left: DETECTOR_STRIPE_CENTER_X - DETECTOR_STRIPE_WIDTH / 2,
+                    width: DETECTOR_STRIPE_WIDTH,
+                    background: PC_COLORS[comp.colorId],
+                  }}
+                />
+              )}
+              <div className="detector-text" style={{ transform: `rotate(${textRotation}deg)` }}>
+                <div className="detector-label" style={{ left: DETECTOR_TEXT_CENTER_X, top: DETECTOR_LABEL_TOP }}>
+                  {`D${detectorNumbers.get(comp.id)}`}
+                </div>
+                <div className="detector-count" style={{ left: DETECTOR_TEXT_CENTER_X, top: DETECTOR_COUNT_TOP, color }}>
+                  {comp.count ?? 0}
+                </div>
+              </div>
+            </div>
+          );
+        }
+
         return (
           <img
             key={comp.id}
             src={type.image}
             alt={type.label}
-            className={`placed-component ${isDragging ? 'dragging' : ''} ${buildMode === 'remove' ? 'remove-mode' : ''}`}
-            style={{
-              left: anchorX + offset.x,
-              top: anchorY + offset.y,
-              width: base.w * GRID_SIZE,
-              height: base.h * GRID_SIZE,
-              transform: `rotate(${comp.rotation}deg)`,
-            }}
+            className={componentClass}
+            style={componentStyle}
             draggable="false"
             onMouseDown={(e) => handleComponentMouseDown(e, comp)}
           />
