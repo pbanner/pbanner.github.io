@@ -120,16 +120,14 @@ export default function App() {
         <div className="overlay-controls data-collection-panel">
           <DataCollectionPanel dcMode={dcMode} setDcMode={setDcMode} />
         </div>
-        <div className="overlay-controls data-plotting-panel">
-          <DataPlottingPanel
-            chartDisplayBools={chartDisplayBools}
-            setChartDisplayBools={setChartDisplayBools}
-            components={components}
-            hoverEnabled={!buildMode}
-            hoveredDetectorId={effectiveHoveredDetectorId}
-            setHoveredDetectorId={setHoveredDetectorId}
-          />
-        </div>
+        <DataPlottingPanel
+          chartDisplayBools={chartDisplayBools}
+          setChartDisplayBools={setChartDisplayBools}
+          components={components}
+          hoverEnabled={!buildMode}
+          hoveredDetectorId={effectiveHoveredDetectorId}
+          setHoveredDetectorId={setHoveredDetectorId}
+        />
       </div>
 
       {/* Placement ghost: a half-opacity, full-scale preview of the armed

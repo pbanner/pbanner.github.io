@@ -143,82 +143,84 @@ export function DataPlottingPanel({ chartDisplayBools, setChartDisplayBools, com
   const [optionsCollapsed, setOptionsCollapsed] = useState(false);
 
   return (
-    <div className="data-plotting-row">
-      {!optionsCollapsed && (
-      <div className="data-plotting-options">
-        <h3 style={{ margin: '0 0 12px 0', fontWeight: 'bold' }}>Chart Options</h3>
-        <div style={{ display: 'flex', flexDirection: 'row', gap: '6px', alignItems: 'center', margin: '0 0 10px 0' }}>
-          <p style={{ padding: '0px 4px 0 0', fontSize: '14px', fontWeight: '500' }}>Show:</p>
-          <div style={{ padding: '0px', display: 'flex', flexDirection: 'column', gap: '0px' }}>
+    <div className={`overlay-controls data-plotting-panel${optionsCollapsed ? ' options-collapsed' : ''}`}>
+      <div className="data-plotting-row">
+        {!optionsCollapsed && (
+          <div className="data-plotting-options">
+            <h3 style={{ margin: '0 0 12px 0', fontWeight: 'bold' }}>Chart Options</h3>
+            <div style={{ display: 'flex', flexDirection: 'row', gap: '6px', alignItems: 'center', margin: '0 0 10px 0' }}>
+              <p style={{ padding: '0px 4px 0 0', fontSize: '14px', fontWeight: '500' }}>Show:</p>
+              <div style={{ padding: '0px', display: 'flex', flexDirection: 'column', gap: '0px' }}>
+                <label>
+                  <input
+                    type="radio"
+                    name="opticsBarLabelMode"
+                    checked={chartDisplayBools.showPercentages === 0}
+                    onChange={() => setChartDisplayBools({ ...chartDisplayBools, showPercentages: 0 })}
+                  />
+                  Counts
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name="opticsBarLabelMode"
+                    checked={chartDisplayBools.showPercentages === 1}
+                    onChange={() => setChartDisplayBools({ ...chartDisplayBools, showPercentages: 1 })}
+                  />
+                  Percentages
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name="opticsBarLabelMode"
+                    checked={chartDisplayBools.showPercentages === 2}
+                    onChange={() => setChartDisplayBools({ ...chartDisplayBools, showPercentages: 2 })}
+                  />
+                  Both
+                </label>
+              </div>
+            </div>
+
             <label>
-              <input
-                type="radio"
-                name="opticsBarLabelMode"
-                checked={chartDisplayBools.showPercentages === 0}
-                onChange={() => setChartDisplayBools({ ...chartDisplayBools, showPercentages: 0 })}
-              />
-              Counts
+              <input type="checkbox" checked={chartDisplayBools.showErrorBars} onChange={(e) => setChartDisplayBools({ ...chartDisplayBools, showErrorBars: e.target.checked })} />
+              Show error bars
             </label>
             <label>
-              <input
-                type="radio"
-                name="opticsBarLabelMode"
-                checked={chartDisplayBools.showPercentages === 1}
-                onChange={() => setChartDisplayBools({ ...chartDisplayBools, showPercentages: 1 })}
-              />
-              Percentages
+              <input type="checkbox" checked={chartDisplayBools.showLegend} onChange={(e) => setChartDisplayBools({ ...chartDisplayBools, showLegend: e.target.checked })} />
+              Show legend
             </label>
             <label>
-              <input
-                type="radio"
-                name="opticsBarLabelMode"
-                checked={chartDisplayBools.showPercentages === 2}
-                onChange={() => setChartDisplayBools({ ...chartDisplayBools, showPercentages: 2 })}
-              />
-              Both
+              <input type="checkbox" checked={chartDisplayBools.showTotal} onChange={(e) => setChartDisplayBools({ ...chartDisplayBools, showTotal: e.target.checked })} />
+              Show running total
             </label>
+            <label>
+              <input type="checkbox" checked={chartDisplayBools.showTheory} onChange={(e) => setChartDisplayBools({ ...chartDisplayBools, showTheory: e.target.checked })} />
+              Theoretical probabilities
+            </label>
+
+            <button
+              type="button"
+              className="control-bar-button"
+              style={{ marginTop: '10px' }}
+              onClick={() => setOptionsCollapsed(true)}
+            >
+              Hide Options &gt;&gt;
+            </button>
           </div>
-        </div>
+        )}
 
-        <label>
-          <input type="checkbox" checked={chartDisplayBools.showErrorBars} onChange={(e) => setChartDisplayBools({ ...chartDisplayBools, showErrorBars: e.target.checked })} />
-          Show error bars
-        </label>
-        <label>
-          <input type="checkbox" checked={chartDisplayBools.showLegend} onChange={(e) => setChartDisplayBools({ ...chartDisplayBools, showLegend: e.target.checked })} />
-          Show legend
-        </label>
-        <label>
-          <input type="checkbox" checked={chartDisplayBools.showTotal} onChange={(e) => setChartDisplayBools({ ...chartDisplayBools, showTotal: e.target.checked })} />
-          Show running total
-        </label>
-        <label>
-          <input type="checkbox" checked={chartDisplayBools.showTheory} onChange={(e) => setChartDisplayBools({ ...chartDisplayBools, showTheory: e.target.checked })} />
-          Theoretical probabilities
-        </label>
-
-        <button
-          type="button"
-          className="control-bar-button"
-          style={{ marginTop: '10px' }}
-          onClick={() => setOptionsCollapsed(true)}
-        >
-          Hide Options &gt;&gt;
-        </button>
-      </div>
-      )}
-
-      <div className="histogram-panel">
-        <div className="histogram-canvas-wrap">
-          <Histogram
-            components={components}
-            displayBools={chartDisplayBools}
-            hoverEnabled={hoverEnabled}
-            hoveredDetectorId={hoveredDetectorId}
-            setHoveredDetectorId={setHoveredDetectorId}
-            optionsCollapsed={optionsCollapsed}
-            onShowOptions={() => setOptionsCollapsed(false)}
-          />
+        <div className="histogram-panel">
+          <div className="histogram-canvas-wrap">
+            <Histogram
+              components={components}
+              displayBools={chartDisplayBools}
+              hoverEnabled={hoverEnabled}
+              hoveredDetectorId={hoveredDetectorId}
+              setHoveredDetectorId={setHoveredDetectorId}
+              optionsCollapsed={optionsCollapsed}
+              onShowOptions={() => setOptionsCollapsed(false)}
+            />
+          </div>
         </div>
       </div>
     </div>

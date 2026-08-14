@@ -73,17 +73,38 @@
 /* Wider than the other two, and laid out horizontally -- Chart Options on
    the left, the plot itself on the right -- matching the Stern-Gerlach
    sim's bottom control bar (options column + .histogram-panel side by
-   side) rather than stacking the plot underneath the options. */
+   side) rather than stacking the plot underneath the options. Width shrinks
+   when the options column collapses (see .options-collapsed below) --
+   .histogram-panel has a fixed width of its own precisely so it's the card
+   that changes size around it, not the chart itself. */
 .data-plotting-panel {
   flex: 0 0 280px;
-  width: 560px;
+  width: 670px;
   min-height: 0;
   overflow: hidden;
+}
+
+/* Collapsed width = .histogram-panel's own fixed 328px + this card's own
+   28px (14px * 2) of horizontal padding + 16px of breathing room for the
+   magnifier/options-toggle buttons overlaid at the histogram's left edge
+   (see .histogram-magnifier-toggle/.histogram-options-toggle) -- without
+   that last bit they'd sit flush against this card's own left edge, since
+   collapsing removes the options column that otherwise stands well clear
+   of them. */
+.data-plotting-panel.options-collapsed {
+  width: 480px;
 }
 
 .data-plotting-row {
   display: flex;
   flex-direction: row;
+  /* No effect while the options column is visible -- it and the histogram
+     panel already exactly fill the row between them then. Once collapsed,
+     this pushes the (fixed-width) histogram panel flush against the row's
+     right edge instead of leaving the card's now-extra width (the 16px
+     margin above) sitting unused on the right of a flush-left histogram --
+     i.e. turns that extra width into the histogram's own left margin. */
+  justify-content: flex-end;
   gap: 14px;
   width: 100%;
   height: 100%;
@@ -364,9 +385,15 @@
 /* Histogram -- sits beside .data-plotting-options rather than below it, so
    it stretches to fill the row's full height instead of needing its own
    min-height. Same layout as the Stern-Gerlach sim's .histogram-panel/
-   .histogram-canvas-wrap/.histogram-loupe. */
+   .histogram-canvas-wrap/.histogram-loupe. Fixed width (rather than
+   flex: 1 1 auto filling whatever the options column leaves behind) so the
+   chart itself stays the same size whether or not that column is
+   collapsed -- see .data-plotting-panel.options-collapsed, which resizes
+   the *card* around this fixed size instead. 328px matches .data-plotting-
+   panel's default 560px width minus the options column (190px), the row's
+   gap (14px), and this card's own horizontal padding (28px). */
 .histogram-panel {
-  flex: 1 1 auto;
+  flex: 0 0 430px;
   min-width: 0;
   padding: 8px 10px;
 }
@@ -433,8 +460,16 @@
     width: 420px;
   }
 
+  .data-plotting-panel.options-collapsed {
+    width: 272px; /* .histogram-panel's 228px here + 28px card padding + 16px margin, same formula as the default breakpoint */
+  }
+
   .data-plotting-options {
     width: 150px;
+  }
+
+  .histogram-panel {
+    flex-basis: 228px; /* 420px card width - 150px options - 14px gap - 28px card padding */
   }
 }
 
