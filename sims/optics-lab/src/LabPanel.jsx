@@ -326,6 +326,7 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
       e.stopPropagation();
       removingRef.current = true;
       setComponents((prev) => prev.filter((c) => c.id !== comp.id));
+      setSelectedId(null);
       return;
     }
     startDrag(e, comp);
