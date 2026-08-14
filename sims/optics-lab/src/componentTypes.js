@@ -15,8 +15,8 @@ import detectorImage from './assets/detector.png';
 // it with its own placementMessage where that's not the whole story (e.g.
 // the wave plates, which also have an angle beyond their 90°-increment
 // rotation).
-const DEFAULT_PLACEMENT_MESSAGE = 'After placing, click to rotate component.';
-const WAVE_PLATE_PLACEMENT_MESSAGE = 'After placing, click to rotate wave plate or change its angle.';
+const DEFAULT_PLACEMENT_MESSAGE = 'After placing, click to\nrotate component.';
+const WAVE_PLATE_PLACEMENT_MESSAGE = 'After placing, click to\nrotate component or\nchange angle.';
 
 // footprint is in grid cells at rotation 0 -- {w: 1, h: 1} (a single square)
 // unless given otherwise. The laser is the one exception so far: 2 cells
