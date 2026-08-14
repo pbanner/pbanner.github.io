@@ -39,8 +39,34 @@ const DETECTOR_TEXT_CENTER_X = 190 * (DETECTOR_BOX_WIDTH / 400);
 const DETECTOR_LABEL_TOP = 50 * (DETECTOR_BOX_HEIGHT / 200);
 const DETECTOR_COUNT_TOP = 132 * (DETECTOR_BOX_HEIGHT / 200);
 
+// A mousedown/mouseup pair on a placed component counts as a "click" (select
+// it) rather than a drag as long as the cursor never moved more than this
+// far in between -- keeps a slightly-shaky click from being misread as an
+// intent to move the component.
+const CLICK_MOVE_THRESHOLD = 4; // px
+
+// Rotate button: sits just off the selected component's cell, offset by this
+// gap -- same idea as the Stern-Gerlach sim's field-overlay anchoring.
+const ROTATE_BUTTON_GAP = 8; // px
+const ROTATE_BUTTON_SIZE = 26; // px
+
+// WaveplateAngleControl: sits to the right of a selected wave plate's cell.
+const WAVEPLATE_CONTROL_GAP = 12; // px
+
+// On-canvas angle indicator: how far in (as a % of the component's own
+// height) it stays clear of the top/bottom edge, so it never sits flush
+// against either one even at the extremes (angle 0 or just under 360).
+const WAVEPLATE_INDICATOR_MARGIN_PERCENT = 12;
+
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
+}
+
+// Keeps a wave plate's angle in [0, 360) regardless of how it got set --
+// mirrors WaveplateAngleControl's own copy of this (kept local to each
+// file rather than shared, since it's a one-line pure function).
+function wrapDegrees(deg) {
+  return ((deg % 360) + 360) % 360;
 }
 
 let nextId = 1;
@@ -127,20 +153,6 @@ function getNextDetectorColorId(components) {
   }
   return null; // more detectors placed at once than the palette has colors
 }
-
-// A mousedown/mouseup pair on a placed component counts as a "click" (select
-// it) rather than a drag as long as the cursor never moved more than this
-// far in between -- keeps a slightly-shaky click from being misread as an
-// intent to move the component.
-const CLICK_MOVE_THRESHOLD = 4; // px
-
-// Rotate button: sits just off the selected component's cell, offset by this
-// gap -- same idea as the Stern-Gerlach sim's field-overlay anchoring.
-const ROTATE_BUTTON_GAP = 8; // px
-const ROTATE_BUTTON_SIZE = 26; // px
-
-// WaveplateAngleControl: sits to the right of a selected wave plate's cell.
-const WAVEPLATE_CONTROL_GAP = 12; // px
 
 // Clockwise rotate glyph (Feather icons' "rotate-cw"): a ~270° arc plus a
 // short hooked line at its open end that reads as the arrowhead.
@@ -603,19 +615,17 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
         }
 
         if (hasAngleControl(type)) {
-          // The indicator's own rotation is comp.angle *minus* comp.rotation,
-          // so that once the wrapper's own rotate(comp.rotation) (below)
-          // is added back on top, the indicator's net on-screen angle is
-          // exactly comp.angle regardless of the component's placement
-          // rotation -- the fast axis is a lab-frame quantity, independent
-          // of which way the component body happens to be snapped on the
-          // grid. (Unlike the detector text fix above, a single rotation
-          // here is fine, not per-element: the indicator is centered on
-          // the same point the wrapper itself rotates around, so there's
-          // no off-center anchor for a shared rotation to mis-position --
-          // it only ever spins in place regardless of which point it
-          // pivots around.)
-          const indicatorRotation = (comp.angle ?? 0) - comp.rotation;
+          // Slides vertically within the component's own body as the angle
+          // changes, rather than rotating in place: 0deg sits near the top
+          // edge, sweeping down to near the bottom as the angle approaches
+          // 360deg, then wrapping back to the top. It's just a normal child
+          // of the rotated wrapper below (like the image itself), so it
+          // rotates along with the component's own placement rotation --
+          // no counter-rotation needed here, unlike the old rotating
+          // version (which had to fight the wrapper's rotation to stay in
+          // a fixed lab-frame orientation).
+          const angleFraction = wrapDegrees(comp.angle ?? 0) / 360;
+          const indicatorTopPercent = WAVEPLATE_INDICATOR_MARGIN_PERCENT + angleFraction * (100 - 2 * WAVEPLATE_INDICATOR_MARGIN_PERCENT);
           return (
             <div
               key={comp.id}
@@ -624,7 +634,7 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
               onMouseDown={(e) => handleComponentMouseDown(e, comp)}
             >
               <img src={type.image} alt={type.label} className="waveplate-image" draggable="false" />
-              <div className="waveplate-indicator" style={{ transform: `translate(-50%, -50%) rotate(${indicatorRotation}deg)` }} />
+              <div className="waveplate-indicator" style={{ top: `${indicatorTopPercent}%` }} />
             </div>
           );
         }

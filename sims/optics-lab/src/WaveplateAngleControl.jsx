@@ -14,6 +14,18 @@ const POINTER_LENGTH = 20;       // px the fixed left-side pointer reaches in fr
 const BG_TOP = '#eaf3fc';
 const BG_BOTTOM = '#cfe4f7';
 const BORDER_COLOR = '#333333';
+const CARD_PADDING = 8; // matches .waveplate-angle-control's own padding
+
+// Distance from this control's own top edge down to the ruler's vertical
+// center. LabPanel positions this whole control by that center point (it's
+// meant to line up with the selected component's own vertical center), but
+// the readout row below the ruler adds extra height that isn't mirrored
+// above it -- centering the *whole* control there (e.g. a plain CSS
+// translateY(-50%)) would leave the ruler itself sitting above that point,
+// not on it. Counter-offsetting by exactly this instead keeps the ruler's
+// center pinned to the anchor regardless of how tall the rest of the
+// control ends up being.
+const RULER_CENTER_OFFSET = CARD_PADDING + RULER_HEIGHT / 2;
 
 // Keeps a dragged/typed angle in [0, 360) -- the fast axis can be set to
 // anything and spun past 0/360 freely (see the drag handler below), but is
@@ -138,7 +150,7 @@ export default function WaveplateAngleControl({ angle, onChangeAngle }) {
   };
 
   return (
-    <div className="waveplate-angle-control">
+    <div className="waveplate-angle-control" style={{ transform: `translateY(-${RULER_CENTER_OFFSET}px)` }}>
       <canvas
         ref={canvasRef}
         className="waveplate-angle-ruler"

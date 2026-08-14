@@ -421,19 +421,20 @@
 .waveplate-indicator {
   position: absolute;
   left: 50%;
-  top: 50%;
-  width: 75%;
-  height: 6px;
+  width: 25%;
+  height: 5px;
   background: #222222;
   border-radius: 2px;
   pointer-events: none;
+  transform: translate(-50%, -50%);
 }
 
 /* WaveplateAngleControl -- the ruler + numeric readout shown to the right
-   of a selected wave plate (see LabPanel's selectedComp block). */
+   of a selected wave plate (see LabPanel's selectedComp block). Vertical
+   centering on the anchor point is handled by the component itself, not
+   here -- see its own RULER_CENTER_OFFSET. */
 .waveplate-angle-control-anchor {
   position: absolute;
-  transform: translateY(-50%);
   z-index: 7;
 }
 
