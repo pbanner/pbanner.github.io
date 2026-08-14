@@ -136,10 +136,15 @@ export function DataCollectionPanel({ dcMode, setDcMode }) {
 // sim's "Chart Options" group, plus the Histogram itself (ported from that
 // sim -- see Histogram.jsx for what's different: no SG/arm grouping or
 // theory line, since there's nothing here yet to group detectors by or
-// compute a theoretical prediction from).
-export function DataPlottingPanel({ chartDisplayBools, setChartDisplayBools, components }) {
+// compute a theoretical prediction from). The options column can be
+// collapsed to give the chart itself more room -- see optionsCollapsed
+// below and Histogram's own "«" toggle, shown only while collapsed.
+export function DataPlottingPanel({ chartDisplayBools, setChartDisplayBools, components, hoverEnabled, hoveredDetectorId, setHoveredDetectorId }) {
+  const [optionsCollapsed, setOptionsCollapsed] = useState(false);
+
   return (
     <div className="data-plotting-row">
+      {!optionsCollapsed && (
       <div className="data-plotting-options">
         <h3 style={{ margin: '0 0 12px 0', fontWeight: 'bold' }}>Chart Options</h3>
         <div style={{ display: 'flex', flexDirection: 'row', gap: '6px', alignItems: 'center', margin: '0 0 10px 0' }}>
@@ -191,11 +196,29 @@ export function DataPlottingPanel({ chartDisplayBools, setChartDisplayBools, com
           <input type="checkbox" checked={chartDisplayBools.showTheory} onChange={(e) => setChartDisplayBools({ ...chartDisplayBools, showTheory: e.target.checked })} />
           Theoretical probabilities
         </label>
+
+        <button
+          type="button"
+          className="control-bar-button"
+          style={{ marginTop: '10px' }}
+          onClick={() => setOptionsCollapsed(true)}
+        >
+          Hide Options &gt;&gt;
+        </button>
       </div>
+      )}
 
       <div className="histogram-panel">
         <div className="histogram-canvas-wrap">
-          <Histogram components={components} displayBools={chartDisplayBools} />
+          <Histogram
+            components={components}
+            displayBools={chartDisplayBools}
+            hoverEnabled={hoverEnabled}
+            hoveredDetectorId={hoveredDetectorId}
+            setHoveredDetectorId={setHoveredDetectorId}
+            optionsCollapsed={optionsCollapsed}
+            onShowOptions={() => setOptionsCollapsed(false)}
+          />
         </div>
       </div>
     </div>

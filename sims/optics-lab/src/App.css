@@ -248,6 +248,15 @@
   filter: drop-shadow(0 0 5px rgba(255, 0, 0, 0.85));
 }
 
+/* Same glow as a direct mouse-over (.placed-component:hover above), but
+   class-driven so the histogram can trigger it on a detector by hovering
+   that detector's own bar in the chart, not just by the mouse literally
+   being over the canvas (see LabPanel's hoveredDetectorId/chartHovered
+   and Histogram's own bar hover). */
+.placed-component.chart-hover {
+  filter: drop-shadow(0 0 5px rgba(52, 152, 219, 0.85));
+}
+
 /* Detector card -- a wrapper div (instead of a bare <img>, since an <img>
    can't have children) holding the detector image plus a colored stripe
    and a label/count text overlay. .placed-component's own padding is inert
@@ -376,6 +385,17 @@
 .histogram-magnifier-toggle {
   position: absolute;
   top: 6px;
+  left: -24px;
+  z-index: 2;
+}
+
+/* Reopens the Chart Options column once it's been collapsed (see
+   DataPlottingPanel's "Hide Options >>" button, its counterpart while the
+   column is visible). Same horizontal position as the magnifier toggle
+   above -- vertical position (bottom) is set inline in Histogram.jsx,
+   computed against the plot's own bottom axis line rather than fixed here. */
+.histogram-options-toggle {
+  position: absolute;
   left: -24px;
   z-index: 2;
 }

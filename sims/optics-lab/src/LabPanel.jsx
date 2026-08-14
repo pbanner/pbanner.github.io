@@ -149,7 +149,7 @@ function RotateIcon({ size = 15, color = "#8b0000" }) {
   );
 }
 
-export default function LabPanel({ displayBools, buildMode, setBuildMode, components, setComponents }) {
+export default function LabPanel({ displayBools, buildMode, setBuildMode, components, setComponents, hoveredDetectorId, setHoveredDetectorId }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
@@ -524,12 +524,24 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
           // the "bottom points left or right" look asked for there.
           const textRotation = comp.rotation === 180 ? 180 : 0;
           const color = comp.colorId != null ? PC_COLORS[comp.colorId] : '#303030';
+          // Chart-hover is a class-driven echo of the same blue glow
+          // .placed-component:hover already gives every component for free
+          // on a direct mouse-over -- this just lets the histogram's own
+          // bar hover (see Histogram.jsx) trigger that same glow here too,
+          // and vice versa (see the onMouseEnter/Leave below). Only live
+          // outside build/remove mode, per the user's request -- App.jsx
+          // also clears hoveredDetectorId the moment build mode is entered,
+          // so a hover that was active right as a build button is clicked
+          // doesn't linger into it.
+          const chartHovered = comp.id === hoveredDetectorId;
           return (
             <div
               key={comp.id}
-              className={`${componentClass} detector-component`}
+              className={`${componentClass} detector-component ${chartHovered ? 'chart-hover' : ''}`}
               style={componentStyle}
               onMouseDown={(e) => handleComponentMouseDown(e, comp)}
+              onMouseEnter={() => { if (!buildMode) setHoveredDetectorId(comp.id); }}
+              onMouseLeave={() => { if (!buildMode) setHoveredDetectorId((prev) => (prev === comp.id ? null : prev)); }}
             >
               {/* Inset by the same 6px padding every other component gets,
                   sized to the image's actual rendered rect there (see the

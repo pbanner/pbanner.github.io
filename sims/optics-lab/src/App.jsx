@@ -27,6 +27,12 @@ export default function App() {
     showTheory: false,
   });
 
+  // Which detector (by id) is currently hovered, shared between LabPanel and
+  // the Histogram so hovering either one highlights the other -- lifted up
+  // here rather than owned by either, since it's the one piece of state both
+  // of those siblings need to read and write.
+  const [hoveredDetectorId, setHoveredDetectorId] = useState(null);
+
   // Arms (or, clicking the same button again, disarms) a component for
   // placement. Seeded from the click event that triggered it so the ghost
   // appears immediately under the cursor, right over the Build panel, before
@@ -75,6 +81,13 @@ export default function App() {
 
   const armedType = buildMode?.place ? COMPONENT_TYPES.find((c) => c.id === buildMode.place) : null;
 
+  // Detector<->histogram cross-highlighting is only meant to apply outside
+  // build/remove mode -- reading it through this rather than the raw state
+  // means a hover that was already active right as a build button gets
+  // clicked (without the mouse itself moving off the detector) still goes
+  // inert immediately, with no separate effect needed to clear it.
+  const effectiveHoveredDetectorId = buildMode ? null : hoveredDetectorId;
+
   return (
     <div className="app-layout">
       {/* Main Canvas Area -- now fills the whole screen; the overlay panels
@@ -86,6 +99,8 @@ export default function App() {
           setBuildMode={setBuildMode}
           components={components}
           setComponents={setComponents}
+          hoveredDetectorId={effectiveHoveredDetectorId}
+          setHoveredDetectorId={setHoveredDetectorId}
         />
       </div>
 
@@ -106,7 +121,14 @@ export default function App() {
           <DataCollectionPanel dcMode={dcMode} setDcMode={setDcMode} />
         </div>
         <div className="overlay-controls data-plotting-panel">
-          <DataPlottingPanel chartDisplayBools={chartDisplayBools} setChartDisplayBools={setChartDisplayBools} components={components} />
+          <DataPlottingPanel
+            chartDisplayBools={chartDisplayBools}
+            setChartDisplayBools={setChartDisplayBools}
+            components={components}
+            hoverEnabled={!buildMode}
+            hoveredDetectorId={effectiveHoveredDetectorId}
+            setHoveredDetectorId={setHoveredDetectorId}
+          />
         </div>
       </div>
 

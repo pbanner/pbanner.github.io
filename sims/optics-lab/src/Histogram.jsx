@@ -29,6 +29,7 @@ const LOUPE_ZOOM = 10;        // how much the loupe magnifies the chart undernea
 const LOUPE_INK_SCALE = 1 / LOUPE_ZOOM * 2.0; // shrinks line widths/font sizes before the zoom transform blows them back up, so they render at their normal apparent size instead of getting magnified too
 const HOVER_BORDER_COLOR = '#000000';
 const HOVER_BORDER_WIDTH = 2.5;
+const OPTIONS_TOGGLE_SIZE = 36; // matches .icon-only-button's own height
 
 // Every placed detector, left-to-right in the same placement order LabPanel
 // itself numbers them by (see its detectorNumbers map) -- one bar each.
@@ -57,7 +58,7 @@ function niceTicks(minTop, targetCount) {
   return ticks;
 }
 
-export default function Histogram({ components, displayBools }) {
+export default function Histogram({ components, displayBools, hoverEnabled, hoveredDetectorId, setHoveredDetectorId, optionsCollapsed, onShowOptions }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [canvasDims, setCanvasDims] = useState({ width: 300, height: 200 });
@@ -75,10 +76,6 @@ export default function Histogram({ components, displayBools }) {
   // only from the mousemove hit-test below, not something the render needs
   // to react to itself.
   const barRectsRef = useRef([]);
-  // Which detector's bar the cursor is currently over -- purely a local
-  // chart-hover effect (unlike the Stern-Gerlach sim's Histogram, this
-  // doesn't echo back out to highlight anything on LabPanel's own canvas).
-  const [hoveredId, setHoveredId] = useState(null);
 
   // Resize -- same devicePixelRatio handling as LabPanel's canvas (see the
   // comment there for why), but using a ResizeObserver rather than a
@@ -217,7 +214,7 @@ export default function Histogram({ components, displayBools }) {
         ctx.fillStyle = color;
         ctx.fillRect(barX, barY, barWidth, barHeight);
         if (isMainDraw) barRectsRef.current.push({ id: d.id, x: barX, y: barY, width: barWidth, height: barHeight });
-        if (isMainDraw && hoveredId === d.id) {
+        if (isMainDraw && hoveredDetectorId === d.id) {
           ctx.strokeStyle = HOVER_BORDER_COLOR;
           ctx.lineWidth = HOVER_BORDER_WIDTH * inkScale;
           ctx.strokeRect(barX, barY, barWidth, barHeight);
@@ -290,7 +287,7 @@ export default function Histogram({ components, displayBools }) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('Detector Counts' + (displayBools.showTotal ? ` (N = ${dataTotal})` : ''), (plotX0 + plotX1)/2, PADDING_TOP / 2);
-  }, [components, displayBools, canvasDims, hoveredId]);
+  }, [components, displayBools, canvasDims, hoveredDetectorId]);
 
   // Renders the loupe: re-runs the exact same drawHistogram routine against
   // the loupe's own canvas, but first stacks a translate/scale/translate
@@ -339,24 +336,28 @@ export default function Histogram({ components, displayBools }) {
     loupeCanvas.style.height = `${LOUPE_DIAMETER}px`;
   }, [magnifierOn]);
 
-  // Tracks the cursor to see if it's over a bar, purely for this chart's
-  // own hover highlight (see hoveredId above).
+  // Tracks the cursor to see if it's over a bar -- shared with LabPanel (see
+  // hoveredDetectorId/setHoveredDetectorId, lifted up to App), so hovering a
+  // bar here highlights that detector on the canvas too, the same way
+  // hovering the detector on the canvas highlights its bar here (LabPanel's
+  // own onMouseEnter/Leave write to the same shared state). hoverEnabled is
+  // off while build/remove mode is active, per the user's request.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const handleMouseMove = (e) => {
-      if (magnifierOn) return;
+      if (magnifierOn || !hoverEnabled) return;
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
       const hit = barRectsRef.current.find(
         (r) => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height
       );
-      setHoveredId(hit ? hit.id : null);
+      setHoveredDetectorId(hit ? hit.id : null);
     };
     const handleMouseLeave = () => {
-      if (magnifierOn) return;
-      setHoveredId(null);
+      if (magnifierOn || !hoverEnabled) return;
+      setHoveredDetectorId(null);
     };
 
     canvas.addEventListener('mousemove', handleMouseMove);
@@ -365,7 +366,7 @@ export default function Histogram({ components, displayBools }) {
       canvas.removeEventListener('mousemove', handleMouseMove);
       canvas.removeEventListener('mouseleave', handleMouseLeave);
     };
-  }, [magnifierOn]);
+  }, [magnifierOn, hoverEnabled, setHoveredDetectorId]);
 
   // Tracks the cursor over the main canvas while the magnifier is active,
   // positioning the loupe (via direct style mutation, not React state --
@@ -426,6 +427,24 @@ export default function Histogram({ components, displayBools }) {
           <line x1="8" y1="11" x2="14" y2="11" />
         </svg>
       </button>
+      {optionsCollapsed && (
+        <button
+          type="button"
+          className="control-bar-button icon-only-button icon-only-button-square histogram-options-toggle active"
+          onClick={onShowOptions}
+          title="Show chart options"
+          style={{
+            // Same horizontal position as the magnifier toggle above (same
+            // left offset off this same containerRef) -- vertically,
+            // centered on the plot's own bottom axis line, which always
+            // sits exactly PADDING_BOTTOM above this container's bottom
+            // edge regardless of canvas size or how much data there is.
+            bottom: PADDING_BOTTOM - OPTIONS_TOGGLE_SIZE / 2,
+          }}
+        >
+          &lt;&lt;
+        </button>
+      )}
     </div>
   );
 }
