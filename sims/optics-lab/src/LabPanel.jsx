@@ -1,9 +1,76 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { getComponentType } from './componentTypes.js';
+import { getComponentType, getDefaultFootprint, getRotatedFootprint } from './componentTypes.js';
 
-// Side length (px) of one grid square -- also the full-scale placed size of
-// every component image, and the size of the placement ghost in App.jsx.
+// Side length (px) of one grid square -- also the placed size of a single-
+// cell component, and the size of the placement ghost in App.jsx. Larger
+// components (see COMPONENT_TYPES' footprint) are placed sized in multiples
+// of this.
 export const GRID_SIZE = 64;
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+let nextId = 1;
+function makeComponentId() {
+  return `c${nextId++}`;
+}
+
+// Pixel -> grid-cell conversion, clamped to whatever grid currently fits in
+// the canvas. Returns null if the point falls outside the grid entirely.
+function cellFromPoint(x, y, cols, rows) {
+  const col = Math.floor(x / GRID_SIZE);
+  const row = Math.floor(y / GRID_SIZE);
+  if (col < 0 || row < 0 || col >= cols || row >= rows) return null;
+  return { col, row };
+}
+
+// Whether two axis-aligned footprints (each in grid-cell units) overlap at all.
+function footprintsOverlap(aCol, aRow, aW, aH, bCol, bRow, bW, bH) {
+  return aCol < bCol + bW && aCol + aW > bCol && aRow < bRow + bH && aRow + aH > bRow;
+}
+
+// Whether a w×h footprint anchored at (col, row) both fits on the current
+// grid and doesn't overlap any existing component (other than excludeId --
+// used so a component doesn't collide with its own current cells while
+// being dragged or rotated).
+function isFootprintFree(components, col, row, w, h, excludeId, cols, rows) {
+  if (col < 0 || row < 0 || col + w > cols || row + h > rows) return false;
+  return !components.some((c) => {
+    if (c.id === excludeId) return false;
+    const ft = getRotatedFootprint(getComponentType(c.type), c.rotation);
+    return footprintsOverlap(col, row, w, h, c.col, c.row, ft.w, ft.h);
+  });
+}
+
+// Whether comp could rotate 90° clockwise right now, staying anchored at
+// its current (col, row). Always true for a square (1×1) footprint -- its
+// own cells never change, so isFootprintFree's excludeId always covers it
+// -- so this only ever actually blocks a non-square footprint like the
+// laser's.
+function canRotateComponent(components, comp, cols, rows) {
+  const nextRotation = (comp.rotation + 90) % 360;
+  const ft = getRotatedFootprint(getComponentType(comp.type), nextRotation);
+  return isFootprintFree(components, comp.col, comp.row, ft.w, ft.h, comp.id, cols, rows);
+}
+
+// A rotated component is rendered at its *default* (rotation-0) pixel size
+// with a plain CSS transform: rotate() -- simplest way to get a correct
+// rotation animation/appearance for free. That means the image's own CSS
+// box never changes size, so at 90°/270° (where the logical footprint's
+// width/height swap) its top-left has to shift by this offset to keep the
+// *visible*, rotated box's top-left lined up with the component's actual
+// grid anchor (col, row). Works out to (0, 0) for any square (w === h)
+// footprint -- i.e. every component except the laser today -- so this only
+// actually does anything for non-square footprints.
+function getRotationOffset(type, rotation) {
+  const base = getDefaultFootprint(type);
+  if (rotation !== 90 && rotation !== 270) return { x: 0, y: 0 };
+  return {
+    x: (base.h - base.w) * GRID_SIZE / 2,
+    y: (base.w - base.h) * GRID_SIZE / 2,
+  };
+}
 
 // A mousedown/mouseup pair on a placed component counts as a "click" (select
 // it) rather than a drag as long as the cursor never moved more than this
@@ -25,24 +92,6 @@ function RotateIcon({ size = 15 }) {
       <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
     </svg>
   );
-}
-
-function clamp(v, lo, hi) {
-  return Math.max(lo, Math.min(hi, v));
-}
-
-let nextId = 1;
-function makeComponentId() {
-  return `c${nextId++}`;
-}
-
-// Pixel -> grid-cell conversion, clamped to whatever grid currently fits in
-// the canvas. Returns null if the point falls outside the grid entirely.
-function cellFromPoint(x, y, cols, rows) {
-  const col = Math.floor(x / GRID_SIZE);
-  const row = Math.floor(y / GRID_SIZE);
-  if (col < 0 || row < 0 || col >= cols || row >= rows) return null;
-  return { col, row };
 }
 
 export default function LabPanel({ displayBools, buildMode, setBuildMode, components, setComponents }) {
@@ -70,12 +119,12 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
     setDragPos(pos);
   };
 
-  // Which placed component (by id) is currently selected -- shows the red
-  // selection glow and the rotate button. Only one at a time. Left as-is
-  // (not cleared) while build/remove mode is active -- selection just goes
-  // inert (see isSelected/selectedComp below) so the rotate button can't
-  // float over whatever's being placed/removed, and picks back up right
-  // where it was once that mode is left again.
+  // Which placed component (by id) is currently selected -- shows the blue
+  // cell highlight (same as a drag target) and the rotate button. Only one
+  // at a time. Left as-is (not cleared) while build/remove mode is active --
+  // selection just goes inert (see selectionActive/selectedComp below) so
+  // the rotate button can't float over whatever's being placed/removed, and
+  // picks back up right where it was once that mode is left again.
   const [selectedId, setSelectedId] = useState(null);
 
   // Remove-mode drag-erase is tracked in a ref (not state) since it doesn't
@@ -138,40 +187,58 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
       ctx.stroke();
     }
 
-        let highlightCell = null;
+    // {col, row, w, h}, in grid cells -- covers a multi-cell component's
+    // whole footprint, not just one square of it.
+    let highlightRect = null;
     let highlightKind = null; // 'place' | 'remove' | 'drag' | 'select'
     if (draggingId != null && dragPos) {
-      highlightCell = {
-        col: clamp(Math.round(dragPos.x / GRID_SIZE), 0, cols - 1),
-        row: clamp(Math.round(dragPos.y / GRID_SIZE), 0, rows - 1),
+      // Same snap math as the drag's own mouseup handler, so the highlight
+      // always matches where the component will actually land.
+      const dragged = components.find((c) => c.id === draggingId);
+      const ft = dragged ? getRotatedFootprint(getComponentType(dragged.type), dragged.rotation) : { w: 1, h: 1 };
+      highlightRect = {
+        col: clamp(Math.round(dragPos.x / GRID_SIZE), 0, cols - ft.w),
+        row: clamp(Math.round(dragPos.y / GRID_SIZE), 0, rows - ft.h),
+        w: ft.w,
+        h: ft.h,
       };
       highlightKind = 'drag';
-    } else if (hoveredCell && (buildMode?.place || buildMode === 'remove')) {
-      highlightCell = hoveredCell;
-      highlightKind = buildMode === 'remove' ? 'remove' : 'place';
+    } else if (hoveredCell && buildMode?.place) {
+      const ft = getRotatedFootprint(getComponentType(buildMode.place), 0);
+      highlightRect = { col: hoveredCell.col, row: hoveredCell.row, w: ft.w, h: ft.h };
+      highlightKind = 'place';
+    } else if (hoveredCell && buildMode === 'remove') {
+      highlightRect = { col: hoveredCell.col, row: hoveredCell.row, w: 1, h: 1 };
+      highlightKind = 'remove';
     } else if (selectedComp) {
       // Selection uses this same cell highlight (rather than a glow on the
       // component itself) so there's no flash-of-blue-then-red as a click
       // transitions from "maybe a drag" (which shows this highlight too)
       // into "just a selection" once mouseup confirms it never moved.
-      highlightCell = { col: selectedComp.col, row: selectedComp.row };
+      const ft = getRotatedFootprint(getComponentType(selectedComp.type), selectedComp.rotation);
+      highlightRect = { col: selectedComp.col, row: selectedComp.row, w: ft.w, h: ft.h };
       highlightKind = 'select';
     }
 
-    if (highlightCell) {
+    if (highlightRect) {
       let fill;
       if (highlightKind === 'select') {
         fill = 'rgba(52, 152, 219, 0.25)';
       } else {
-        const occupied = components.some((c) => c.col === highlightCell.col && c.row === highlightCell.row && c.id !== draggingId);
+        // isFootprintFree also catches a footprint that doesn't fit on the
+        // grid at all (e.g. a 2-wide laser hovered over the last column) --
+        // that reads the same as "occupied" here, both meaning "can't go
+        // here." Excludes the dragged component's own id -- its own cells
+        // shouldn't read as "occupied" just because it's the thing being moved.
+        const free = isFootprintFree(components, highlightRect.col, highlightRect.row, highlightRect.w, highlightRect.h, draggingId, cols, rows);
         if (highlightKind === 'remove') {
-          fill = occupied ? 'rgba(231, 76, 60, 0.35)' : 'rgba(231, 76, 60, 0.12)';
+          fill = !free ? 'rgba(231, 76, 60, 0.35)' : 'rgba(231, 76, 60, 0.12)';
         } else {
-          fill = occupied ? 'rgba(231, 76, 60, 0.25)' : 'rgba(52, 152, 219, 0.25)';
+          fill = free ? 'rgba(52, 152, 219, 0.25)' : 'rgba(231, 76, 60, 0.25)';
         }
       }
       ctx.fillStyle = fill;
-      ctx.fillRect(highlightCell.col * GRID_SIZE, highlightCell.row * GRID_SIZE, GRID_SIZE, GRID_SIZE);
+      ctx.fillRect(highlightRect.col * GRID_SIZE, highlightRect.row * GRID_SIZE, highlightRect.w * GRID_SIZE, highlightRect.h * GRID_SIZE);
     }
   }, [components, canvasDims, displayBools, buildMode, hoveredCell, draggingId, dragPos, cols, rows, selectedComp]);
 
@@ -181,7 +248,13 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
     const rect = canvas.getBoundingClientRect();
     const cell = cellFromPoint(clientX - rect.left, clientY - rect.top, cols, rows);
     if (!cell) return;
-    setComponents((prev) => prev.filter((c) => !(c.col === cell.col && c.row === cell.row)));
+    // Erases whichever component's footprint contains this cell -- a
+    // multi-cell component (e.g. the laser) is removed by clicking any of
+    // its cells, not just its anchor.
+    setComponents((prev) => prev.filter((c) => {
+      const ft = getRotatedFootprint(getComponentType(c.type), c.rotation);
+      return !footprintsOverlap(cell.col, cell.row, 1, 1, c.col, c.row, ft.w, ft.h);
+    }));
   }, [cols, rows, setComponents]);
 
   // Placement (click to drop an armed component) and remove-mode's initial
@@ -200,7 +273,9 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
       const rect = canvas.getBoundingClientRect();
       const cell = cellFromPoint(e.clientX - rect.left, e.clientY - rect.top, cols, rows);
       if (!cell) return;
-      if (components.some((c) => c.col === cell.col && c.row === cell.row)) return; // occupied
+      const type = getComponentType(buildMode.place);
+      const ft = getRotatedFootprint(type, 0); // freshly placed, always starts unrotated
+      if (!isFootprintFree(components, cell.col, cell.row, ft.w, ft.h, null, cols, rows)) return;
       setComponents((prev) => [...prev, { id: makeComponentId(), type: buildMode.place, col: cell.col, row: cell.row, rotation: 0 }]);
       setBuildMode(null); // single-shot placement, same as the Stern-Gerlach sim's build mode
       setSelectedId(null); // a fresh placement always starts deselected, not whatever was selected before
@@ -254,6 +329,8 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
 
   // Moving an already-placed component: free-follow the cursor, then snap
   // to the nearest grid cell on release (reverting if that cell is taken).
+  // A release that never moved past CLICK_MOVE_THRESHOLD is treated as a
+  // plain click instead -- see the mouseup handler below.
   const startDrag = (e, comp) => {
     if (buildMode) return; // don't fight with placement/remove mode
     e.stopPropagation();
@@ -285,14 +362,21 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
       });
     };
 
+    // Reads dragPosRef directly rather than a setDragPos functional updater --
+    // updater functions must stay pure (React may invoke them speculatively,
+    // e.g. under StrictMode), so the setComponents side effect below can't
+    // safely live inside one.
     const onUp = () => {
       const pos = dragPosRef.current;
       if (pos) {
-        const col = clamp(Math.round(pos.x / GRID_SIZE), 0, cols - 1);
-        const row = clamp(Math.round(pos.y / GRID_SIZE), 0, rows - 1);
         setComponents((prev) => {
-          const occupied = prev.some((c) => c.id !== draggingId && c.col === col && c.row === row);
-          return prev.map((c) => (c.id === draggingId && !occupied ? { ...c, col, row } : c));
+          const dragged = prev.find((c) => c.id === draggingId);
+          if (!dragged) return prev;
+          const ft = getRotatedFootprint(getComponentType(dragged.type), dragged.rotation);
+          const col = clamp(Math.round(pos.x / GRID_SIZE), 0, cols - ft.w);
+          const row = clamp(Math.round(pos.y / GRID_SIZE), 0, rows - ft.h);
+          const free = isFootprintFree(prev, col, row, ft.w, ft.h, draggingId, cols, rows);
+          return prev.map((c) => (c.id === draggingId && free ? { ...c, col, row } : c));
         });
       }
       // Never actually dragged -- this was a click. Toggle selection instead
@@ -314,11 +398,20 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
 
   const cursor = buildMode?.place || buildMode === 'remove' ? 'crosshair' : 'default';
 
-  // Rotates the selected component 90° clockwise. WPs/PBSs are visually
-  // (and eventually optically) identical at 0°/180°, but the state itself
-  // still just cycles through all four -- no special-casing needed here.
+  // Rotates the selected component 90° clockwise, staying anchored at its
+  // current (col, row) -- so for a non-square footprint (the laser) this
+  // can swing the far end into another component, or off the edge of the
+  // grid, in a way that was perfectly fine before the rotation. Silently
+  // refuses (component stays exactly as it was) rather than allowing that.
+  // WPs/PBSs are visually (and eventually optically) identical at 0°/180°,
+  // but the rotation state itself still just cycles through all four --
+  // no special-casing needed here.
   const rotateSelected = () => {
-    setComponents((prev) => prev.map((c) => (c.id === selectedId ? { ...c, rotation: (c.rotation + 90) % 360 } : c)));
+    setComponents((prev) => {
+      const comp = prev.find((c) => c.id === selectedId);
+      if (!comp || !canRotateComponent(prev, comp, cols, rows)) return prev;
+      return prev.map((c) => (c.id === selectedId ? { ...c, rotation: (c.rotation + 90) % 360 } : c));
+    });
   };
 
   return (
@@ -333,46 +426,74 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
       />
       {components.map((comp) => {
         const type = getComponentType(comp.type);
+        const base = getDefaultFootprint(type);
+        const offset = getRotationOffset(type, comp.rotation);
         const isDragging = comp.id === draggingId;
-        const x = isDragging && dragPos ? dragPos.x : comp.col * GRID_SIZE;
-        const y = isDragging && dragPos ? dragPos.y : comp.row * GRID_SIZE;
+        const anchorX = isDragging && dragPos ? dragPos.x : comp.col * GRID_SIZE;
+        const anchorY = isDragging && dragPos ? dragPos.y : comp.row * GRID_SIZE;
         return (
           <img
             key={comp.id}
             src={type.image}
             alt={type.label}
             className={`placed-component ${isDragging ? 'dragging' : ''}`}
-            style={{ left: x, top: y, width: GRID_SIZE, height: GRID_SIZE, transform: `rotate(${comp.rotation}deg)` }}
+            style={{
+              left: anchorX + offset.x,
+              top: anchorY + offset.y,
+              width: base.w * GRID_SIZE,
+              height: base.h * GRID_SIZE,
+              transform: `rotate(${comp.rotation}deg)`,
+            }}
             draggable="false"
             onMouseDown={(e) => handleComponentMouseDown(e, comp)}
           />
         );
       })}
       {selectedComp && (() => {
-        // Anchored above the cell by default, like the SG sim's field
-        // overlays -- except for the top row, where there's no room above,
-        // so it flips to sit just below instead.
+        const ft = getRotatedFootprint(getComponentType(selectedComp.type), selectedComp.rotation);
         const growUp = selectedComp.row > 0;
-        const cx = selectedComp.col * GRID_SIZE + GRID_SIZE / 2;
+        const cx = selectedComp.col * GRID_SIZE + (ft.w * GRID_SIZE) / 2;
         const cy = growUp
           ? selectedComp.row * GRID_SIZE - ROTATE_BUTTON_GAP
-          : (selectedComp.row + 1) * GRID_SIZE + ROTATE_BUTTON_GAP;
+          : (selectedComp.row + ft.h) * GRID_SIZE + ROTATE_BUTTON_GAP;
+        const canRotate = canRotateComponent(components, selectedComp, cols, rows);
+        // Sits on the far side of the button from the component -- another
+        // ROTATE_BUTTON_SIZE + ROTATE_BUTTON_GAP further out along the same
+        // axis and anchor direction the button itself already uses.
+        const messageY = growUp
+          ? cy - ROTATE_BUTTON_SIZE - ROTATE_BUTTON_GAP
+          : cy + ROTATE_BUTTON_SIZE + ROTATE_BUTTON_GAP;
         return (
-          <button
-            type="button"
-            className="rotate-button"
-            aria-label="Rotate component 90°"
-            style={{
-              left: cx,
-              top: cy,
-              width: ROTATE_BUTTON_SIZE,
-              height: ROTATE_BUTTON_SIZE,
-              transform: growUp ? 'translate(-50%, -100%)' : 'translate(-50%, 0%)',
-            }}
-            onClick={(e) => { e.stopPropagation(); rotateSelected(); }}
-          >
-            <RotateIcon />
-          </button>
+          <>
+            <button
+              type="button"
+              className="rotate-button"
+              aria-label={canRotate ? 'Rotate component 90°' : 'Rotate component 90° -- blocked, another component is in the way.'}
+              disabled={!canRotate}
+              style={{
+                left: cx,
+                top: cy,
+                width: ROTATE_BUTTON_SIZE,
+                height: ROTATE_BUTTON_SIZE,
+                transform: growUp ? 'translate(-50%, -100%)' : 'translate(-50%, 0%)',
+              }}
+              onClick={(e) => { e.stopPropagation(); rotateSelected(); }}
+            >
+              <RotateIcon />
+            </button>
+            {!canRotate && (
+              <div
+                className="rotate-blocked-message"
+                style={{
+                  left: cx,
+                  top: messageY,
+                  transform: growUp ? 'translate(-50%, -100%)' : 'translate(-50%, 0%)',
+                }}
+              >
+                Another component is in the way, preventing this one from being rotated.
+              </div>
+            )}
+          </>
         );
       })()}
     </div>

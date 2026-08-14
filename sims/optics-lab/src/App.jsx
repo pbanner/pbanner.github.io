@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import './App.css';
 import LabPanel, { GRID_SIZE } from './LabPanel.jsx';
 import { BuildPanel, DataCollectionPanel, DataPlottingPanel } from './panels.jsx';
-import { COMPONENT_TYPES } from './componentTypes.js';
+import { COMPONENT_TYPES, getDefaultFootprint } from './componentTypes.js';
 
 export default function App() {
   const [displayBools, setDisplayBools] = useState({
@@ -113,15 +113,18 @@ export default function App() {
       {/* Placement ghost: a half-opacity, full-scale preview of the armed
           component that follows the cursor everywhere, including over the
           overlay panels, until it's dropped on an empty grid square. */}
-      {armedType && ghostPos && (
-        <img
-          src={armedType.image}
-          alt=""
-          className="placement-ghost"
-          style={{ left: ghostPos.x, top: ghostPos.y, width: GRID_SIZE, height: GRID_SIZE }}
-          draggable="false"
-        />
-      )}
+      {armedType && ghostPos && (() => {
+        const footprint = getDefaultFootprint(armedType); // always unrotated -- a fresh placement starts at rotation 0
+        return (
+          <img
+            src={armedType.image}
+            alt=""
+            className="placement-ghost"
+            style={{ left: ghostPos.x, top: ghostPos.y, width: footprint.w * GRID_SIZE, height: footprint.h * GRID_SIZE }}
+            draggable="false"
+          />
+        );
+      })()}
     </div>
   );
 }
