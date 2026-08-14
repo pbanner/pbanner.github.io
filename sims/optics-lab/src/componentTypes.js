@@ -23,8 +23,8 @@ const WAVE_PLATE_PLACEMENT_MESSAGE = 'After placing, click to\nrotate component 
 // wide, 1 tall, i.e. it extends across two cells in the same row.
 export const COMPONENT_TYPES = [
   { id: 'laser', label: 'Laser', image: laserImage, footprint: { w: 2, h: 1 } },
-  { id: 'hwp', label: 'Half-Wave Plate', image: hwpImage, placementMessage: WAVE_PLATE_PLACEMENT_MESSAGE },
-  { id: 'qwp', label: 'Quarter-Wave Plate', image: qwpImage, placementMessage: WAVE_PLATE_PLACEMENT_MESSAGE },
+  { id: 'hwp', label: 'Half-Wave Plate', image: hwpImage, placementMessage: WAVE_PLATE_PLACEMENT_MESSAGE, hasAngle: true },
+  { id: 'qwp', label: 'Quarter-Wave Plate', image: qwpImage, placementMessage: WAVE_PLATE_PLACEMENT_MESSAGE, hasAngle: true },
   { id: 'mirror', label: 'Mirror', image: mirrorImage },
   { id: 'pbs', label: 'Polarizing Beam Splitter', image: pbsImage },
   { id: 'detector', label: 'Detector', image: detectorImage, footprint: { w: 2, h: 1 } },
@@ -38,6 +38,14 @@ export function getComponentType(id) {
 // the generic rotate hint otherwise.
 export function getPlacementMessage(type) {
   return type.placementMessage ?? DEFAULT_PLACEMENT_MESSAGE;
+}
+
+// Whether a type has a continuous optical angle (in addition to its 90°-
+// increment placement rotation) -- currently just the wave plates, whose
+// fast axis can be set to anything, not just 0/90/180/270. See LabPanel's
+// WaveplateAngleControl usage and the comp.angle field it reads/writes.
+export function hasAngleControl(type) {
+  return !!type.hasAngle;
 }
 
 // A type's footprint at rotation 0 -- defaults to a single cell.

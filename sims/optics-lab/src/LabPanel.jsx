@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { getComponentType, getDefaultFootprint, getRotatedFootprint } from './componentTypes.js';
+import { getComponentType, getDefaultFootprint, getRotatedFootprint, hasAngleControl } from './componentTypes.js';
 import { PC_COLORS } from './colors.js';
+import WaveplateAngleControl from './WaveplateAngleControl.jsx';
 
 // Side length (px) of one grid square -- also the placed size of a single-
 // cell component, and the size of the placement ghost in App.jsx. Larger
@@ -137,6 +138,9 @@ const CLICK_MOVE_THRESHOLD = 4; // px
 // gap -- same idea as the Stern-Gerlach sim's field-overlay anchoring.
 const ROTATE_BUTTON_GAP = 8; // px
 const ROTATE_BUTTON_SIZE = 26; // px
+
+// WaveplateAngleControl: sits to the right of a selected wave plate's cell.
+const WAVEPLATE_CONTROL_GAP = 12; // px
 
 // Clockwise rotate glyph (Feather icons' "rotate-cw"): a ~270° arc plus a
 // short hooked line at its open end that reads as the arrowhead.
@@ -336,6 +340,9 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
         if (buildMode.place === 'detector') {
           newComp.colorId = getNextDetectorColorId(prev);
           newComp.count = 0;
+        }
+        if (hasAngleControl(type)) {
+          newComp.angle = 0;
         }
         return [...prev, newComp];
       });
@@ -595,6 +602,33 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
           );
         }
 
+        if (hasAngleControl(type)) {
+          // The indicator's own rotation is comp.angle *minus* comp.rotation,
+          // so that once the wrapper's own rotate(comp.rotation) (below)
+          // is added back on top, the indicator's net on-screen angle is
+          // exactly comp.angle regardless of the component's placement
+          // rotation -- the fast axis is a lab-frame quantity, independent
+          // of which way the component body happens to be snapped on the
+          // grid. (Unlike the detector text fix above, a single rotation
+          // here is fine, not per-element: the indicator is centered on
+          // the same point the wrapper itself rotates around, so there's
+          // no off-center anchor for a shared rotation to mis-position --
+          // it only ever spins in place regardless of which point it
+          // pivots around.)
+          const indicatorRotation = (comp.angle ?? 0) - comp.rotation;
+          return (
+            <div
+              key={comp.id}
+              className={`${componentClass} waveplate-component`}
+              style={componentStyle}
+              onMouseDown={(e) => handleComponentMouseDown(e, comp)}
+            >
+              <img src={type.image} alt={type.label} className="waveplate-image" draggable="false" />
+              <div className="waveplate-indicator" style={{ transform: `translate(-50%, -50%) rotate(${indicatorRotation}deg)` }} />
+            </div>
+          );
+        }
+
         return (
           <img
             key={comp.id}
@@ -652,6 +686,21 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
               </div>
             )}
           </>
+        );
+      })()}
+      {selectedComp && hasAngleControl(getComponentType(selectedComp.type)) && (() => {
+        const ft = getRotatedFootprint(getComponentType(selectedComp.type), selectedComp.rotation);
+        const anchorX = (selectedComp.col + ft.w) * GRID_SIZE + WAVEPLATE_CONTROL_GAP;
+        const anchorY = selectedComp.row * GRID_SIZE + (ft.h * GRID_SIZE) / 2;
+        return (
+          <div className="waveplate-angle-control-anchor" style={{ left: anchorX, top: anchorY }}>
+            <WaveplateAngleControl
+              angle={selectedComp.angle ?? 0}
+              onChangeAngle={(newAngle) => {
+                setComponents((prev) => prev.map((c) => (c.id === selectedComp.id ? { ...c, angle: newAngle } : c)));
+              }}
+            />
+          </div>
         );
       })()}
     </div>

@@ -406,6 +406,77 @@
   text-align: center;
 }
 
+/* Wave plate card -- a wrapper div (instead of a bare <img>, same reason as
+   the detector) holding the image plus a small qualitative indicator of
+   its fast-axis angle (comp.angle), visible whether or not it's selected. */
+.waveplate-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.waveplate-indicator {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 75%;
+  height: 6px;
+  background: #222222;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* WaveplateAngleControl -- the ruler + numeric readout shown to the right
+   of a selected wave plate (see LabPanel's selectedComp block). */
+.waveplate-angle-control-anchor {
+  position: absolute;
+  transform: translateY(-50%);
+  z-index: 7;
+}
+
+.waveplate-angle-control {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.00);
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.waveplate-angle-heading {
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+  white-space: nowrap;
+}
+
+.waveplate-angle-ruler {
+  display: block;
+  cursor: ns-resize;
+  border-radius: 4px;
+}
+
+.waveplate-angle-readout-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: #333;
+}
+
+.waveplate-angle-readout {
+  width: 60px;
+  text-align: center;
+  font-size: 13px;
+  padding: 3px 4px;
+  border: 1px solid #999;
+  border-radius: 4px;
+}
+
 /* Histogram -- sits beside .data-plotting-options rather than below it, so
    it stretches to fill the row's full height instead of needing its own
    min-height. Same layout as the Stern-Gerlach sim's .histogram-panel/
