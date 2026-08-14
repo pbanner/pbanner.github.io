@@ -274,6 +274,7 @@
 .rotate-button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+  border: 2px solid #8b8b8b;
 }
 
 .rotate-button:disabled:hover {
@@ -286,13 +287,15 @@
   background: rgba(255, 255, 255, 0.95);
   border: 1px solid #8b0000;
   border-radius: 6px;
-  padding: 3px 8px;
+  padding: 8px 10px;
   font-size: 11px;
   color: #8b0000;
   white-space: nowrap;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   pointer-events: none;
   z-index: 6;
+  line-height: 1.25;
+  text-align: center;
 }
 
 /* Stand-in for the eventual chart in the data-plotting panel -- sits beside

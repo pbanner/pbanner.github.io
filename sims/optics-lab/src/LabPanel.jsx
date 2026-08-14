@@ -89,9 +89,9 @@ const ROTATE_BUTTON_SIZE = 26; // px
 
 // Clockwise rotate glyph (Feather icons' "rotate-cw"): a ~270° arc plus a
 // short hooked line at its open end that reads as the arrowhead.
-function RotateIcon({ size = 15 }) {
+function RotateIcon({ size = 15, color = "#8b0000" }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#8b0000" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M23 4v6h-6" />
       <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
     </svg>
@@ -487,7 +487,7 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
               }}
               onClick={(e) => { e.stopPropagation(); rotateSelected(); }}
             >
-              <RotateIcon />
+              <RotateIcon color={canRotate ? "#8b0000" : "#8b8b8b"} />
             </button>
             {!canRotate && (
               <div
@@ -498,7 +498,7 @@ export default function LabPanel({ displayBools, buildMode, setBuildMode, compon
                   transform: growUp ? 'translate(-50%, -100%)' : 'translate(-50%, 0%)',
                 }}
               >
-                Another component is in the way, preventing this one from being rotated.
+                Another component is in the way,<br />preventing this one from being rotated.
               </div>
             )}
           </>
