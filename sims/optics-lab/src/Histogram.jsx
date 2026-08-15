@@ -256,7 +256,7 @@ export default function Histogram({ components, displayBools, hoverEnabled, hove
       });
     }
 
-    if (legendOn && detectors.length > 0) {
+    if (legendOn) {
       const legendY0 = plotY0;
       const legendY1 = legendY0 + legendBoxHeight;
       ctx.strokeStyle = "#999999";
@@ -268,8 +268,9 @@ export default function Histogram({ components, displayBools, hoverEnabled, hove
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       if (detectors.length === 0) {
+        ctx.font = `bold 11px Arial`;
         ctx.fillStyle = TICK_LABEL_COLOR;
-        ctx.fillText('None', legendX0 + LEGEND_PADDING, legendY0 + legendBoxHeight / 2);
+        ctx.fillText('Legend', legendX0 + LEGEND_PADDING, legendY0 + legendBoxHeight / 2);
       } else {
         detectors.forEach((d, i) => {
           const rowY = legendY0 + LEGEND_PADDING + i * LEGEND_ROW_HEIGHT + LEGEND_ROW_HEIGHT / 2;
