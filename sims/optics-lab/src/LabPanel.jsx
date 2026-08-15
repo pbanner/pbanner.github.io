@@ -47,16 +47,24 @@ const DETECTOR_COUNT_TOP = 132 * (DETECTOR_BOX_HEIGHT / 200);
 // intent to move the component.
 const CLICK_MOVE_THRESHOLD = 4; // px
 
-// Rotate button: sits just off the selected component's cell, offset by this
-// gap -- same idea as the Stern-Gerlach sim's field-overlay anchoring.
+// Rotate/delete buttons: sit just off the selected component's cell, offset
+// by this gap -- same idea as the Stern-Gerlach sim's field-overlay
+// anchoring. Both buttons share one size; delete always sits below the
+// component, while rotate flips above/below depending on available room
+// (see the selectedComp block) -- when both land below, DELETE_BUTTON_GAP
+// is the horizontal gap between the pair.
 const ROTATE_BUTTON_GAP = 8; // px
 const ROTATE_BUTTON_SIZE = 26; // px
+const DELETE_BUTTON_GAP = 6; // px, between rotate and delete when side by side
 
 // WaveplateAngleControl: sits to the right of a selected wave plate's cell.
 const WAVEPLATE_CONTROL_GAP = 12; // px
 
-// Laser Power control: sits centered below a selected laser's cell.
-const LASER_POWER_CONTROL_WIDTH = 200; // px
+// Laser Power control: sits to the right of a selected laser's cell, same
+// idea as the wave plate's own control (and the same gap).
+const LASER_POWER_CONTROL_GAP = 12; // px
+const LASER_POWER_CONTROL_WIDTH = 90; // px
+const LASER_POWER_SLIDER_LENGTH = 140; // px, the vertical slider's own length
 
 // On-canvas angle indicator: how far in (as a % of the component's own
 // height) it stays clear of the top/bottom edge, so it never sits flush
@@ -713,11 +721,22 @@ function getNextDetectorColorId(components) {
 
 // Clockwise rotate glyph (Feather icons' "rotate-cw"): a ~270° arc plus a
 // short hooked line at its open end that reads as the arrowhead.
-function RotateIcon({ size = 15, color = "#8b0000" }) {
+function RotateIcon({ size = 15, color = "#3498db" }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M23 4v6h-6" />
       <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+    </svg>
+  );
+}
+
+// A plain "x", drawn as SVG (not the unicode "×") so it renders identically
+// regardless of the system's own font -- same reasoning as RotateIcon.
+function DeleteIcon({ size = 15, color = "#8b0000" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 5L19 19" />
+      <path d="M19 5L5 19" />
     </svg>
   );
 }
@@ -1077,6 +1096,11 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
     });
   };
 
+  const deleteSelected = () => {
+    setComponents((prev) => prev.filter((c) => c.id !== selectedId));
+    setSelectedId(null);
+  };
+
   // Detector labels (D1, D2, ...) are derived from placement order among
   // just the detector-type components, not stored on the component itself --
   // recomputed on every render (cheap; components lists here run small).
@@ -1376,6 +1400,13 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
         const messageY = growUp
           ? cy - ROTATE_BUTTON_SIZE - ROTATE_BUTTON_GAP
           : cy + ROTATE_BUTTON_SIZE + ROTATE_BUTTON_GAP;
+        // Delete always sits below the component (unlike rotate, which
+        // flips above/below depending on room) -- when rotate is *also*
+        // below (growUp false), they'd otherwise land in the exact same
+        // spot, so delete shifts over to sit beside it instead of
+        // displacing it.
+        const deleteY = (selectedComp.row + ft.h) * GRID_SIZE + ROTATE_BUTTON_GAP;
+        const deleteX = growUp ? cx : cx + ROTATE_BUTTON_SIZE + DELETE_BUTTON_GAP;
         return (
           <>
             <button
@@ -1392,7 +1423,7 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
               }}
               onClick={(e) => { e.stopPropagation(); rotateSelected(); }}
             >
-              <RotateIcon color={canRotate ? "#8b0000" : "#8b8b8b"} />
+              <RotateIcon color={canRotate ? "#3498db" : "#8b8b8b"} />
             </button>
             {!canRotate && (
               <div
@@ -1406,6 +1437,21 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
                 Another component is in the way,<br />preventing this one from being rotated.
               </div>
             )}
+            <button
+              type="button"
+              className="delete-button"
+              aria-label="Delete component"
+              style={{
+                left: deleteX,
+                top: deleteY,
+                width: ROTATE_BUTTON_SIZE,
+                height: ROTATE_BUTTON_SIZE,
+                transform: 'translate(-50%, 0%)',
+              }}
+              onClick={(e) => { e.stopPropagation(); deleteSelected(); }}
+            >
+              <DeleteIcon />
+            </button>
           </>
         );
       })()}
@@ -1426,8 +1472,8 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
       })()}
       {selectedComp && hasPowerControl(getComponentType(selectedComp.type)) && (() => {
         const ft = getRotatedFootprint(getComponentType(selectedComp.type), selectedComp.rotation);
-        const anchorX = (selectedComp.col + ft.w/2) * GRID_SIZE - LASER_POWER_CONTROL_WIDTH / 2;
-        const anchorY = (selectedComp.row + ft.h) * GRID_SIZE + 10;
+        const anchorX = (selectedComp.col + ft.w) * GRID_SIZE + LASER_POWER_CONTROL_GAP;
+        const anchorY = selectedComp.row * GRID_SIZE + (ft.h * GRID_SIZE) / 2;
         return (
           <div className="laser-power-control-anchor" style={{ left: anchorX, top: anchorY }}>
             <div className="laser-power-control" style={{ width: LASER_POWER_CONTROL_WIDTH }}>
@@ -1440,6 +1486,8 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
                 min={0.0}
                 max={100}
                 step={1.0}
+                vertical
+                verticalLength={LASER_POWER_SLIDER_LENGTH}
               />
             </div>
           </div>

@@ -130,10 +130,15 @@ export default function WaveplateAngleControl({ angle, onChangeAngle }) {
     const onMove = (e) => {
       if (!draggingRef.current) return;
       // Dragging up increases the angle (like pulling a vertical slider's
-      // handle "up" for "more"), dragging down decreases it.
+      // handle "up" for "more"), dragging down decreases it. Snapped to the
+      // nearest half degree -- dragging is a coarse, by-eye motion, so
+      // matching it to whatever fractional pixel the cursor lands on would
+      // read as arbitrary precision it doesn't actually have; typing a
+      // value directly (see commitText below) is the precise path, and
+      // isn't limited to this step.
       const dy = e.clientY - dragStartYRef.current;
       const next = wrapDegrees(dragStartAngleRef.current + dy / PX_PER_DEGREE);
-      onChangeAngle(Math.round(next * 10) / 10);
+      onChangeAngle(Math.round(next * 2) / 2);
     };
     const onUp = () => { draggingRef.current = false; };
     window.addEventListener('mousemove', onMove);
