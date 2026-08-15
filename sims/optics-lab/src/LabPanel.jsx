@@ -331,23 +331,129 @@ function beamsplitterReflectExit(rotation, entrySide) {
   return otherSideInPair(pair, entrySide);
 }
 
-// The exact pixel point where a photon crosses into cell (col, row) --
-// where a block/detector absorbs it, or (for the far side, via
-// SIDE_TO_EXIT_DIR when it doesn't turn) where it leaves one, on whichever
-// edge `dir` enters through, at the same transverse coordinate (`carried`)
-// the photon has held since its last actual turn.
-function cellEntryPoint(col, row, dir, carried) {
-  if (dir.x !== 0) {
-    const x = dir.x > 0 ? col * GRID_SIZE : (col + 1) * GRID_SIZE;
-    return { x, y: carried.y };
-  }
-  const y = dir.y > 0 ? row * GRID_SIZE : (row + 1) * GRID_SIZE;
-  return { x: carried.x, y };
+// Passing straight through -- a wave plate, or a beamsplitter's transmitted
+// branch -- doesn't bend, so there's no reason to touch the beam's own
+// transverse position at all. This only advances the tracking point's
+// *longitudinal* coordinate (to this cell's own center, purely so the next
+// marching step resumes searching beyond this cell), leaving the carried
+// transverse coordinate exactly as it was. Snapping it to the cell's center
+// here (an earlier version's bug) is what made every photon passing
+// through the same wave plate/beamsplitter converge into a single, dead-
+// straight line regardless of how far off-axis it actually entered -- a
+// visible "funneling" a real (jitter-width) beam wouldn't show, and one
+// that then propagated into wherever the beam ended up bending next.
+function advanceThrough(col, row, dir, carried) {
+  if (dir.x !== 0) return { x: (col + 0.5) * GRID_SIZE, y: carried.y };
+  return { x: carried.x, y: (row + 0.5) * GRID_SIZE };
 }
-// Where a 1x1 cell's diagonal actually is -- the bend point for a mirror's
-// or beamsplitter's reflected branch.
-function cellCenter(col, row) {
-  return { x: (col + 0.5) * GRID_SIZE, y: (row + 0.5) * GRID_SIZE };
+
+// A precise (non-rounded) rotation of a point around the origin, `deg`
+// clockwise on screen -- same convention as rotateVec, but without that
+// function's integer rounding (fine for its own use, exact cardinal unit
+// vectors, but not for the sub-pixel graphic geometry below).
+function rotatePointPrecise(p, deg) {
+  const t = (deg * Math.PI) / 180;
+  const c = Math.cos(t), s = Math.sin(t);
+  return { x: p.x * c - p.y * s, y: p.x * s + p.y * c };
+}
+
+// A reflective/beamsplitting graphic's own diagonal bar, measured directly
+// off its source image the same way DETECTOR_* was measured off
+// detector.png: object-fit:contain centers each (square) source canvas in
+// the cell's own (square, GRID_SIZE - 2*padding) content box with no
+// letterboxing, then the image's own drawn bar -- p0/p1 here are its
+// measured on-canvas endpoints, not necessarily the canvas's literal
+// corners -- gets scaled into that box. mirror.png's bar in particular
+// isn't quite centered in its own 168x168 canvas (bbox (4,25)-(143,165));
+// npbs.png/pbs.png's are close enough to dead-center (bbox (2,2)-(149,149)
+// of 150x150) that this makes no visible difference for them, but they're
+// measured the same way on principle rather than assumed.
+function scaledLocalDiagonal(imageSize, bboxP0, bboxP1) {
+  const contentSize = GRID_SIZE - 2 * DETECTOR_PADDING;
+  const scale = contentSize / imageSize;
+  const toLocal = (p) => ({ x: DETECTOR_PADDING + p.x * scale, y: DETECTOR_PADDING + p.y * scale });
+  return { p0: toLocal(bboxP0), p1: toLocal(bboxP1) };
+}
+const MIRROR_DIAGONAL_LOCAL = scaledLocalDiagonal(168, { x: 4, y: 25 }, { x: 143, y: 165 });
+const BEAMSPLITTER_DIAGONAL_LOCAL = scaledLocalDiagonal(150, { x: 2, y: 2 }, { x: 149, y: 149 });
+
+// Where the incoming ray -- approaching a 1x1 cell (col, row) along `dir`,
+// at whatever transverse coordinate it's carried (`carried`) since its last
+// actual turn -- crosses `diagonalLocal`'s bar (rotated along with the
+// component itself, same transform as its own image). Unlike cellCenter,
+// this moves with the beam's own position across its aperture width, so
+// photons that entered a little off from dead-center bounce off a
+// correspondingly different point along the mirror/beamsplitter's face,
+// fanning back out naturally instead of every photon funneling through the
+// exact same pixel regardless of where it actually hit.
+function diagonalIntersection(col, row, rotation, dir, carried, diagonalLocal) {
+  const c = GRID_SIZE / 2;
+  const rotate = (p) => {
+    const r = rotatePointPrecise({ x: p.x - c, y: p.y - c }, rotation);
+    return { x: c + r.x, y: c + r.y };
+  };
+  const p0 = rotate(diagonalLocal.p0);
+  const p1 = rotate(diagonalLocal.p1);
+  const dx = p1.x - p0.x, dy = p1.y - p0.y;
+  if (dir.x !== 0) {
+    const localY = carried.y - row * GRID_SIZE;
+    const t = (localY - p0.y) / dy;
+    return { x: col * GRID_SIZE + p0.x + t * dx, y: carried.y };
+  }
+  const localX = carried.x - col * GRID_SIZE;
+  const t = (localX - p0.x) / dx;
+  return { x: carried.x, y: row * GRID_SIZE + p0.y + t * dy };
+}
+
+// A block/detector's own graphic rect, measured the same way (see
+// scaledLocalDiagonal above) -- DETECTOR_OFFSET_X/Y/BOX_WIDTH/HEIGHT are
+// already exactly this, measured against detector.png for the detector's
+// own on-canvas rendering; BLOCK_* is the equivalent for beam-block.png (a
+// tall, narrow 72x400 image, so unlike the detector it's letterboxed
+// horizontally rather than vertically).
+const DETECTOR_LOCAL_RECT = {
+  x0: DETECTOR_OFFSET_X, y0: DETECTOR_OFFSET_Y,
+  x1: DETECTOR_OFFSET_X + DETECTOR_BOX_WIDTH, y1: DETECTOR_OFFSET_Y + DETECTOR_BOX_HEIGHT,
+};
+const BLOCK_IMAGE_WIDTH = 72, BLOCK_IMAGE_HEIGHT = 400;
+const BLOCK_CONTENT_SIZE = GRID_SIZE - 2 * DETECTOR_PADDING; // 1x1 footprint -- square content box
+const BLOCK_BOX_HEIGHT = BLOCK_CONTENT_SIZE; // fits by height -- the image is much taller than wide
+const BLOCK_BOX_WIDTH = BLOCK_BOX_HEIGHT * (BLOCK_IMAGE_WIDTH / BLOCK_IMAGE_HEIGHT);
+const BLOCK_LOCAL_RECT = {
+  x0: DETECTOR_PADDING + (BLOCK_CONTENT_SIZE - BLOCK_BOX_WIDTH) / 2,
+  y0: DETECTOR_PADDING,
+  x1: DETECTOR_PADDING + (BLOCK_CONTENT_SIZE - BLOCK_BOX_WIDTH) / 2 + BLOCK_BOX_WIDTH,
+  y1: DETECTOR_PADDING + BLOCK_BOX_HEIGHT,
+};
+
+// Where the incoming ray -- entering a component's footprint along `dir`,
+// at transverse coordinate `carried` -- first crosses `rect`'s own near
+// edge, given the footprint's actual placement anchor (anchorX/anchorY --
+// its *unrotated* top-left; a 1x1 component's is just (col, row) *
+// GRID_SIZE, but the detector's 2x1 one needs its own real placement
+// anchor, not whichever of its two cells the ray happened to enter
+// through) and rotation. `rect` rotates along with the component -- still
+// axis-aligned afterward, since every rotation here is a 90° multiple --
+// so this always resolves to a plain min/max on the rotated corners.
+// Off-axis position is clamped to the rotated rect's own span, in case the
+// beam's aperture jitter carried it slightly past the (narrower-than-the-
+// full-cell) graphic's own edge.
+function rectEntryPoint(anchorX, anchorY, baseFootprint, rotation, rect, dir, carried) {
+  const cx = anchorX + (baseFootprint.w * GRID_SIZE) / 2;
+  const cy = anchorY + (baseFootprint.h * GRID_SIZE) / 2;
+  const corners = [
+    { x: rect.x0, y: rect.y0 }, { x: rect.x1, y: rect.y0 },
+    { x: rect.x0, y: rect.y1 }, { x: rect.x1, y: rect.y1 },
+  ].map((p) => {
+    const r = rotatePointPrecise({ x: anchorX + p.x - cx, y: anchorY + p.y - cy }, rotation);
+    return { x: cx + r.x, y: cy + r.y };
+  });
+  const xs = corners.map((p) => p.x), ys = corners.map((p) => p.y);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  if (dir.x !== 0) {
+    return { x: dir.x > 0 ? x0 : x1, y: clamp(carried.y, y0, y1) };
+  }
+  return { x: clamp(carried.x, x0, x1), y: dir.y > 0 ? y0 : y1 };
 }
 
 // Whether `entrySide` is the "front" (not-dark, coated) face of a 1x1
@@ -422,11 +528,21 @@ function tracePaths(laserComp, cellMap, cols, rows) {
     const type = getComponentType(hitComp.type);
     const entrySide = dir.x > 0 ? 'left' : dir.x < 0 ? 'right' : dir.y > 0 ? 'top' : 'bottom';
 
-    // Terminal absorption/detection happens right at the cell's near edge
-    // -- the photon never travels any further into the block/detector than
-    // that, so that's exactly how far its phase needs to advance too.
+    // Terminal absorption/detection: travels all the way to the edge of
+    // the component's own *graphic* (see DETECTOR_LOCAL_RECT/
+    // BLOCK_LOCAL_RECT -- measured against the actual rendered images, not
+    // assumed) rather than stopping short at the cell's outer edge, so the
+    // photon visibly reaches the block/detector before it disappears. Uses
+    // the component's own real placement anchor, not necessarily (col,
+    // row) -- the detector's 2x1 footprint might have been entered through
+    // either of its two cells.
     if (type.physicsKind === 'block' || type.physicsKind === 'detector') {
-      const point = cellEntryPoint(col, row, dir, pos);
+      const base = getDefaultFootprint(type);
+      const offset = getRotationOffset(type, hitComp.rotation);
+      const anchorX = hitComp.col * GRID_SIZE + offset.x;
+      const anchorY = hitComp.row * GRID_SIZE + offset.y;
+      const rect = type.physicsKind === 'block' ? BLOCK_LOCAL_RECT : DETECTOR_LOCAL_RECT;
+      const point = rectEntryPoint(anchorX, anchorY, base, hitComp.rotation, rect, dir, pos);
       const dist = Math.hypot(point.x - pos.x, point.y - pos.y);
       const arrived = scaleState(state, pathPhaseFactor(dist));
       const outcome = type.physicsKind === 'block' ? { type: 'absorbed' } : { type: 'detected', detectorId: hitComp.id };
@@ -434,43 +550,57 @@ function tracePaths(laserComp, cellMap, cols, rows) {
       return;
     }
 
-    // Every other kind interacts at the cell's own center (where its
-    // diagonal actually is, or -- for a wave plate -- just a stand-in for
-    // "the middle of this idealized, thickness-free element") -- so that's
-    // the point both the phase and (for a reflection) the new direction get
-    // evaluated from.
-    const center = cellCenter(col, row);
-    const dist = Math.hypot(center.x - pos.x, center.y - pos.y);
-    const arrived = scaleState(state, pathPhaseFactor(dist));
-
-    if (type.physicsKind === 'hwp' || type.physicsKind === 'qwp') {
-      const matrix = type.physicsKind === 'hwp' ? hwpMatrix(hitComp.angle ?? 0) : qwpMatrix(hitComp.angle ?? 0);
-      walk(center, dir, applyJones(matrix, arrived), points, hop + 1); // straight through -- no bend, no new vertex
+    // A mirror bends (or, absorbed on its dark face, ends) exactly where
+    // the incoming ray crosses its own diagonal bar -- see
+    // diagonalIntersection -- not always the same fixed center point, so
+    // beams that entered a little off-axis visibly bounce off a
+    // correspondingly different spot rather than every beam converging on
+    // one pixel first.
+    if (type.physicsKind === 'mirror') {
+      const res = mirrorOutcome(hitComp.rotation, entrySide);
+      const bendPoint = diagonalIntersection(col, row, hitComp.rotation, dir, pos, MIRROR_DIAGONAL_LOCAL);
+      const dist = Math.hypot(bendPoint.x - pos.x, bendPoint.y - pos.y);
+      const arrived = scaleState(state, pathPhaseFactor(dist));
+      if (res.type === 'absorb') {
+        results.push({ outcome: { type: 'absorbed' }, state: arrived, points: [...points, bendPoint] });
+        return;
+      }
+      walk(bendPoint, SIDE_TO_EXIT_DIR[res.exitSide], scaleState(arrived, -1), [...points, bendPoint], hop + 1);
       return;
     }
 
-    if (type.physicsKind === 'mirror') {
-      const res = mirrorOutcome(hitComp.rotation, entrySide);
-      if (res.type === 'absorb') {
-        results.push({ outcome: { type: 'absorbed' }, state: arrived, points: [...points, cellEntryPoint(col, row, dir, pos)] });
-        return;
-      }
-      walk(center, SIDE_TO_EXIT_DIR[res.exitSide], scaleState(arrived, -1), [...points, center], hop + 1);
+    // A wave plate (and a beamsplitter's transmitted branch, below) has no
+    // visible bend -- advanceThrough only moves the tracking point's
+    // longitudinal coordinate, preserving whatever transverse position the
+    // beam actually carried in.
+    const through = advanceThrough(col, row, dir, pos);
+    const throughDist = Math.hypot(through.x - pos.x, through.y - pos.y);
+    const arrived = scaleState(state, pathPhaseFactor(throughDist));
+
+    if (type.physicsKind === 'hwp' || type.physicsKind === 'qwp') {
+      const matrix = type.physicsKind === 'hwp' ? hwpMatrix(hitComp.angle ?? 0) : qwpMatrix(hitComp.angle ?? 0);
+      walk(through, dir, applyJones(matrix, arrived), points, hop + 1); // straight through -- no bend, no new vertex
       return;
     }
 
     // npbs / pbs: both branches are always taken (this is the coherent
     // trace -- samplePhotonPath is what turns this into one random draw).
+    // The reflected branch bends at the diagonal's actual crossing point,
+    // same as a mirror; the transmitted one doesn't bend at all, so it just
+    // reuses the through-phase above.
+    const bendPoint = diagonalIntersection(col, row, hitComp.rotation, dir, pos, BEAMSPLITTER_DIAGONAL_LOCAL);
+    const bendDist = Math.hypot(bendPoint.x - pos.x, bendPoint.y - pos.y);
+    const bendArrived = scaleState(state, pathPhaseFactor(bendDist));
     const reflectExitSide = beamsplitterReflectExit(hitComp.rotation, entrySide);
     const reflectPhase = isFrontEntry(hitComp.rotation, entrySide) ? -1 : 1;
     if (type.physicsKind === 'pbs') {
       const transmitState = { h: arrived.h, v: { re: 0, im: 0 } };
-      const reflectState = { h: { re: 0, im: 0 }, v: scaleState(arrived, reflectPhase).v };
-      if (cAbs2(transmitState.h) > 0) walk(center, dir, transmitState, points, hop + 1);
-      if (cAbs2(reflectState.v) > 0) walk(center, SIDE_TO_EXIT_DIR[reflectExitSide], reflectState, [...points, center], hop + 1);
+      const reflectState = { h: { re: 0, im: 0 }, v: scaleState(bendArrived, reflectPhase).v };
+      if (cAbs2(transmitState.h) > 0) walk(through, dir, transmitState, points, hop + 1);
+      if (cAbs2(reflectState.v) > 0) walk(bendPoint, SIDE_TO_EXIT_DIR[reflectExitSide], reflectState, [...points, bendPoint], hop + 1);
     } else {
-      walk(center, dir, scaleState(arrived, Math.SQRT1_2), points, hop + 1);
-      walk(center, SIDE_TO_EXIT_DIR[reflectExitSide], scaleState(arrived, reflectPhase * Math.SQRT1_2), [...points, center], hop + 1);
+      walk(through, dir, scaleState(arrived, Math.SQRT1_2), points, hop + 1);
+      walk(bendPoint, SIDE_TO_EXIT_DIR[reflectExitSide], scaleState(bendArrived, reflectPhase * Math.SQRT1_2), [...points, bendPoint], hop + 1);
     }
   }
 
@@ -1073,7 +1203,12 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
     if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
   }, []);
 
-  useImperativeHandle(ref, () => ({ spawnParticle, resetParticles }), [spawnParticle, resetParticles]);
+  // Clears the current selection -- backs App.jsx's "pressing Start
+  // deselects everything" behavior, since selectedId is local state here,
+  // not something App.jsx already has a handle on.
+  const deselectAll = useCallback(() => setSelectedId(null), []);
+
+  useImperativeHandle(ref, () => ({ spawnParticle, resetParticles, deselectAll }), [spawnParticle, resetParticles, deselectAll]);
 
   const renderComponent = (comp) => {
     const type = getComponentType(comp.type);

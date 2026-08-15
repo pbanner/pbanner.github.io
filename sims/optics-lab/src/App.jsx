@@ -105,10 +105,12 @@ export default function App() {
   }, [dcMode.mode, dcMode.running, laserPower]);
 
   const handleMakeOnePhoton = () => {
+    labPanelRef.current?.deselectAll();
     labPanelRef.current?.spawnParticle();
   };
 
   const handleToggleRunning = () => {
+    if (!dcMode.running) labPanelRef.current?.deselectAll(); // about to start running -- clear the selection
     setDcMode((prev) => ({ ...prev, running: !prev.running }));
   };
 
@@ -120,6 +122,29 @@ export default function App() {
     setComponents((prev) => prev.map((c) => (c.type === 'detector' ? { ...c, count: 0 } : c)));
     setDcMode((prev) => ({ ...prev, running: false }));
   };
+
+  // Auto-resets the histogram (running counts + any in-flight photons)
+  // whenever the experiment itself changes -- placing/removing/moving/
+  // rotating a component, or adjusting a wave plate's angle or a laser's
+  // power. Keyed on a signature that leaves each detector's own count out,
+  // so a detector actually being hit (which also goes through
+  // setComponents, many times a second while photons are flowing) doesn't
+  // retrigger this -- only a change to the experiment's own layout/settings
+  // does. Skips its very first run (mount), since there's nothing to reset yet.
+  const experimentSignature = JSON.stringify(components.map((c) => {
+    const stripped = { ...c };
+    delete stripped.count;
+    return stripped;
+  }));
+  const isFirstExperimentSignature = useRef(true);
+  useEffect(() => {
+    if (isFirstExperimentSignature.current) {
+      isFirstExperimentSignature.current = false;
+      return;
+    }
+    labPanelRef.current?.resetParticles();
+    setComponents((prev) => prev.map((c) => (c.type === 'detector' ? { ...c, count: 0 } : c)));
+  }, [experimentSignature]);
 
   const armedType = buildMode?.place ? COMPONENT_TYPES.find((c) => c.id === buildMode.place) : null;
 
