@@ -21,3 +21,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+src/assets/npbs_OG.psd
+src/assets/npbs_old.png

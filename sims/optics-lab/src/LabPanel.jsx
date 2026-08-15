@@ -3,7 +3,7 @@ import { getComponentType, getDefaultFootprint, getRotatedFootprint, hasAngleCon
 import { PC_COLORS } from './colors.js';
 import WaveplateAngleControl from './WaveplateAngleControl.jsx';
 import { SliderPlusTextboxControl } from './controls.jsx';
-import { H_STATE, V_STATE, applyJones, hwpMatrix, qwpMatrix, cAbs2 } from './physics.js';
+import { H_STATE, applyJones, hwpMatrix, qwpMatrix, cAdd, cMul, cAbs2 } from './physics.js';
 
 // Side length (px) of one grid square -- also the placed size of a single-
 // cell component, and the size of the placement ghost in App.jsx. Larger
@@ -141,14 +141,20 @@ function getRotationOffset(type, rotation) {
 
 // --- Photon physics/animation -----------------------------------------
 //
-// A photon's path is a stochastic walk through the placed components, in
-// the same spirit as the Stern-Gerlach sim's samplePath: it samples every
-// probabilistic branch (a beamsplitter) via the Born rule and collapses
-// state accordingly, and the result is a polyline of vertices -- start,
-// one per reflection, and wherever it finally stops -- that the animation
-// loop then just walks at a constant speed. Unlike that sim, there's no
-// separate "theoretical probability" exact companion here; the histogram
-// only ever shows accumulated counts.
+// A photon's fate is worked out in two passes. tracePaths first walks
+// *every* branch coherently -- a beamsplitter recurses into both its
+// transmitted and reflected halves rather than coin-flipping between them,
+// each carrying its own complex amplitude (Jones state, not yet a
+// probability), so that two branches which later land on the same detector
+// add as amplitudes and interfere before anything is squared. Only once all
+// branches have run their course does samplePhotonPath group them by
+// outcome, turn each group's combined amplitude into a probability, and
+// draw one actual outcome for this one photon -- the same "sample after
+// summing amplitudes" order interference always requires, just applied
+// here as the primary simulation rather than as a separate exact overlay
+// (contrast the Stern-Gerlach sim's samplePath, an independent per-photon
+// Monte Carlo walk with no such combining step, next to its own
+// theoreticalProbabilities for the exact version).
 
 const PARTICLE_SPEED = 300; // px/sec, matches the Stern-Gerlach sim's own particles
 const PARTICLE_RADIUS = 4;
@@ -158,10 +164,46 @@ const PARTICLE_COLOR = '#3498db'; // same blue as .control-bar-button etc.
 // canvas edge before being destroyed, rather than stopping right at the
 // boundary line.
 const ESCAPE_RUN_LENGTH = 70;
-// Safety cap on how many components a single photon may interact with --
+// Safety cap on how many components one single branch may pass through --
 // guards against a closed loop of mirrors/beamsplitters the student built
-// (by accident or otherwise) hanging the animation loop forever.
+// (by accident or otherwise) recursing forever.
 const MAX_HOPS = 500;
+// Safety cap on the *total* number of branches a single photon's trace may
+// fork into -- a chain of N beamsplitters forks into up to 2^N branches, so
+// without this a large-but-plausible layout could still blow up combinatorially.
+// Past this budget, tracePaths simply stops forking further (the untraced
+// remainder's amplitude is dropped rather than credited anywhere, which is
+// the same "this is a simplifying safety valve, not real physics" tradeoff
+// MAX_HOPS itself already makes).
+const MAX_TOTAL_BRANCHES = 2000;
+
+// The photon's wavelength, in the same px units as GRID_SIZE -- taken equal
+// to one grid square for now (an explicit simplifying choice, not a derived
+// constant -- see PATH_PHASE below), so two paths differing by a whole
+// number of grid cells arrive back in phase and only a fractional-cell
+// length difference detunes an interferometer. Not yet exposed as a control;
+// a natural place to add one later.
+const WAVELENGTH = GRID_SIZE;
+
+// Multiplies a 2-component Jones state by a complex (or plain real) scalar,
+// applied equally to both components -- used both for a beamsplitter/mirror
+// reflection's amplitude coefficient (magnitude and/or a sign flip) and for
+// the running phase accumulated from travel distance (see pathPhaseFactor).
+function scaleState(state, factor) {
+  const f = typeof factor === 'number' ? { re: factor, im: 0 } : factor;
+  return { h: cMul(f, state.h), v: cMul(f, state.v) };
+}
+
+// e^{i * 2*pi * distance / WAVELENGTH} -- the phase a photon accumulates
+// over `distance` px of straight travel. Multiplying a state by this at
+// every leg of its journey (see tracePaths) is what makes two branches that
+// traveled different total distances to the same detector interfere
+// differently than two that traveled the same distance, exactly the way a
+// real interferometer's arm-length difference does.
+function pathPhaseFactor(distance) {
+  const phase = (2 * Math.PI * distance) / WAVELENGTH;
+  return { re: Math.cos(phase), im: Math.sin(phase) };
+}
 
 // Laser emission geometry, read directly off laser.png: the small nozzle at
 // the barrel's right end -- its actual "opening" -- sits at the unrotated
@@ -308,25 +350,59 @@ function cellCenter(col, row) {
   return { x: (col + 0.5) * GRID_SIZE, y: (row + 0.5) * GRID_SIZE };
 }
 
-// Walks one photon from the laser through the placed components. Returns
-// the polyline of vertices it actually traveled (every straight run's
-// endpoints) and how it stopped: { type: 'detected', detectorId } | {
-// type: 'absorbed' } | { type: 'escaped' } (ran off the canvas, or -- see
-// MAX_HOPS -- got stuck in a loop of mirrors/beamsplitters long enough that
-// this gives up on it same as if it had escaped).
-function samplePhotonPath(laserComp, cellMap, cols, rows) {
+// Whether `entrySide` is the "front" (not-dark, coated) face of a 1x1
+// cell's rotating diagonal at this rotation -- the same face mirrorOutcome
+// reflects from. Reused for beamsplitters too, purely for the reflection
+// phase below: front-face reflection picks up a pi phase shift (r = -1),
+// same as a real coated surface's external reflection; the back face and
+// straight transmission (either face) don't. That asymmetry -- "one port"
+// of the beamsplitter gaining a phase the others don't -- is what makes a
+// symmetric Mach-Zehnder interfere onto a single output instead of
+// splitting 50/50, the same way a real one does.
+function isFrontEntry(rotation, entrySide) {
+  return mirrorReflectivePair(rotation).includes(entrySide);
+}
+
+// Recursively walks every coherent branch of one photon's wavefunction
+// through the placed components. A beamsplitter forks into *both* its
+// transmitted and reflected halves (rather than samplePhotonPath's old
+// per-hop coin flip), each carrying its own share of the state -- still
+// complex amplitude, not yet a probability. Every finished branch (however
+// it ends) is pushed onto `results` as { outcome, state, points }: two
+// branches that both end up 'detected' at the same detector are meant to be
+// summed back together (as amplitudes, before squaring) by the caller --
+// see samplePhotonPath -- which is the actual interference step; nothing
+// here decides who "wins", it just reports what every branch carried.
+//
+// `state` is scaled by pathPhaseFactor for every leg of travel (so two
+// branches of different total length decohere/recohere correctly by the
+// time they reach a shared detector) and by isFrontEntry's r = -1 on every
+// front-face reflection (mirror or beamsplitter alike). A mirror's
+// reflection is otherwise full-strength (|r| = 1, it doesn't split); an
+// NPBS's is a 50/50 magnitude split on both branches (|r| = |t| = 1/sqrt2,
+// polarization untouched); a PBS instead splits *by component* -- H
+// transmits whole, V reflects whole -- which is what keeps differently-
+// polarized light from interfering with itself: two states that don't
+// share a component (H vs V) simply have nothing to add when summed.
+function tracePaths(laserComp, cellMap, cols, rows) {
   const emission = getLaserEmission(laserComp);
-  let dir = emission.dir;
   const jitter = (Math.random() - 0.5) * LASER_APERTURE_WIDTH;
-  let pos = dir.x !== 0 ? { x: emission.x, y: emission.y + jitter } : { x: emission.x + jitter, y: emission.y };
-  let state = H_STATE; // the laser's own fixed emission polarization
-  let col = Math.floor(pos.x / GRID_SIZE);
-  let row = Math.floor(pos.y / GRID_SIZE);
+  const startPos = emission.dir.x !== 0
+    ? { x: emission.x, y: emission.y + jitter }
+    : { x: emission.x + jitter, y: emission.y };
 
-  const points = [pos];
-  let outcome = { type: 'escaped' };
+  const results = [];
+  let branchBudget = MAX_TOTAL_BRANCHES;
 
-  hopLoop: for (let hop = 0; hop < MAX_HOPS; hop++) {
+  function walk(pos, dir, state, points, hop) {
+    if (branchBudget-- <= 0) return; // drop this branch's remaining amplitude -- see MAX_TOTAL_BRANCHES
+    if (hop > MAX_HOPS) {
+      results.push({ outcome: { type: 'escaped' }, state, points });
+      return;
+    }
+
+    let col = Math.floor(pos.x / GRID_SIZE);
+    let row = Math.floor(pos.y / GRID_SIZE);
     let hitComp;
     for (;;) {
       col += dir.x;
@@ -335,9 +411,9 @@ function samplePhotonPath(laserComp, cellMap, cols, rows) {
         const exitPoint = dir.x !== 0
           ? { x: dir.x > 0 ? cols * GRID_SIZE : 0, y: pos.y }
           : { x: pos.x, y: dir.y > 0 ? rows * GRID_SIZE : 0 };
-        points.push(exitPoint);
-        outcome = { type: 'escaped' };
-        break hopLoop;
+        const dist = Math.hypot(exitPoint.x - pos.x, exitPoint.y - pos.y);
+        results.push({ outcome: { type: 'escaped' }, state: scaleState(state, pathPhaseFactor(dist)), points: [...points, exitPoint] });
+        return;
       }
       const found = cellMap.get(`${col},${row}`);
       if (found) { hitComp = found; break; }
@@ -346,52 +422,112 @@ function samplePhotonPath(laserComp, cellMap, cols, rows) {
     const type = getComponentType(hitComp.type);
     const entrySide = dir.x > 0 ? 'left' : dir.x < 0 ? 'right' : dir.y > 0 ? 'top' : 'bottom';
 
-    if (type.physicsKind === 'block') {
-      points.push(cellEntryPoint(col, row, dir, pos));
-      outcome = { type: 'absorbed' };
-      break;
+    // Terminal absorption/detection happens right at the cell's near edge
+    // -- the photon never travels any further into the block/detector than
+    // that, so that's exactly how far its phase needs to advance too.
+    if (type.physicsKind === 'block' || type.physicsKind === 'detector') {
+      const point = cellEntryPoint(col, row, dir, pos);
+      const dist = Math.hypot(point.x - pos.x, point.y - pos.y);
+      const arrived = scaleState(state, pathPhaseFactor(dist));
+      const outcome = type.physicsKind === 'block' ? { type: 'absorbed' } : { type: 'detected', detectorId: hitComp.id };
+      results.push({ outcome, state: arrived, points: [...points, point] });
+      return;
     }
-    if (type.physicsKind === 'detector') {
-      points.push(cellEntryPoint(col, row, dir, pos));
-      outcome = { type: 'detected', detectorId: hitComp.id };
-      break;
-    }
+
+    // Every other kind interacts at the cell's own center (where its
+    // diagonal actually is, or -- for a wave plate -- just a stand-in for
+    // "the middle of this idealized, thickness-free element") -- so that's
+    // the point both the phase and (for a reflection) the new direction get
+    // evaluated from.
+    const center = cellCenter(col, row);
+    const dist = Math.hypot(center.x - pos.x, center.y - pos.y);
+    const arrived = scaleState(state, pathPhaseFactor(dist));
+
     if (type.physicsKind === 'hwp' || type.physicsKind === 'qwp') {
       const matrix = type.physicsKind === 'hwp' ? hwpMatrix(hitComp.angle ?? 0) : qwpMatrix(hitComp.angle ?? 0);
-      state = applyJones(matrix, state);
-      continue; // straight through -- no bend, no new vertex
+      walk(center, dir, applyJones(matrix, arrived), points, hop + 1); // straight through -- no bend, no new vertex
+      return;
     }
+
     if (type.physicsKind === 'mirror') {
       const res = mirrorOutcome(hitComp.rotation, entrySide);
       if (res.type === 'absorb') {
-        points.push(cellEntryPoint(col, row, dir, pos));
-        outcome = { type: 'absorbed' };
-        break;
+        results.push({ outcome: { type: 'absorbed' }, state: arrived, points: [...points, cellEntryPoint(col, row, dir, pos)] });
+        return;
       }
-      pos = cellCenter(col, row);
-      points.push(pos);
-      dir = SIDE_TO_EXIT_DIR[res.exitSide];
-      continue;
+      walk(center, SIDE_TO_EXIT_DIR[res.exitSide], scaleState(arrived, -1), [...points, center], hop + 1);
+      return;
     }
-    // npbs / pbs: reflect-vs-transmit is a 50/50 coin flip for the
-    // polarization-agnostic NPBS, or a Born-rule draw against the current
-    // state's own V-amplitude for the PBS (which also collapses state to
-    // whichever of H/V that branch corresponds to -- a PBS is a real
-    // projective measurement in the H/V basis, unlike the NPBS).
+
+    // npbs / pbs: both branches are always taken (this is the coherent
+    // trace -- samplePhotonPath is what turns this into one random draw).
     const reflectExitSide = beamsplitterReflectExit(hitComp.rotation, entrySide);
-    const reflectProb = type.physicsKind === 'pbs' ? cAbs2(state.v) : 0.5;
-    if (Math.random() < reflectProb) {
-      if (type.physicsKind === 'pbs') state = V_STATE;
-      pos = cellCenter(col, row);
-      points.push(pos);
-      dir = SIDE_TO_EXIT_DIR[reflectExitSide];
+    const reflectPhase = isFrontEntry(hitComp.rotation, entrySide) ? -1 : 1;
+    if (type.physicsKind === 'pbs') {
+      const transmitState = { h: arrived.h, v: { re: 0, im: 0 } };
+      const reflectState = { h: { re: 0, im: 0 }, v: scaleState(arrived, reflectPhase).v };
+      if (cAbs2(transmitState.h) > 0) walk(center, dir, transmitState, points, hop + 1);
+      if (cAbs2(reflectState.v) > 0) walk(center, SIDE_TO_EXIT_DIR[reflectExitSide], reflectState, [...points, center], hop + 1);
     } else {
-      if (type.physicsKind === 'pbs') state = H_STATE;
-      // transmits straight through -- no bend, no new vertex
+      walk(center, dir, scaleState(arrived, Math.SQRT1_2), points, hop + 1);
+      walk(center, SIDE_TO_EXIT_DIR[reflectExitSide], scaleState(arrived, reflectPhase * Math.SQRT1_2), [...points, center], hop + 1);
     }
   }
 
-  return { points, outcome };
+  walk(startPos, emission.dir, H_STATE, [startPos], 0);
+  return results;
+}
+
+// Turns tracePaths' full coherent branch set into one sampled outcome for
+// one actual photon: branches that reach the *same* detector are summed as
+// amplitudes first (interference), then every remaining outcome -- each
+// detector's combined probability, plus every individually-absorbed or
+// -escaped branch on its own -- is drawn from as a plain weighted lottery.
+// Absorbed/escaped branches are deliberately *not* pooled the way detector
+// hits are: nothing recombines them into a shared measurement, so (unlike
+// two paths reuniting at a detector) they stay distinguishable and just
+// don't interfere with each other. Returns the same { points, outcome }
+// shape the old per-photon walk did, so buildPhotonSegments/spawnParticle
+// don't need to know any of this changed.
+function samplePhotonPath(laserComp, cellMap, cols, rows) {
+  const branches = tracePaths(laserComp, cellMap, cols, rows);
+
+  const detectorGroups = new Map(); // detectorId -> { state, members: [branch, ...] }
+  const outcomes = []; // { prob, points, state } -- one entry per final lottery ticket
+  branches.forEach((branch) => {
+    if (branch.outcome.type === 'detected') {
+      const id = branch.outcome.detectorId;
+      const group = detectorGroups.get(id) ?? { state: { h: { re: 0, im: 0 }, v: { re: 0, im: 0 } }, members: [] };
+      group.state = { h: cAdd(group.state.h, branch.state.h), v: cAdd(group.state.v, branch.state.v) };
+      group.members.push(branch);
+      detectorGroups.set(id, group);
+    } else {
+      outcomes.push({ prob: cAbs2(branch.state.h) + cAbs2(branch.state.v), outcome: branch.outcome, points: branch.points });
+    }
+  });
+  detectorGroups.forEach((group, detectorId) => {
+    const prob = cAbs2(group.state.h) + cAbs2(group.state.v);
+    // Animate whichever contributing branch happens to be sampled, weighted
+    // by its own individual (pre-interference) probability -- a
+    // visualization choice, not a physical one: interference has already
+    // been fully accounted for in `prob` above by the time this runs.
+    let pick = Math.random() * group.members.reduce((sum, m) => sum + cAbs2(m.state.h) + cAbs2(m.state.v), 0);
+    let points = group.members[group.members.length - 1].points;
+    for (const member of group.members) {
+      pick -= cAbs2(member.state.h) + cAbs2(member.state.v);
+      if (pick <= 0) { points = member.points; break; }
+    }
+    outcomes.push({ prob, outcome: { type: 'detected', detectorId }, points });
+  });
+
+  const totalProb = outcomes.reduce((sum, o) => sum + o.prob, 0);
+  let draw = Math.random() * totalProb;
+  for (const o of outcomes) {
+    draw -= o.prob;
+    if (draw <= 0) return { points: o.points, outcome: o.outcome };
+  }
+  const last = outcomes[outcomes.length - 1];
+  return { points: last.points, outcome: last.outcome };
 }
 
 function segmentLength(seg) {
