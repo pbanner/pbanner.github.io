@@ -494,9 +494,9 @@ function isFrontEntry(rotation, entrySide) {
 // transmits whole, V reflects whole -- which is what keeps differently-
 // polarized light from interfering with itself: two states that don't
 // share a component (H vs V) simply have nothing to add when summed.
-function tracePaths(laserComp, cellMap, cols, rows) {
+function tracePaths(laserComp, cellMap, cols, rows, jitterOverride) {
   const emission = getLaserEmission(laserComp);
-  const jitter = (Math.random() - 0.5) * LASER_APERTURE_WIDTH;
+  const jitter = jitterOverride !== undefined ? jitterOverride : (Math.random() - 0.5) * LASER_APERTURE_WIDTH;
   const startPos = emission.dir.x !== 0
     ? { x: emission.x, y: emission.y + jitter }
     : { x: emission.x + jitter, y: emission.y };
@@ -662,6 +662,92 @@ function samplePhotonPath(laserComp, cellMap, cols, rows) {
   }
   const last = outcomes[outcomes.length - 1];
   return { points: last.points, outcome: last.outcome };
+}
+
+// Grid extent guaranteed to contain every placed component's own footprint,
+// plus a 1-cell margin -- used in place of the real canvas's cols/rows for
+// theoretical-probability purposes (see computeTheoreticalProbabilities).
+// Since a placed component can never sit outside the actual visible canvas
+// (LabPanel's own placement/drag code keeps it in-bounds), this is always
+// <= the real cols/rows -- and a jitter-free branch that has already left
+// this bounding box is guaranteed to never hit anything further out
+// regardless of how much real canvas lies beyond it, so how much bigger the
+// real canvas actually is doesn't change any branch's outcome.
+function boundingGridExtent(components) {
+  let maxCol = 0, maxRow = 0;
+  components.forEach((c) => {
+    const type = getComponentType(c.type);
+    const ft = getRotatedFootprint(type, c.rotation);
+    maxCol = Math.max(maxCol, c.col + ft.w);
+    maxRow = Math.max(maxRow, c.row + ft.h);
+  });
+  return { cols: maxCol + 1, rows: maxRow + 1 };
+}
+
+// The exact per-detector detection probabilities for one photon launched
+// from the placed laser, for the "Theoretical probabilities" chart option --
+// the same coherent branch trace tracePaths/samplePhotonPath already do for
+// each animated photon, just read off directly instead of collapsing it
+// into one random draw. Grouping/summing amplitudes-then-squaring for
+// same-detector branches (the actual interference step) mirrors
+// samplePhotonPath exactly; absorbed/escaped branches are only summed as
+// individual probabilities (see tracePaths' own doc comment on why those
+// don't pool together the way detector hits do), since nothing here needs
+// them separated further.
+//
+// Runs with the aperture jitter fixed at 0 (dead center) rather than
+// tracePaths' usual per-photon random draw: the exact interference
+// probabilities are, in general, a function of that jitter too (a branch's
+// phase depends on its exact geometric path length, which shifts
+// continuously with where across the aperture it started), so an
+// asymmetric setup technically doesn't have *one* single "theoretical"
+// answer independent of the beam's transverse profile. Dead center is a
+// documented simplification (an idealized zero-width beam) rather than an
+// attempt to integrate over the jitter distribution -- it matches every
+// symmetric setup exactly (where the jitter dependence cancels out anyway)
+// and is the natural single answer to show as a reference line otherwise.
+//
+// Returns null if there's no laser placed yet. detectorProbs only ever
+// contains ids of detectors branches actually reached -- a detector nothing
+// can reach (e.g. behind a block) simply never appears in it.
+//
+// A plain function export, not a component -- Histogram.jsx imports this
+// directly rather than routing it through props, since it needs tracePaths
+// and buildCellMap, both private to this file and too tightly coupled to
+// its own local geometry helpers (DETECTOR_LOCAL_RECT et al., also shared
+// with this file's rendering code) to be worth relocating for one export.
+// eslint-disable-next-line react-refresh/only-export-components
+export function computeTheoreticalProbabilities(components) {
+  const laserComp = components.find((c) => c.type === 'laser');
+  if (!laserComp) return null;
+
+  const cellMap = buildCellMap(components);
+  const { cols, rows } = boundingGridExtent(components);
+  const branches = tracePaths(laserComp, cellMap, cols, rows, 0);
+
+  const detectorGroups = new Map(); // detectorId -> { h, v } (summed amplitude)
+  let absorbedProb = 0;
+  let escapedProb = 0;
+  branches.forEach((branch) => {
+    if (branch.outcome.type === 'detected') {
+      const id = branch.outcome.detectorId;
+      const group = detectorGroups.get(id) ?? { h: { re: 0, im: 0 }, v: { re: 0, im: 0 } };
+      group.h = cAdd(group.h, branch.state.h);
+      group.v = cAdd(group.v, branch.state.v);
+      detectorGroups.set(id, group);
+    } else if (branch.outcome.type === 'absorbed') {
+      absorbedProb += cAbs2(branch.state.h) + cAbs2(branch.state.v);
+    } else {
+      escapedProb += cAbs2(branch.state.h) + cAbs2(branch.state.v);
+    }
+  });
+
+  const detectorProbs = new Map();
+  detectorGroups.forEach((state, id) => {
+    detectorProbs.set(id, cAbs2(state.h) + cAbs2(state.v));
+  });
+
+  return { detectorProbs, absorbedProb, escapedProb };
 }
 
 function segmentLength(seg) {

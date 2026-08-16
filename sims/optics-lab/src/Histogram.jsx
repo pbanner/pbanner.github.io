@@ -1,5 +1,6 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { PC_COLORS } from './colors.js';
+import { computeTheoreticalProbabilities } from './LabPanel.jsx';
 
 // Plot layout -- all tunable
 const PADDING_TOP = 25;
@@ -30,6 +31,9 @@ const LOUPE_INK_SCALE = 1 / LOUPE_ZOOM * 2.0; // shrinks line widths/font sizes 
 const HOVER_BORDER_COLOR = '#000000';
 const HOVER_BORDER_WIDTH = 2.5;
 const OPTIONS_TOGGLE_SIZE = 36; // matches .icon-only-button's own height
+const THEORY_LINE_COLOR = '#707070';
+const THEORY_LINE_WIDTH = 2;
+const THEORY_LINE_OVERHANG = 6; // extra px each side beyond the bar's own width, so the line reads as "wider than the bar" rather than flush with its edges
 
 // Every placed detector, left-to-right in the same placement order LabPanel
 // itself numbers them by (see its detectorNumbers map) -- one bar each.
@@ -107,6 +111,18 @@ export default function Histogram({ components, displayBools, hoverEnabled, hove
     return () => observer.disconnect();
   }, []);
 
+  // The exact per-detector probabilities for the "Theoretical probabilities"
+  // chart option -- see computeTheoreticalProbabilities' own doc comment.
+  // Memoized separately from drawHistogram itself (rather than computed
+  // inline in the callback below) since drawHistogram also gets re-invoked
+  // on every mousemove while the magnifier loupe is active; recomputing the
+  // full coherent branch trace on every one of those would be wasteful when
+  // nothing about the setup actually changed.
+  const theoryData = useMemo(
+    () => (displayBools.showTheory ? computeTheoreticalProbabilities(components) : null),
+    [components, displayBools.showTheory]
+  );
+
   // inkScale lets this same drawing routine be reused, unmodified, to render
   // into the magnifier loupe: the loupe applies a zoom transform to its own
   // context before calling this, so every position (bar heights, gaps, tick
@@ -118,9 +134,34 @@ export default function Histogram({ components, displayBools, hoverEnabled, hove
     const { width, height } = canvasDims;
     ctx.clearRect(0, 0, width, height);
 
-    const detectors = getDetectors(components);
-    const dataTotal = detectors.reduce((sum, d) => sum + d.count, 0);
-    const dataMax = detectors.reduce((m, d) => Math.max(m, d.count), 0);
+    const dataTotalDetectors = getDetectors(components);
+    const dataTotal = dataTotalDetectors.reduce((sum, d) => sum + d.count, 0);
+
+    // theoryData is normalized against the *entire* photon ensemble,
+    // including branches that never reach a placed detector at all
+    // (absorbed, or escaped off the edge) -- but dataTotal only ever counts
+    // photons that landed in a placed detector, since that's all the
+    // histogram can see. Comparing raw probabilities against that would
+    // make the reference lines too low (and not sum to dataTotal) any time
+    // a block or an open end siphons off some fraction of the photons, so
+    // it's renormalized here to sum to 1 across just the placed detectors,
+    // matching what dataTotal actually represents.
+    const theoryOn = displayBools.showTheory && theoryData != null;
+    const theorySum = theoryOn
+      ? Array.from(theoryData.detectorProbs.values()).reduce((s, p) => s + p, 0)
+      : 0;
+    const detectors = dataTotalDetectors.map((d) => ({
+      ...d,
+      theoryProb: theoryOn && theorySum > 0 ? (theoryData.detectorProbs.get(d.id) ?? 0) / theorySum : 0,
+    }));
+
+    // The axis has to be tall enough for the theory lines too, not just the
+    // observed bars, or a line for an under-sampled detector could get
+    // clipped off the top of the plot.
+    const dataMax = detectors.reduce((m, d) => {
+      const expected = theoryOn && dataTotal > 0 ? d.theoryProb * dataTotal : 0;
+      return Math.max(m, d.count, expected);
+    }, 0);
     const requiredMax = Math.max(MIN_AXIS_MAX, dataMax * AXIS_HEADROOM);
     const ticks = niceTicks(requiredMax, TARGET_TICK_COUNT);
     const axisMax = ticks[ticks.length - 1];
@@ -137,7 +178,7 @@ export default function Histogram({ components, displayBools, hoverEnabled, hove
     const legendOn = displayBools.showLegend;
     const legendX1 = width - PADDING_RIGHT;
     const legendX0 = legendX1 - LEGEND_WIDTH;
-    const legendRowCount = detectors.length === 0 ? 1 : detectors.length;
+    const legendRowCount = detectors.length === 0 ? 1 : detectors.length;// + (theoryOn ? 1 : 0);
     const legendBoxHeight = LEGEND_PADDING * 2 + legendRowCount * LEGEND_ROW_HEIGHT;
 
     const plotX0 = paddingLeft;
@@ -220,6 +261,19 @@ export default function Histogram({ components, displayBools, hoverEnabled, hove
           ctx.strokeRect(barX, barY, barWidth, barHeight);
         }
 
+        // Draw the theory reference line
+        if (theoryOn && dataTotal > 0) {
+          const expectedCount = d.theoryProb * dataTotal;
+          const lineY = plotY1 - (expectedCount / axisMax) * (plotY1 - plotY0);
+          const lineHalfWidth = barWidth / 2 + THEORY_LINE_OVERHANG;
+          ctx.strokeStyle = THEORY_LINE_COLOR;
+          ctx.lineWidth = THEORY_LINE_WIDTH * inkScale;
+          ctx.beginPath();
+          ctx.moveTo(slotCenter - lineHalfWidth, lineY);
+          ctx.lineTo(slotCenter + lineHalfWidth, lineY);
+          ctx.stroke();
+        }
+
         // Draw the error bars
         const drawErrorBars = (d.count > 2 && displayBools.showErrorBars);
         const errOffset = Math.sqrt(d.count) * (barHeight / d.count);
@@ -279,6 +333,17 @@ export default function Histogram({ components, displayBools, hoverEnabled, hove
           ctx.fillStyle = AXIS_COLOR;
           ctx.fillText(d.label, legendX0 + LEGEND_PADDING + LEGEND_SWATCH_SIZE + 6, rowY);
         });
+        // if (theoryOn) {
+        //   const rowY = legendY0 + LEGEND_PADDING + detectors.length * LEGEND_ROW_HEIGHT + LEGEND_ROW_HEIGHT / 2;
+        //   ctx.strokeStyle = THEORY_LINE_COLOR;
+        //   ctx.lineWidth = THEORY_LINE_WIDTH * inkScale;
+        //   ctx.beginPath();
+        //   ctx.moveTo(legendX0 + LEGEND_PADDING, rowY);
+        //   ctx.lineTo(legendX0 + LEGEND_PADDING + LEGEND_SWATCH_SIZE, rowY);
+        //   ctx.stroke();
+        //   ctx.fillStyle = AXIS_COLOR;
+        //   ctx.fillText('Theoretical', legendX0 + LEGEND_PADDING + LEGEND_SWATCH_SIZE + 6, rowY);
+        // }
       }
     }
 
@@ -288,7 +353,7 @@ export default function Histogram({ components, displayBools, hoverEnabled, hove
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('Detector Counts' + (displayBools.showTotal ? ` (N = ${dataTotal})` : ''), (plotX0 + plotX1)/2, PADDING_TOP / 2);
-  }, [components, displayBools, canvasDims, hoveredDetectorId]);
+  }, [components, displayBools, canvasDims, hoveredDetectorId, theoryData]);
 
   // Renders the loupe: re-runs the exact same drawHistogram routine against
   // the loupe's own canvas, but first stacks a translate/scale/translate
