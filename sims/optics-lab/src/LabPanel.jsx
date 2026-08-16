@@ -644,8 +644,19 @@ function tracePaths(laserComp, cellMap, cols, rows, jitterOverride) {
     if (type.physicsKind === 'pbs') {
       const transmitState = { h: arrived.h, v: { re: 0, im: 0 } };
       const reflectState = { h: { re: 0, im: 0 }, v: scaleState(bendArrived, reflectPhase).v };
-      if (cAbs2(transmitState.h) > 0) walk(through, dir, transmitState, points, hop + 1, [...path, `${hitComp.id}:transmit`]);
-      if (cAbs2(reflectState.v) > 0) walk(bendPoint, SIDE_TO_EXIT_DIR[reflectExitSide], reflectState, [...points, bendPoint], hop + 1, [...path, `${hitComp.id}:reflect`]);
+      // Both branches are always walked, even one whose amplitude comes out
+      // exactly zero for this particular incoming polarization (e.g. still
+      // pure H, having passed no waveplate) -- walking a zero branch is a
+      // no-op for every probability this ever feeds (0 amplitude in means 0
+      // amplitude out, forever, so it can only ever contribute a 0 to
+      // whatever it reaches), but skipping it would mean *which* branches
+      // even exist depends on the photon's polarization state -- something
+      // previewPaths' dashed overlay deliberately has no business knowing
+      // (see its own doc comment). Keeping every branch here, unconditionally,
+      // is what lets that overlay just read tracePaths' own branch list
+      // directly instead of needing a separate polarization-blind walk.
+      walk(through, dir, transmitState, points, hop + 1, [...path, `${hitComp.id}:transmit`]);
+      walk(bendPoint, SIDE_TO_EXIT_DIR[reflectExitSide], reflectState, [...points, bendPoint], hop + 1, [...path, `${hitComp.id}:reflect`]);
     } else {
       walk(through, dir, scaleState(arrived, Math.SQRT1_2), points, hop + 1, [...path, `${hitComp.id}:transmit`]);
       walk(bendPoint, SIDE_TO_EXIT_DIR[reflectExitSide], scaleState(bendArrived, reflectPhase * Math.SQRT1_2), [...points, bendPoint], hop + 1, [...path, `${hitComp.id}:reflect`]);
