@@ -14,6 +14,9 @@ const SIDEBAR_LABEL_GAP = 12;
 export default function App() {
   const [displayBools, setDisplayBools] = useState({
     gridOn: true,             // Displaying the grid
+    // theoryScreenshotToggle = 0 is normal mode; 1 = show probabilities; 2 = show question marks
+    // Activate 1 via Shift+P, 2 via Shift+Q -- same scheme as the Stern-Gerlach sim
+    theoryScreenshotToggle: 0,
   });
 
   const [components, setComponents] = useState([]);
@@ -138,6 +141,26 @@ export default function App() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g') {
         e.preventDefault();
         setDisplayBools((prev) => ({ ...prev, gridOn: !prev.gridOn }));
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  // Shift+P toggles theoryScreenshotToggle -- swaps every placed detector
+  // between its normal image+running-count display and a card showing its
+  // exact theoretical hit probability (LabPanel does the actual drawing);
+  // Shift+Q swaps to a card showing just a "?" instead, for a screenshot
+  // that asks the question without giving away the answer. Ported from the
+  // Stern-Gerlach sim's own Shift+P/Shift+Q, including the toggle-off-if-
+  // already-active behavior.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!e.shiftKey) return;
+      if (e.code === 'KeyP') {
+        setDisplayBools((prev) => ({ ...prev, theoryScreenshotToggle: prev.theoryScreenshotToggle !== 1 ? 1 : 0 }));
+      } else if (e.code === 'KeyQ') {
+        setDisplayBools((prev) => ({ ...prev, theoryScreenshotToggle: prev.theoryScreenshotToggle !== 2 ? 2 : 0 }));
       }
     };
     window.addEventListener('keydown', onKeyDown);

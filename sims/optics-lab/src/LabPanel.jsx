@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { getComponentType, getDefaultFootprint, getRotatedFootprint, hasAngleControl, hasPowerControl, isPhotonDrawnUnder } from './componentTypes.js';
 import { PC_COLORS } from './colors.js';
 import WaveplateAngleControl from './WaveplateAngleControl.jsx';
@@ -39,6 +39,14 @@ const DETECTOR_TEXT_CENTER_X = 190 * (DETECTOR_BOX_WIDTH / 400);
 // centered element's own `top` needs directly.
 const DETECTOR_LABEL_TOP = 50 * (DETECTOR_BOX_HEIGHT / 200);
 const DETECTOR_COUNT_TOP = 132 * (DETECTOR_BOX_HEIGHT / 200);
+
+// Theory-probability card (theoryScreenshotToggle, Shift+P/Shift+Q in
+// App.jsx) -- drawn in place of a placed detector's usual image+running-
+// count, sized a bit larger than the detector's own footprint (ported at
+// the same multiplier as the Stern-Gerlach sim's own THEORY_BAR_CARD_
+// MULTIPLIER) so it visibly reads as a distinct overlay rather than a
+// same-size reskin, centered on the same point the normal card occupies.
+const THEORY_CARD_MULTIPLIER = 1.2;
 
 // A mousedown/mouseup pair on a placed component counts as a "click" (select
 // it) rather than a drag as long as the cursor never moved more than this
@@ -1287,6 +1295,24 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
     if (c.type === 'detector') detectorNumbers.set(c.id, nextDetectorNumber++);
   });
 
+  // theoryScreenshotToggle (Shift+P/Shift+Q, App.jsx): exact theoretical hit
+  // probability per placed detector, renormalized to sum to 1 across just
+  // the placed detectors -- built the same way Histogram.jsx builds its own
+  // theory overlay (see theoryData there), so the percentage shown here on
+  // a detector always matches the one the histogram would show. Memoized
+  // (unlike detectorNumbers above) since computeTheoreticalProbabilities
+  // re-walks the full photon trace, which isn't cheap enough to redo on
+  // every render this component happens to get (e.g. from cursor hover).
+  const theoryMap = useMemo(() => {
+    if (!displayBools.theoryScreenshotToggle) return null;
+    const probs = computeTheoreticalProbabilities(components);
+    if (!probs) return new Map();
+    const theorySum = Array.from(probs.detectorProbs.values()).reduce((s, p) => s + p, 0);
+    return new Map(
+      Array.from(probs.detectorProbs.entries()).map(([id, p]) => [id, theorySum > 0 ? p / theorySum : 0])
+    );
+  }, [components, displayBools.theoryScreenshotToggle]);
+
   // Draws every currently in-flight photon on the dedicated photon layer
   // (see photonCanvasRef) -- cleared and redrawn fresh each frame, same as
   // the Stern-Gerlach sim's own drawParticles.
@@ -1463,6 +1489,45 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
       // so a hover that was active right as a build button is clicked
       // doesn't linger into it.
       const chartHovered = comp.id === hoveredDetectorId;
+
+      if (displayBools.theoryScreenshotToggle !== 0) {
+        // Same center point componentStyle's own box occupies, just grown
+        // by THEORY_CARD_MULTIPLIER around it -- left/top compensate for
+        // the extra width/height so the card doesn't shift off its normal
+        // spot while growing.
+        const cardWidth = componentStyle.width * THEORY_CARD_MULTIPLIER;
+        const cardHeight = componentStyle.height * THEORY_CARD_MULTIPLIER;
+        const theoryCardStyle = {
+          left: componentStyle.left - (cardWidth - componentStyle.width) / 2,
+          top: componentStyle.top - (cardHeight - componentStyle.height) / 2,
+          width: cardWidth,
+          height: cardHeight,
+          transform: componentStyle.transform,
+        };
+        const prob = theoryMap?.get(comp.id) ?? 0;
+        return (
+          <div
+            key={comp.id}
+            className={`${componentClass} detector-theory-card ${chartHovered ? 'chart-hover' : ''}`}
+            style={theoryCardStyle}
+            onMouseDown={(e) => handleComponentMouseDown(e, comp)}
+            onMouseEnter={() => { if (!buildMode) setHoveredDetectorId(comp.id); }}
+            onMouseLeave={() => { if (!buildMode) setHoveredDetectorId((prev) => (prev === comp.id ? null : prev)); }}
+          >
+            {displayBools.theoryScreenshotToggle === 2 ? (
+              <div className="detector-theory-question" style={{ color, transform: `rotate(${textRotation}deg)` }}>?</div>
+            ) : (
+              <div className="detector-theory-body" style={{ transform: `rotate(${textRotation}deg)` }}>
+                <div className="detector-theory-percent" style={{ color }}>{`${(prob * 100).toFixed(1)}%`}</div>
+                <div className="detector-theory-bar-track">
+                  <div className="detector-theory-bar-fill" style={{ width: `${prob * 100}%`, background: color }} />
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
       return (
         <div
           key={comp.id}

@@ -463,6 +463,54 @@
   color: #666;
 }
 
+/* Theory-probability card (theoryScreenshotToggle, Shift+P/Shift+Q --
+   LabPanel.jsx swaps a detector into this instead of .detector-component
+   while active). A plain white card, same visual language as the Stern-
+   Gerlach sim's own canvas-drawn version, just built from real DOM/CSS
+   here since this sim's placed components are DOM elements rather than
+   canvas draws. */
+.placed-component.detector-theory-card {
+  padding: 0;
+  box-sizing: border-box;
+  background: #ffffff;
+  border: 1.5px solid #303030;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.detector-theory-question {
+  font-family: Arial, sans-serif;
+  font-size: 32px;
+  font-weight: bold;
+}
+
+.detector-theory-body {
+  width: 82%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.detector-theory-percent {
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.detector-theory-bar-track {
+  width: 100%;
+  height: 10px;
+  border: 1px solid #303030;
+  box-sizing: border-box;
+}
+
+.detector-theory-bar-fill {
+  height: 100%;
+}
+
 /* Rotate button -- floats just off the selected component's cell (see
    ROTATE_BUTTON_GAP in LabPanel.jsx). Dark red is deliberately a different
    red than the selection glow/occupied-cell highlight above, so the control
