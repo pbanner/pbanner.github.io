@@ -42,11 +42,10 @@ const DETECTOR_COUNT_TOP = 132 * (DETECTOR_BOX_HEIGHT / 200);
 
 // Theory-probability card (theoryScreenshotToggle, Shift+P/Shift+Q in
 // App.jsx) -- drawn in place of a placed detector's usual image+running-
-// count, sized a bit larger than the detector's own footprint (ported at
-// the same multiplier as the Stern-Gerlach sim's own THEORY_BAR_CARD_
-// MULTIPLIER) so it visibly reads as a distinct overlay rather than a
-// same-size reskin, centered on the same point the normal card occupies.
-const THEORY_CARD_MULTIPLIER = 1.2;
+// count, in exactly the detector's own two-grid-square footprint (unlike
+// the Stern-Gerlach sim's own version, which grows past the PC's own
+// footprint by THEORY_BAR_CARD_MULTIPLIER -- there's no room to spare here
+// without the card overlapping a neighboring cell).
 
 // A mousedown/mouseup pair on a placed component counts as a "click" (select
 // it) rather than a drag as long as the cursor never moved more than this
@@ -945,6 +944,28 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
   const cols = Math.max(1, Math.floor(canvasDims.width / GRID_SIZE));
   const rows = Math.max(1, Math.floor(canvasDims.height / GRID_SIZE));
 
+  // theoryScreenshotToggle's dashed "possible paths" overlay -- ported from
+  // the Stern-Gerlach sim's own always-on preview (see its drawPreviewArcs),
+  // but scoped to only appear alongside the probability/question-mark cards
+  // (see the grid-draw effect below) rather than as a separate always-
+  // visible toggle, since a beam that can fork at every beamsplitter
+  // doesn't have a small fixed set of "arms" to always show. Every branch
+  // tracePaths returns gets its own dashed line here, deliberately
+  // independent of that branch's actual probability (even a branch that
+  // interferes away to exactly zero once combined with another still had a
+  // real, physically possible trajectory) -- unlike theoryMap below, this
+  // has no reason to group/sum/renormalize anything. Walked at
+  // jitterOverride 0 for the same reason computeTheoreticalProbabilities is:
+  // one fixed reference line per branch, not a different jittered shape
+  // every render.
+  const previewPaths = useMemo(() => {
+    if (!displayBools.theoryScreenshotToggle) return null;
+    const laserComp = components.find((c) => c.type === 'laser');
+    if (!laserComp) return [];
+    const cellMap = buildCellMap(components);
+    return tracePaths(laserComp, cellMap, cols, rows, 0).map((branch) => branch.points);
+  }, [components, displayBools.theoryScreenshotToggle, cols, rows]);
+
   // Inert (no highlight, no button) while build/remove mode is active or a
   // drag is in progress -- even for a drag of the selected component itself,
   // so the button doesn't have to chase its free-following drag position.
@@ -1004,6 +1025,21 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
       ctx.stroke();
     }
 
+    // Dashed "possible paths" overlay -- see previewPaths' own comment.
+    if (previewPaths && previewPaths.length > 0) {
+      ctx.strokeStyle = '#303030';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([10, 8]);
+      previewPaths.forEach((points) => {
+        if (points.length < 2) return;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+        ctx.stroke();
+      });
+      ctx.setLineDash([]);
+    }
+
     // {col, row, w, h}, in grid cells -- covers a multi-cell component's
     // whole footprint, not just one square of it.
     let highlightRect = null;
@@ -1057,7 +1093,7 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
       ctx.fillStyle = fill;
       ctx.fillRect(highlightRect.col * GRID_SIZE, highlightRect.row * GRID_SIZE, highlightRect.w * GRID_SIZE, highlightRect.h * GRID_SIZE);
     }
-  }, [components, canvasDims, displayBools, buildMode, hoveredCell, draggingId, dragPos, cols, rows, selectedComp]);
+  }, [components, canvasDims, displayBools, buildMode, hoveredCell, draggingId, dragPos, cols, rows, selectedComp, previewPaths]);
 
   const eraseAtClientPos = useCallback((clientX, clientY) => {
     const canvas = canvasRef.current;
@@ -1491,25 +1527,12 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
       const chartHovered = comp.id === hoveredDetectorId;
 
       if (displayBools.theoryScreenshotToggle !== 0) {
-        // Same center point componentStyle's own box occupies, just grown
-        // by THEORY_CARD_MULTIPLIER around it -- left/top compensate for
-        // the extra width/height so the card doesn't shift off its normal
-        // spot while growing.
-        const cardWidth = componentStyle.width * THEORY_CARD_MULTIPLIER;
-        const cardHeight = componentStyle.height * THEORY_CARD_MULTIPLIER;
-        const theoryCardStyle = {
-          left: componentStyle.left - (cardWidth - componentStyle.width) / 2,
-          top: componentStyle.top - (cardHeight - componentStyle.height) / 2,
-          width: cardWidth,
-          height: cardHeight,
-          transform: componentStyle.transform,
-        };
         const prob = theoryMap?.get(comp.id) ?? 0;
         return (
           <div
             key={comp.id}
             className={`${componentClass} detector-theory-card ${chartHovered ? 'chart-hover' : ''}`}
-            style={theoryCardStyle}
+            style={componentStyle}
             onMouseDown={(e) => handleComponentMouseDown(e, comp)}
             onMouseEnter={() => { if (!buildMode) setHoveredDetectorId(comp.id); }}
             onMouseLeave={() => { if (!buildMode) setHoveredDetectorId((prev) => (prev === comp.id ? null : prev)); }}
