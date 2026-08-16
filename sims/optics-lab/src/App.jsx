@@ -178,6 +178,14 @@ export default function App() {
     setDcMode((prev) => ({ ...prev, running: false }));
   };
 
+  // Edits the placed laser's own power from the Data Collection panel's
+  // Laser Power slider (Continuous mode only) -- a no-op if there isn't one
+  // yet (the slider is disabled in that case, but this stays a safe no-op
+  // regardless of how it's triggered).
+  const handleChangeLaserPower = (newPower) => {
+    setComponents((prev) => prev.map((c) => (c.type === 'laser' ? { ...c, power: newPower } : c)));
+  };
+
   // Auto-resets the histogram (running counts + any in-flight photons)
   // whenever the experiment itself changes -- placing/removing/moving/
   // rotating a component, or adjusting a wave plate's angle or a laser's
@@ -257,10 +265,13 @@ export default function App() {
         </div>
       )}
 
-      {/* Two overlay panels, stacked from the bottom of the screen along
-          the right edge -- same floating-card look as the Stern-Gerlach
-          sim's on-canvas field controls. The plotting panel gets a fixed
-          height; the data collection panel is sized to its own content. */}
+      {/* Two overlay panels, sharing the bottom-right corner of the screen
+          side by side (Data Collection Controls to the left of the
+          histogram) -- same floating-card look as the Stern-Gerlach sim's
+          on-canvas field controls. Both bottom-aligned; see
+          .overlay-panel-stack itself for how the row keeps Data Collection
+          Controls flush against the histogram's own left edge regardless
+          of that panel's width (it changes when Chart Options collapses). */}
       <div className="overlay-panel-stack">
         <div className="overlay-controls data-collection-panel">
           <DataCollectionPanel
@@ -269,6 +280,8 @@ export default function App() {
             onMakeOnePhoton={handleMakeOnePhoton}
             onToggleRunning={handleToggleRunning}
             onResetData={handleResetData}
+            laserPower={laserPower}
+            onChangeLaserPower={handleChangeLaserPower}
           />
         </div>
         <DataPlottingPanel

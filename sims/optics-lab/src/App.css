@@ -15,25 +15,30 @@
   overflow: hidden;
 }
 
-/* Column of two floating panels, anchored along the right edge and
-   stretching from just below the top of the screen to just above the
-   bottom. (The build panel used to live here too -- it's now the left-edge
-   sidebar instead, see .sidebar-panel below -- so this stack is just
-   Data Collection Controls and the histogram now.)
+/* Row of two floating panels, anchored along the bottom-right corner:
+   Data Collection Controls sits to the *left* of the histogram (last in
+   DOM order, so it's the rightmost row item), the two of them bottom-
+   aligned via align-items: flex-end (the cross axis of a row is vertical,
+   so "flex-end" here means "flush with the bottom", the same way it meant
+   "flush with the right" back when this was a column). (The build panel
+   used to live here too -- it's now the left-edge sidebar instead, see
+   .sidebar-panel below.)
 
    No explicit width here -- each panel sets its own (see
    .data-collection-panel / .data-plotting-panel below) so they don't have
-   to match, and align-items: flex-end keeps their right edges flush with
-   this column's own right:16px anchor regardless. Left unset, this box's
-   width shrink-wraps to its widest child (standard abspos sizing when
-   `left` and `width` are both auto but `right` isn't), so the column as a
-   whole is exactly as wide as the widest panel. */
+   to match. Left unset, this box's width shrink-wraps to the sum of its
+   children (standard abspos sizing when `left` and `width` are both auto
+   but `right` isn't), so Data Collection Controls automatically stays
+   flush against the histogram panel's own left edge -- including as that
+   edge moves when Chart Options collapses/expands (see .data-plotting-
+   panel.options-collapsed) -- with no explicit coordination needed; it's
+   just normal flex reflow. */
 .overlay-panel-stack {
   position: absolute;
   right: 16px;
   bottom: 16px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: flex-end;
   gap: 16px;
   line-height: 1.6;
@@ -180,16 +185,25 @@
   width: 270px;
 }
 
-/* Wider than the other two, and laid out horizontally -- Chart Options on
-   the left, the plot itself on the right -- matching the Stern-Gerlach
-   sim's bottom control bar (options column + .histogram-panel side by
-   side) rather than stacking the plot underneath the options. Width shrinks
-   when the options column collapses (see .options-collapsed below) --
-   .histogram-panel has a fixed width of its own precisely so it's the card
-   that changes size around it, not the chart itself. */
+/* Wider than Data Collection Controls, and laid out horizontally inside
+   itself -- Chart Options on the left, the plot itself on the right --
+   matching the Stern-Gerlach sim's bottom control bar (options column and
+   .histogram-panel side by side) rather than stacking the plot underneath
+   the options. Width shrinks when the options column collapses (see
+   .options-collapsed below) -- .histogram-panel has a fixed width of its
+   own precisely so it's the card that changes size around it, not the
+   chart itself.
+
+   Explicit width *and* height, rather than leaning on flex-basis the way
+   .data-collection-panel does for its own (auto) sizing -- flex-basis sets
+   whichever dimension is the *main* axis, and .overlay-panel-stack's own
+   axis switched from vertical to horizontal when Data Collection Controls
+   moved beside the histogram instead of above it, so a flex-basis here
+   would now be pinning this panel's width instead of its height. */
 .data-plotting-panel {
-  flex: 0 0 280px;
+  flex: 0 0 auto;
   width: 670px;
+  height: 280px;
   min-height: 0;
   overflow: hidden;
 }
@@ -602,31 +616,6 @@ input.waveplate-angle-readout::-webkit-inner-spin-button {
 input.waveplate-angle-readout[type=number] {
   appearance: textfield;
   -moz-appearance: textfield;
-}
-
-/* LaserPowerControl -- the label/slider/textbox shown to the right of a
-   selected laser (see LabPanel's selectedComp block), reusing the same
-   SliderPlusTextboxControl the old Data Collection Controls rate slider
-   did, in its vertical layout. Unlike the wave plate's own (borderless)
-   control, this keeps the standard floating-card look shared with the rest
-   of the sim's overlay panels, since there's no ruler/canvas here
-   competing with it visually. Vertically centered on the anchor point the
-   same simple way the rotate/delete buttons are (a plain translateY), not
-   the wave plate control's own ruler-precise offset -- there's no ruler
-   graphic here whose center needs to land exactly on it. */
-.laser-power-control-anchor {
-  position: absolute;
-  z-index: 7;
-  transform: translateY(-50%);
-}
-
-.laser-power-control {
-  background: rgba(255, 255, 255, 0.96);
-  border: 2px solid #333;
-  border-radius: 10px;
-  padding: 10px 12px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-  box-sizing: border-box;
 }
 
 /* Vertical variant of .control-group (see SliderPlusTextboxControl's

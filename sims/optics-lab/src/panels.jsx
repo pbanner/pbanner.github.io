@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { COMPONENT_TYPES } from './componentTypes.js';
-import { PlayIcon, StopIcon } from './controls.jsx';
+import { PlayIcon, StopIcon, SliderPlusTextboxControl } from './controls.jsx';
 import Histogram from './Histogram.jsx';
 import trashCanImage from './assets/trash-can.png';
 
@@ -111,60 +111,79 @@ export function BuildPanel({ buildMode, onButtonMouseDown, toggleRemoveMode, com
 
 // Middle overlay panel -- controls identical in kind to the Stern-Gerlach
 // sim's "Data Collection Controls" group (App.jsx): single-shot vs.
-// continuous mode, a start/stop button, and a reset button. The rate itself
-// lives on the laser component (see LabPanel's Laser Power control), not
-// here -- App.jsx's continuous-mode timer reads it directly. This panel
-// stays presentational: onMakeOnePhoton/onToggleRunning/onResetData are
-// App.jsx's own handlers, which are the ones that actually reach into
-// LabPanel's particle animation (via its ref) and component state.
-export function DataCollectionPanel({ dcMode, setDcMode, onMakeOnePhoton, onToggleRunning, onResetData }) {
+// continuous mode, a Laser Power slider (Continuous mode only), a start/
+// stop button, and a reset button. The rate itself still lives on the
+// laser component (comp.power) -- App.jsx's continuous-mode timer reads it
+// directly -- this is just the other place, alongside the laser's own
+// on-canvas selection panel, that can edit it. This panel stays mostly
+// presentational: onMakeOnePhoton/onToggleRunning/onResetData/
+// onChangeLaserPower are all App.jsx's own handlers/state.
+export function DataCollectionPanel({ dcMode, setDcMode, onMakeOnePhoton, onToggleRunning, onResetData, laserPower, onChangeLaserPower }) {
+  const hasLaser = laserPower != null;
   return (
     <>
-      <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Data Collection Controls</h3>
-      <div style={{ display: 'flex', flexDirection: 'row', gap: '10px', alignItems: 'center' }}>
-        <p style={{ fontSize: '14px', fontWeight: '500' }}>Mode:</p>
-        <div style={{ padding: '0px 0px 8px 0px', display: 'flex', flexDirection: 'column', gap: '0px' }}>
-          <label>
-            <input
-              type="radio"
-              name="opticsDCmode"
-              checked={dcMode.mode === 'single'}
-              onChange={() => setDcMode({ ...dcMode, mode: 'single' })}
-            />
-            One at a time
-          </label>
-          <label>
-            <input
-              type="radio"
-              name="opticsDCmode"
-              checked={dcMode.mode === 'stream'}
-              onChange={() => setDcMode({ ...dcMode, mode: 'stream' })}
-            />
-            Continuous
-          </label>
-        </div>
-      </div>
+      <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Laser Controls</h3>
+      {!hasLaser ? (
+        <p style={{ fontSize: '14px', color: '#666' }}>Place a laser to access controls.</p>
+      ) : (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'row', gap: '10px', alignItems: 'center' }}>
+            <p style={{ fontSize: '14px', fontWeight: '500' }}>Mode:</p>
+            <div style={{ padding: '0px 0px 8px 0px', display: 'flex', flexDirection: 'column', gap: '0px' }}>
+              <label>
+                <input
+                  type="radio"
+                  name="opticsDCmode"
+                  checked={dcMode.mode === 'single'}
+                  onChange={() => setDcMode({ ...dcMode, mode: 'single' })}
+                />
+                One at a time
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="opticsDCmode"
+                  checked={dcMode.mode === 'stream'}
+                  onChange={() => setDcMode({ ...dcMode, mode: 'stream' })}
+                />
+                Continuous
+              </label>
+            </div>
+          </div>
 
-      <div style={{ display: 'flex', flexDirection: 'row', gap: '10px' }}>
-        <button
-          className="control-bar-button"
-          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flex: '1 1 auto', minWidth: '80px' }}
-          onClick={dcMode.mode === 'single' ? onMakeOnePhoton : onToggleRunning}
-        >
-          {dcMode.mode === 'single'
-            ? (<><PlayIcon /> Make One Photon</>)
-            : dcMode.running
-              ? (<><StopIcon /> Stop</>)
-              : (<><PlayIcon /> Start</>)}
-        </button>
-        <button
-          className="control-bar-button"
-          style={{ flex: '1 1 auto', minWidth: '80px' }}
-          onClick={onResetData}
-        >
-          Reset Data
-        </button>
-      </div>
+          {dcMode.mode === 'stream' && (
+            <SliderPlusTextboxControl
+              label="Laser Power"
+              valueNum={laserPower}
+              onChangeNum={onChangeLaserPower}
+              min={0.0}
+              max={100}
+              step={1.0}
+            />
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'row', gap: '10px' }}>
+            <button
+              className="control-bar-button"
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flex: '1 1 auto', minWidth: '80px' }}
+              onClick={dcMode.mode === 'single' ? onMakeOnePhoton : onToggleRunning}
+            >
+              {dcMode.mode === 'single'
+                ? (<><PlayIcon /> Make One Photon</>)
+                : dcMode.running
+                  ? (<><StopIcon /> Stop</>)
+                  : (<><PlayIcon /> Start</>)}
+            </button>
+            <button
+              className="control-bar-button"
+              style={{ flex: '1 1 auto', minWidth: '80px' }}
+              onClick={onResetData}
+            >
+              Reset Data
+            </button>
+          </div>
+        </>
+      )}
     </>
   );
 }

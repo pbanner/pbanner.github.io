@@ -2,7 +2,6 @@ import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHand
 import { getComponentType, getDefaultFootprint, getRotatedFootprint, hasAngleControl, hasPowerControl, isPhotonDrawnUnder } from './componentTypes.js';
 import { PC_COLORS } from './colors.js';
 import WaveplateAngleControl from './WaveplateAngleControl.jsx';
-import { SliderPlusTextboxControl } from './controls.jsx';
 import { H_STATE, applyJones, hwpMatrix, qwpMatrix, cAdd, cMul, cAbs2 } from './physics.js';
 
 // Side length (px) of one grid square -- also the placed size of a single-
@@ -62,12 +61,6 @@ const DELETE_BUTTON_GAP = 6; // px, between rotate and delete when side by side
 
 // WaveplateAngleControl: sits to the right of a selected wave plate's cell.
 const WAVEPLATE_CONTROL_GAP = 12; // px
-
-// Laser Power control: sits to the right of a selected laser's cell, same
-// idea as the wave plate's own control (and the same gap).
-const LASER_POWER_CONTROL_GAP = 12; // px
-const LASER_POWER_CONTROL_WIDTH = 90; // px
-const LASER_POWER_SLIDER_LENGTH = 140; // px, the vertical slider's own length
 
 // On-canvas angle indicator: how far in (as a % of the component's own
 // height) it stays clear of the top/bottom edge, so it never sits flush
@@ -1503,29 +1496,6 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
                 setComponents((prev) => prev.map((c) => (c.id === selectedComp.id ? { ...c, angle: newAngle } : c)));
               }}
             />
-          </div>
-        );
-      })()}
-      {selectedComp && hasPowerControl(getComponentType(selectedComp.type)) && (() => {
-        const ft = getRotatedFootprint(getComponentType(selectedComp.type), selectedComp.rotation);
-        const anchorX = (selectedComp.col + ft.w) * GRID_SIZE + LASER_POWER_CONTROL_GAP;
-        const anchorY = selectedComp.row * GRID_SIZE + (ft.h * GRID_SIZE) / 2;
-        return (
-          <div className="laser-power-control-anchor" style={{ left: anchorX, top: anchorY }}>
-            <div className="laser-power-control" style={{ width: LASER_POWER_CONTROL_WIDTH }}>
-              <SliderPlusTextboxControl
-                label="Laser Power"
-                valueNum={selectedComp.power ?? 20}
-                onChangeNum={(newPower) => {
-                  setComponents((prev) => prev.map((c) => (c.id === selectedComp.id ? { ...c, power: newPower } : c)));
-                }}
-                min={0.0}
-                max={100}
-                step={1.0}
-                vertical
-                verticalLength={LASER_POWER_SLIDER_LENGTH}
-              />
-            </div>
           </div>
         );
       })()}
