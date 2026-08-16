@@ -159,6 +159,21 @@ function getRotationOffset(type, rotation) {
 // (contrast the Stern-Gerlach sim's samplePath, an independent per-photon
 // Monte Carlo walk with no such combining step, next to its own
 // theoreticalProbabilities for the exact version).
+//
+// The probability that draw uses always comes from a zero-width trace --
+// tracePaths called with jitterOverride 0, treating the laser as an
+// idealized ray from dead center -- so it's the exact same distribution
+// computeTheoreticalProbabilities reports; a beam's real transverse width
+// (LASER_APERTURE_WIDTH) never gets a vote in what a photon actually does.
+// But samplePhotonPath then re-walks a *second*, independently jittered
+// trace purely to find a realistic-looking line to animate: each branch
+// tracePaths returns carries its own `path` signature (see walk's own
+// comment), and samplePhotonPath looks up whichever branch of the jittered
+// trace followed the same sequence of hits/turns the zero-width draw
+// picked, so the photon still visibly bounces off wherever its own random
+// entry point actually carries it on each mirror/beamsplitter face,
+// exactly as if the whole walk had been jittered end to end -- because for
+// the drawn line, it was.
 
 const PARTICLE_SPEED = 300; // px/sec, matches the Stern-Gerlach sim's own particles
 const PARTICLE_RADIUS = 4;
@@ -217,7 +232,11 @@ function pathPhaseFactor(distance) {
 // against detector.png). LASER_APERTURE_WIDTH is that nozzle's own cross-
 // section, converted from image pixels to the footprint's own scale -- the
 // "pretty small opening" the emitted beam's transverse jitter is confined
-// to, rather than the full 50px height of the placed component.
+// to, rather than the full 50px height of the placed component. Only ever
+// applied to the *visual* trace a photon's drawn line comes from (see
+// tracePaths' jitterOverride and samplePhotonPath) -- the probability of
+// what a photon actually does is always computed treating the beam as an
+// idealized zero-width ray from dead center instead.
 const LASER_EMIT_LOCAL_X = 87; // px into the unrotated 100px-wide footprint
 const LASER_EMIT_LOCAL_Y = 24; // px into the unrotated 50px-tall footprint
 const LASER_APERTURE_WIDTH = 15; // px, full spread of the beam's transverse jitter
@@ -343,9 +362,12 @@ function beamsplitterReflectExit(rotation, entrySide) {
 // transverse coordinate exactly as it was. Snapping it to the cell's center
 // here (an earlier version's bug) is what made every photon passing
 // through the same wave plate/beamsplitter converge into a single, dead-
-// straight line regardless of how far off-axis it actually entered -- a
-// visible "funneling" a real (jitter-width) beam wouldn't show, and one
-// that then propagated into wherever the beam ended up bending next.
+// straight line regardless of how far off-axis it actually entered (e.g.
+// from an earlier bounce off a mirror/beamsplitter face whose own diagonal
+// isn't perfectly centered in its cell -- see MIRROR_DIAGONAL_LOCAL/
+// BEAMSPLITTER_DIAGONAL_LOCAL) -- a visible funneling nothing about the
+// actual geometry would produce, and one that then propagated into
+// wherever the beam ended up bending next.
 function advanceThrough(col, row, dir, carried) {
   if (dir.x !== 0) return { x: (col + 0.5) * GRID_SIZE, y: carried.y };
   return { x: carried.x, y: (row + 0.5) * GRID_SIZE };
@@ -439,9 +461,10 @@ const BLOCK_LOCAL_RECT = {
 // through) and rotation. `rect` rotates along with the component -- still
 // axis-aligned afterward, since every rotation here is a 90° multiple --
 // so this always resolves to a plain min/max on the rotated corners.
-// Off-axis position is clamped to the rotated rect's own span, in case the
-// beam's aperture jitter carried it slightly past the (narrower-than-the-
-// full-cell) graphic's own edge.
+// Off-axis position is clamped to the rotated rect's own span, in case a
+// carried transverse offset from an earlier off-center bounce (see
+// advanceThrough's own comment) puts it slightly past the (narrower-than-
+// the-full-cell) graphic's own edge.
 function rectEntryPoint(anchorX, anchorY, baseFootprint, rotation, rect, dir, carried) {
   const cx = anchorX + (baseFootprint.w * GRID_SIZE) / 2;
   const cy = anchorY + (baseFootprint.h * GRID_SIZE) / 2;
@@ -478,11 +501,12 @@ function isFrontEntry(rotation, entrySide) {
 // transmitted and reflected halves (rather than samplePhotonPath's old
 // per-hop coin flip), each carrying its own share of the state -- still
 // complex amplitude, not yet a probability. Every finished branch (however
-// it ends) is pushed onto `results` as { outcome, state, points }: two
-// branches that both end up 'detected' at the same detector are meant to be
-// summed back together (as amplitudes, before squaring) by the caller --
-// see samplePhotonPath -- which is the actual interference step; nothing
-// here decides who "wins", it just reports what every branch carried.
+// it ends) is pushed onto `results` as { outcome, state, points, path }:
+// two branches that both end up 'detected' at the same detector are meant
+// to be summed back together (as amplitudes, before squaring) by the
+// caller -- see samplePhotonPath -- which is the actual interference step;
+// nothing here decides who "wins", it just reports what every branch
+// carried.
 //
 // `state` is scaled by pathPhaseFactor for every leg of travel (so two
 // branches of different total length decohere/recohere correctly by the
@@ -494,6 +518,19 @@ function isFrontEntry(rotation, entrySide) {
 // transmits whole, V reflects whole -- which is what keeps differently-
 // polarized light from interfering with itself: two states that don't
 // share a component (H vs V) simply have nothing to add when summed.
+//
+// `path` is a token per fork/termination (`${componentId}:${action}`) built
+// up alongside `points` -- a branch's own identity, independent of exactly
+// where it geometrically bent. Since jitter never changes *which* side a
+// beam enters or exits through (only where exactly within that side), two
+// traces of the same setup with different jitter always produce the same
+// set of path signatures; samplePhotonPath uses this to find "the same"
+// branch across a zero-width trace (for probabilities) and an
+// independently jittered one (for a realistic drawn line).
+//
+// jitterOverride pins the emitted beam's transverse start offset to an
+// exact value (0 for the physics trace) instead of drawing a fresh random
+// one (every visual trace) -- see LASER_APERTURE_WIDTH.
 function tracePaths(laserComp, cellMap, cols, rows, jitterOverride) {
   const emission = getLaserEmission(laserComp);
   const jitter = jitterOverride !== undefined ? jitterOverride : (Math.random() - 0.5) * LASER_APERTURE_WIDTH;
@@ -504,10 +541,10 @@ function tracePaths(laserComp, cellMap, cols, rows, jitterOverride) {
   const results = [];
   let branchBudget = MAX_TOTAL_BRANCHES;
 
-  function walk(pos, dir, state, points, hop) {
+  function walk(pos, dir, state, points, hop, path) {
     if (branchBudget-- <= 0) return; // drop this branch's remaining amplitude -- see MAX_TOTAL_BRANCHES
     if (hop > MAX_HOPS) {
-      results.push({ outcome: { type: 'escaped' }, state, points });
+      results.push({ outcome: { type: 'escaped' }, state, points, path });
       return;
     }
 
@@ -522,7 +559,7 @@ function tracePaths(laserComp, cellMap, cols, rows, jitterOverride) {
           ? { x: dir.x > 0 ? cols * GRID_SIZE : 0, y: pos.y }
           : { x: pos.x, y: dir.y > 0 ? rows * GRID_SIZE : 0 };
         const dist = Math.hypot(exitPoint.x - pos.x, exitPoint.y - pos.y);
-        results.push({ outcome: { type: 'escaped' }, state: scaleState(state, pathPhaseFactor(dist)), points: [...points, exitPoint] });
+        results.push({ outcome: { type: 'escaped' }, state: scaleState(state, pathPhaseFactor(dist)), points: [...points, exitPoint], path });
         return;
       }
       const found = cellMap.get(`${col},${row}`);
@@ -550,7 +587,7 @@ function tracePaths(laserComp, cellMap, cols, rows, jitterOverride) {
       const dist = Math.hypot(point.x - pos.x, point.y - pos.y);
       const arrived = scaleState(state, pathPhaseFactor(dist));
       const outcome = type.physicsKind === 'block' ? { type: 'absorbed' } : { type: 'detected', detectorId: hitComp.id };
-      results.push({ outcome, state: arrived, points: [...points, point] });
+      results.push({ outcome, state: arrived, points: [...points, point], path: [...path, `${hitComp.id}:${outcome.type}`] });
       return;
     }
 
@@ -566,10 +603,10 @@ function tracePaths(laserComp, cellMap, cols, rows, jitterOverride) {
       const dist = Math.hypot(bendPoint.x - pos.x, bendPoint.y - pos.y);
       const arrived = scaleState(state, pathPhaseFactor(dist));
       if (res.type === 'absorb') {
-        results.push({ outcome: { type: 'absorbed' }, state: arrived, points: [...points, bendPoint] });
+        results.push({ outcome: { type: 'absorbed' }, state: arrived, points: [...points, bendPoint], path: [...path, `${hitComp.id}:absorbed`] });
         return;
       }
-      walk(bendPoint, SIDE_TO_EXIT_DIR[res.exitSide], scaleState(arrived, -1), [...points, bendPoint], hop + 1);
+      walk(bendPoint, SIDE_TO_EXIT_DIR[res.exitSide], scaleState(arrived, -1), [...points, bendPoint], hop + 1, [...path, `${hitComp.id}:reflect`]);
       return;
     }
 
@@ -583,7 +620,7 @@ function tracePaths(laserComp, cellMap, cols, rows, jitterOverride) {
 
     if (type.physicsKind === 'hwp' || type.physicsKind === 'qwp') {
       const matrix = type.physicsKind === 'hwp' ? hwpMatrix(hitComp.angle ?? 0) : qwpMatrix(hitComp.angle ?? 0);
-      walk(through, dir, applyJones(matrix, arrived), points, hop + 1); // straight through -- no bend, no new vertex
+      walk(through, dir, applyJones(matrix, arrived), points, hop + 1, [...path, `${hitComp.id}:pass`]); // straight through -- no bend, no new vertex
       return;
     }
 
@@ -600,15 +637,15 @@ function tracePaths(laserComp, cellMap, cols, rows, jitterOverride) {
     if (type.physicsKind === 'pbs') {
       const transmitState = { h: arrived.h, v: { re: 0, im: 0 } };
       const reflectState = { h: { re: 0, im: 0 }, v: scaleState(bendArrived, reflectPhase).v };
-      if (cAbs2(transmitState.h) > 0) walk(through, dir, transmitState, points, hop + 1);
-      if (cAbs2(reflectState.v) > 0) walk(bendPoint, SIDE_TO_EXIT_DIR[reflectExitSide], reflectState, [...points, bendPoint], hop + 1);
+      if (cAbs2(transmitState.h) > 0) walk(through, dir, transmitState, points, hop + 1, [...path, `${hitComp.id}:transmit`]);
+      if (cAbs2(reflectState.v) > 0) walk(bendPoint, SIDE_TO_EXIT_DIR[reflectExitSide], reflectState, [...points, bendPoint], hop + 1, [...path, `${hitComp.id}:reflect`]);
     } else {
-      walk(through, dir, scaleState(arrived, Math.SQRT1_2), points, hop + 1);
-      walk(bendPoint, SIDE_TO_EXIT_DIR[reflectExitSide], scaleState(bendArrived, reflectPhase * Math.SQRT1_2), [...points, bendPoint], hop + 1);
+      walk(through, dir, scaleState(arrived, Math.SQRT1_2), points, hop + 1, [...path, `${hitComp.id}:transmit`]);
+      walk(bendPoint, SIDE_TO_EXIT_DIR[reflectExitSide], scaleState(bendArrived, reflectPhase * Math.SQRT1_2), [...points, bendPoint], hop + 1, [...path, `${hitComp.id}:reflect`]);
     }
   }
 
-  walk(startPos, emission.dir, H_STATE, [startPos], 0);
+  walk(startPos, emission.dir, H_STATE, [startPos], 0, []);
   return results;
 }
 
@@ -620,14 +657,24 @@ function tracePaths(laserComp, cellMap, cols, rows, jitterOverride) {
 // Absorbed/escaped branches are deliberately *not* pooled the way detector
 // hits are: nothing recombines them into a shared measurement, so (unlike
 // two paths reuniting at a detector) they stay distinguishable and just
-// don't interfere with each other. Returns the same { points, outcome }
-// shape the old per-photon walk did, so buildPhotonSegments/spawnParticle
-// don't need to know any of this changed.
+// don't interfere with each other.
+//
+// This whole draw runs against a zero-width trace (jitterOverride 0), so
+// the probabilities involved are the exact ones computeTheoreticalProbabilities
+// reports -- the beam's real transverse width never gets a say in what a
+// photon actually does. It's only *after* an outcome (and, for a detector,
+// which contributing branch) has been picked that a second, independently
+// jittered trace gets walked purely to find a realistic-looking line to
+// animate: pickVisualPoints below looks for whichever of that second
+// trace's branches followed the exact same sequence of hits/turns (see
+// tracePaths' own `path` doc comment), so the drawn photon still visibly
+// bounces off wherever its own random entry point actually carries it on
+// each mirror/beamsplitter face along the way, not just at the very start.
 function samplePhotonPath(laserComp, cellMap, cols, rows) {
-  const branches = tracePaths(laserComp, cellMap, cols, rows);
+  const branches = tracePaths(laserComp, cellMap, cols, rows, 0);
 
   const detectorGroups = new Map(); // detectorId -> { state, members: [branch, ...] }
-  const outcomes = []; // { prob, points, state } -- one entry per final lottery ticket
+  const outcomes = []; // { prob, outcome, path } -- one entry per final lottery ticket
   branches.forEach((branch) => {
     if (branch.outcome.type === 'detected') {
       const id = branch.outcome.detectorId;
@@ -636,32 +683,54 @@ function samplePhotonPath(laserComp, cellMap, cols, rows) {
       group.members.push(branch);
       detectorGroups.set(id, group);
     } else {
-      outcomes.push({ prob: cAbs2(branch.state.h) + cAbs2(branch.state.v), outcome: branch.outcome, points: branch.points });
+      outcomes.push({ prob: cAbs2(branch.state.h) + cAbs2(branch.state.v), outcome: branch.outcome, path: branch.path });
     }
   });
   detectorGroups.forEach((group, detectorId) => {
     const prob = cAbs2(group.state.h) + cAbs2(group.state.v);
-    // Animate whichever contributing branch happens to be sampled, weighted
-    // by its own individual (pre-interference) probability -- a
-    // visualization choice, not a physical one: interference has already
-    // been fully accounted for in `prob` above by the time this runs.
+    // Which contributing branch to actually animate is still a
+    // visualization choice, weighted by its own individual (pre-
+    // interference) probability -- interference has already been fully
+    // accounted for in `prob` above by the time this runs.
     let pick = Math.random() * group.members.reduce((sum, m) => sum + cAbs2(m.state.h) + cAbs2(m.state.v), 0);
-    let points = group.members[group.members.length - 1].points;
+    let path = group.members[group.members.length - 1].path;
     for (const member of group.members) {
       pick -= cAbs2(member.state.h) + cAbs2(member.state.v);
-      if (pick <= 0) { points = member.points; break; }
+      if (pick <= 0) { path = member.path; break; }
     }
-    outcomes.push({ prob, outcome: { type: 'detected', detectorId }, points });
+    outcomes.push({ prob, outcome: { type: 'detected', detectorId }, path });
   });
 
   const totalProb = outcomes.reduce((sum, o) => sum + o.prob, 0);
   let draw = Math.random() * totalProb;
+  let chosen = outcomes[outcomes.length - 1];
   for (const o of outcomes) {
     draw -= o.prob;
-    if (draw <= 0) return { points: o.points, outcome: o.outcome };
+    if (draw <= 0) { chosen = o; break; }
   }
-  const last = outcomes[outcomes.length - 1];
-  return { points: last.points, outcome: last.outcome };
+
+  const visualBranches = tracePaths(laserComp, cellMap, cols, rows);
+  return { points: pickVisualPoints(chosen, visualBranches, branches), outcome: chosen.outcome };
+}
+
+// Finds the drawn line for a chosen outcome: the jittered trace's own
+// branch with the exact same path signature, if the jitter happened to
+// still land it on that same sequence of hits/turns (the overwhelmingly
+// common case -- jitter only ever moves *where* along a side a beam enters,
+// never *which* side); failing that, any of its branches that at least
+// reached the same final outcome; failing even that (only possible for an
+// absorbed/escaped outcome sharing its bare `{type}` with some other
+// branch of the jittered trace that isn't really "the same" one), the
+// zero-width trace's own points for that exact signature, which are
+// guaranteed to exist since `chosen` came from `physicsBranches` itself.
+function pickVisualPoints(chosen, visualBranches, physicsBranches) {
+  const key = chosen.path.join('|');
+  const exact = visualBranches.find((b) => b.path.join('|') === key);
+  if (exact) return exact.points;
+  const outcomeMatches = (a, b) => a.type === b.type && a.detectorId === b.detectorId;
+  const sameOutcome = visualBranches.find((b) => outcomeMatches(b.outcome, chosen.outcome));
+  if (sameOutcome) return sameOutcome.points;
+  return physicsBranches.find((b) => b.path.join('|') === key).points;
 }
 
 // Grid extent guaranteed to contain every placed component's own footprint,
@@ -695,17 +764,14 @@ function boundingGridExtent(components) {
 // don't pool together the way detector hits do), since nothing here needs
 // them separated further.
 //
-// Runs with the aperture jitter fixed at 0 (dead center) rather than
-// tracePaths' usual per-photon random draw: the exact interference
-// probabilities are, in general, a function of that jitter too (a branch's
-// phase depends on its exact geometric path length, which shifts
-// continuously with where across the aperture it started), so an
-// asymmetric setup technically doesn't have *one* single "theoretical"
-// answer independent of the beam's transverse profile. Dead center is a
-// documented simplification (an idealized zero-width beam) rather than an
-// attempt to integrate over the jitter distribution -- it matches every
-// symmetric setup exactly (where the jitter dependence cancels out anyway)
-// and is the natural single answer to show as a reference line otherwise.
+// Runs against a zero-width trace (jitterOverride 0), exactly like the
+// probability half of samplePhotonPath's own draw -- so there's no separate
+// approximation happening here: this is the same single well-defined
+// distribution every animated photon's outcome is actually drawn from
+// (LASER_APERTURE_WIDTH only ever affects which specific line gets
+// animated for that outcome afterward, never which outcome it is; see
+// samplePhotonPath/pickVisualPoints), just read off directly instead of
+// collapsed into one random draw.
 //
 // Returns null if there's no laser placed yet. detectorProbs only ever
 // contains ids of detectors branches actually reached -- a detector nothing
