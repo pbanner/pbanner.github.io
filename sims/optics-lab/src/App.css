@@ -15,13 +15,13 @@
   overflow: hidden;
 }
 
-/* Column of three floating panels, anchored along the right edge and
+/* Column of two floating panels, anchored along the right edge and
    stretching from just below the top of the screen to just above the
-   bottom. The build panel (flex: 1 1 auto) takes whatever room is left
-   over once the content-sized data-collection panel and the fixed-height
-   data-plotting panel have taken theirs.
+   bottom. (The build panel used to live here too -- it's now the left-edge
+   sidebar instead, see .sidebar-panel below -- so this stack is just
+   Data Collection Controls and the histogram now.)
 
-   No explicit width here -- each panel sets its own (see .build-panel /
+   No explicit width here -- each panel sets its own (see
    .data-collection-panel / .data-plotting-panel below) so they don't have
    to match, and align-items: flex-end keeps their right edges flush with
    this column's own right:16px anchor regardless. Left unset, this box's
@@ -59,10 +59,120 @@
   pointer-events: auto; /* opts back in despite .overlay-panel-stack's pointer-events: none */
 }
 
-.build-panel {
-  flex: 0 0 210px;
-  width: 320px;
-  overflow-y: auto;
+/* Left-edge sidebar -- an Adobe-toolbar-style single column of icon
+   buttons (see BuildPanel/SidebarIconButton in panels.jsx). An overlay in
+   its own right (not a member of .overlay-panel-stack), positioned and
+   styled the same way that stack's own panels are -- border/radius/
+   translucent background matching .overlay-controls -- just anchored to
+   the opposite (left) edge and shrink-wrapped to a single icon's width
+   instead of stretching to fit a whole card's worth of controls. */
+.sidebar-panel {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border: 2px solid #333;
+  border-radius: 12px;
+  padding: 10px 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+.sidebar-heading {
+  font-size: 16px;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 0px;
+}
+
+.sidebar-column {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-divider {
+  width: 100%;
+  height: 1px;
+  background: #aaa;
+  margin: 4px 0;
+}
+
+/* One icon in the sidebar's column -- a plain circular hover/active
+   highlight behind the image, no card or label of its own (see
+   .sidebar-hover-label for where the label actually renders). Gray on
+   hover reads as "you're over something interactive"; blue -- the same
+   blue used for the active state everywhere else in this sim (.control-
+   bar-button.active, the rotate button) -- marks "this is currently armed/
+   active" specifically, so the two states can't be confused with each
+   other even while hovering an already-active icon. */
+.sidebar-icon-button {
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.sidebar-icon-button:hover {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.sidebar-icon-button.active {
+  background: #3498db;
+}
+
+.sidebar-icon-button.active:hover {
+  background: #2f88c4;
+}
+
+.sidebar-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.sidebar-icon-button:disabled:hover {
+  background: transparent;
+}
+
+.sidebar-icon-button-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+/* A hovered sidebar icon's own label -- floats outside the (thin) sidebar
+   itself, in the canvas area, rather than the sidebar growing to fit text
+   (see App.jsx's hoveredSidebarButton). Plain viewport (fixed) coordinates
+   and a high z-index, same reasoning as .placement-message: it has to
+   render above the canvas and every other overlay panel it might land on
+   top of. */
+.sidebar-hover-label {
+  position: fixed;
+  pointer-events: none;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #999;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: bold;
+  color: #222;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
 }
 
 .data-collection-panel {
@@ -190,28 +300,6 @@
   border-color: #bbb;
 }
 
-/* "Add Components" heading above the row of icon-only buttons in the Build
-   panel -- swaps to name whichever button is currently hovered. A single
-   line always, so the row below it never jiggles vertically. */
-.add-component-heading {
-  font-size: 14px;
-  font-weight: 600;
-  color: #333;
-  margin: 4px 0 6px 0;
-  white-space: nowrap;
-}
-
-/* Fixed 4-column grid (2 rows of 4, given COMPONENT_TYPES' 8 entries) --
-   deliberately not flex-wrap, which would reflow to whatever fits a given
-   width rather than the specific two rows wanted here (see COMPONENT_TYPES'
-   own ordering comment in componentTypes.js). */
-.add-component-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  margin: 0 0 0px 0;
-}
-
 .icon-only-button {
   height: 36px;
   padding: 4px 6px;
@@ -223,14 +311,6 @@
 .icon-only-button-square {
   min-width: 36px;
   padding: 4px;
-}
-
-.icon-only-button-image {
-  max-height: 100%;
-  max-width: 100%;
-  object-fit: contain;
-  -webkit-user-drag: none;
-  user-select: none;
 }
 
 /* Placement ghost -- a half-opacity, full-scale preview of the component
@@ -644,7 +724,6 @@ input.waveplate-angle-readout[type=number] {
 
 /* Responsive for smaller screens */
 @media (max-width: 800px) {
-  .build-panel,
   .data-collection-panel {
     width: 260px;
   }

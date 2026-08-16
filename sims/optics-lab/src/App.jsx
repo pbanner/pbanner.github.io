@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import './App.css';
-import LabPanel, { GRID_SIZE } from './LabPanel.jsx';
+import LabPanel, { GRID_SIZE, CLICK_MOVE_THRESHOLD } from './LabPanel.jsx';
 import { BuildPanel, DataCollectionPanel, DataPlottingPanel } from './panels.jsx';
 import { COMPONENT_TYPES, getDefaultFootprint, getPlacementMessage } from './componentTypes.js';
 
 // Gap between the placement ghost's own bottom edge and the guidance
 // message below it.
 const PLACEMENT_MESSAGE_GAP = 8;
+// Gap between a hovered sidebar icon's own right edge and its floating
+// label (see hoveredSidebarButton below).
+const SIDEBAR_LABEL_GAP = 12;
 
 export default function App() {
   const [displayBools, setDisplayBools] = useState({
@@ -43,13 +46,65 @@ export default function App() {
   // of those siblings need to read and write.
   const [hoveredDetectorId, setHoveredDetectorId] = useState(null);
 
-  // Arms (or, clicking the same button again, disarms) a component for
-  // placement. Seeded from the click event that triggered it so the ghost
-  // appears immediately under the cursor, right over the Build panel, before
-  // any further mouse movement.
-  const armPlacement = (componentId, e) => {
-    setBuildMode((prev) => (prev?.place === componentId ? null : { place: componentId }));
-    if (e) setGhostPos({ x: e.clientX, y: e.clientY });
+  // Which sidebar icon (if any) is currently hovered -- { label, rect } for
+  // the button's own DOMRect, or null. Drives the bold label that floats
+  // outside the (thin) sidebar next to whichever icon it names; see the
+  // render block below and BuildPanel's own onHoverButton.
+  const [hoveredSidebarButton, setHoveredSidebarButton] = useState(null);
+
+  // A mousedown on a sidebar add-icon starts a gesture that isn't yet
+  // committed to being a click or a drag -- exactly the same distinction
+  // LabPanel's own startDrag makes for moving an already-placed component,
+  // just replayed here for *placing* a new one, so the two feel symmetric:
+  // release without crossing CLICK_MOVE_THRESHOLD and it's click-to-place
+  // (arm, then wait for a second click on the canvas -- unchanged from
+  // before); cross it and it's a real drag, committed the moment the mouse
+  // is released whether or not that release ever passes back over the icon
+  // itself. Either way the component gets armed (buildMode/ghostPos) as
+  // soon as the mouse goes down, since click-to-place already showed the
+  // ghost immediately too -- there'd be nothing to distinguish a drag *from*
+  // otherwise until it was too late to show the ghost following it from
+  // the start.
+  const buildDragRef = useRef(null);
+  const handleBuildButtonMouseDown = (componentId, e) => {
+    const wasAlreadyArmed = buildMode?.place === componentId;
+    buildDragRef.current = { componentId, startX: e.clientX, startY: e.clientY, moved: false, wasAlreadyArmed };
+    if (!wasAlreadyArmed) {
+      setBuildMode({ place: componentId });
+      setGhostPos({ x: e.clientX, y: e.clientY });
+    }
+
+    const onMove = (ev) => {
+      const d = buildDragRef.current;
+      if (!d || d.moved) return;
+      if (Math.hypot(ev.clientX - d.startX, ev.clientY - d.startY) > CLICK_MOVE_THRESHOLD) d.moved = true;
+    };
+    const onUp = (ev) => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      const d = buildDragRef.current;
+      buildDragRef.current = null;
+      if (!d) return;
+      if (d.moved) {
+        // A real drag -- commit (or, dropped somewhere invalid, silently
+        // cancel) right here, rather than waiting for a second click.
+        // Dropped directly on the trash can specifically skips placing at
+        // all, rather than placing a brand new component invisibly
+        // underneath that (opaque, on-top) sidebar icon.
+        const droppedOnTrash = !!document.elementFromPoint(ev.clientX, ev.clientY)?.closest('[data-role="trash-target"]');
+        if (!droppedOnTrash) labPanelRef.current?.placeComponentAt(d.componentId, ev.clientX, ev.clientY);
+        setBuildMode(null);
+      } else if (d.wasAlreadyArmed) {
+        // A plain click on an already-armed icon -- toggle it back off,
+        // same as before.
+        setBuildMode(null);
+      }
+      // Otherwise: a plain click on a not-yet-armed icon -- stay armed,
+      // waiting for a second click on the canvas (handled by LabPanel's
+      // own handleCanvasClick).
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
   };
 
   const toggleRemoveMode = () => {
@@ -172,20 +227,41 @@ export default function App() {
         />
       </div>
 
-      {/* Three overlay panels, stacked from the bottom of the screen along
+      {/* Left-edge sidebar -- a thin single column of icon buttons (see
+          BuildPanel/SidebarIconButton), an overlay in its own right rather
+          than a member of the right-edge stack below, so it can eventually
+          move again (e.g. Data Collection down to the lower-left) without
+          disturbing that stack's own layout. */}
+      <BuildPanel
+        buildMode={buildMode}
+        onButtonMouseDown={handleBuildButtonMouseDown}
+        toggleRemoveMode={toggleRemoveMode}
+        components={components}
+        onHoverButton={setHoveredSidebarButton}
+      />
+
+      {/* A hovered sidebar icon's own bold label -- floats outside the
+          (thin) sidebar itself, vertically centered on the icon it names.
+          Plain viewport (fixed) coordinates, same reasoning as the
+          placement ghost/message below: it has to render above everything,
+          including the canvas and every other overlay panel. */}
+      {hoveredSidebarButton && (
+        <div
+          className="sidebar-hover-label"
+          style={{
+            left: hoveredSidebarButton.rect.right + SIDEBAR_LABEL_GAP,
+            top: hoveredSidebarButton.rect.top + hoveredSidebarButton.rect.height / 2,
+          }}
+        >
+          {hoveredSidebarButton.label}
+        </div>
+      )}
+
+      {/* Two overlay panels, stacked from the bottom of the screen along
           the right edge -- same floating-card look as the Stern-Gerlach
           sim's on-canvas field controls. The plotting panel gets a fixed
-          height; the build panel grows to fill whatever's left above the
-          (content-sized) data collection panel. */}
+          height; the data collection panel is sized to its own content. */}
       <div className="overlay-panel-stack">
-        <div className="overlay-controls build-panel">
-          <BuildPanel
-            buildMode={buildMode}
-            armPlacement={armPlacement}
-            toggleRemoveMode={toggleRemoveMode}
-            components={components}
-          />
-        </div>
         <div className="overlay-controls data-collection-panel">
           <DataCollectionPanel
             dcMode={dcMode}

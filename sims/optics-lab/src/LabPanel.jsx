@@ -44,8 +44,11 @@ const DETECTOR_COUNT_TOP = 132 * (DETECTOR_BOX_HEIGHT / 200);
 // A mousedown/mouseup pair on a placed component counts as a "click" (select
 // it) rather than a drag as long as the cursor never moved more than this
 // far in between -- keeps a slightly-shaky click from being misread as an
-// intent to move the component.
-const CLICK_MOVE_THRESHOLD = 4; // px
+// intent to move the component. Exported for App.jsx's own build-panel
+// click-vs-drag handling (see handleBuildButtonMouseDown there), which
+// makes the same distinction for *placing* a new component that this makes
+// for moving an already-placed one.
+export const CLICK_MOVE_THRESHOLD = 4; // px
 
 // Rotate/delete buttons: sit just off the selected component's cell, offset
 // by this gap -- same idea as the Stern-Gerlach sim's field-overlay
@@ -928,34 +931,51 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
     }
   };
 
+  // Attempts to place a fresh `componentId` at whatever grid cell contains
+  // the given client (viewport) coordinates -- the one place both ways of
+  // dropping a new component onto the grid actually go through, so they can
+  // never drift apart on what's a legal placement: handleCanvasClick below
+  // (click-to-place's second click) and, via the ref (see
+  // useImperativeHandle), App.jsx's build-panel drag-and-drop release.
+  // Returns whether it actually placed anything, which is what tells
+  // handleCanvasClick's own click-to-place path whether to clear buildMode
+  // (an invalid click -- occupied cell, off-grid -- leaves it armed to try
+  // again) or leaves that entirely to the caller, as the drag-and-drop path
+  // does (it always clears buildMode on release, successful or not).
+  const placeComponentAt = useCallback((componentId, clientX, clientY) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return false;
+    const rect = canvas.getBoundingClientRect();
+    const cell = cellFromPoint(clientX - rect.left, clientY - rect.top, cols, rows);
+    if (!cell) return false;
+    const type = getComponentType(componentId);
+    // Capped at one laser -- BuildPanel already disables the Add Laser
+    // button once one's placed, but this is the actual enforcement point.
+    if (componentId === 'laser' && components.some((c) => c.type === 'laser')) return false;
+    const ft = getRotatedFootprint(type, 0); // freshly placed, always starts unrotated
+    if (!isFootprintFree(components, cell.col, cell.row, ft.w, ft.h, null, cols, rows)) return false;
+    setComponents((prev) => {
+      const newComp = { id: makeComponentId(), type: componentId, col: cell.col, row: cell.row, rotation: 0 };
+      if (componentId === 'detector') {
+        newComp.colorId = getNextDetectorColorId(prev);
+        newComp.count = 0;
+      }
+      if (hasAngleControl(type)) {
+        newComp.angle = 0;
+      }
+      if (hasPowerControl(type)) {
+        newComp.power = 20; // matches the old Data Collection Controls rate slider's own default
+      }
+      return [...prev, newComp];
+    });
+    setSelectedId(null); // a fresh placement always starts deselected, not whatever was selected before
+    return true;
+  }, [components, cols, rows, setComponents]);
+
   const handleCanvasClick = (e) => {
     if (buildMode?.place) {
-      const canvas = canvasRef.current;
-      const rect = canvas.getBoundingClientRect();
-      const cell = cellFromPoint(e.clientX - rect.left, e.clientY - rect.top, cols, rows);
-      if (!cell) return;
-      const type = getComponentType(buildMode.place);
-      // Capped at one laser -- BuildPanel already disables the Add Laser
-      // button once one's placed, but this is the actual enforcement point.
-      if (buildMode.place === 'laser' && components.some((c) => c.type === 'laser')) return;
-      const ft = getRotatedFootprint(type, 0); // freshly placed, always starts unrotated
-      if (!isFootprintFree(components, cell.col, cell.row, ft.w, ft.h, null, cols, rows)) return;
-      setComponents((prev) => {
-        const newComp = { id: makeComponentId(), type: buildMode.place, col: cell.col, row: cell.row, rotation: 0 };
-        if (buildMode.place === 'detector') {
-          newComp.colorId = getNextDetectorColorId(prev);
-          newComp.count = 0;
-        }
-        if (hasAngleControl(type)) {
-          newComp.angle = 0;
-        }
-        if (hasPowerControl(type)) {
-          newComp.power = 20; // matches the old Data Collection Controls rate slider's own default
-        }
-        return [...prev, newComp];
-      });
-      setBuildMode(null); // single-shot placement, same as the Stern-Gerlach sim's build mode
-      setSelectedId(null); // a fresh placement always starts deselected, not whatever was selected before
+      // single-shot placement, same as the Stern-Gerlach sim's build mode
+      if (placeComponentAt(buildMode.place, e.clientX, e.clientY)) setBuildMode(null);
       return;
     }
     // A click that lands on empty canvas (not on a component -- see
@@ -1044,7 +1064,19 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
     // updater functions must stay pure (React may invoke them speculatively,
     // e.g. under StrictMode), so the setComponents side effect below can't
     // safely live inside one.
-    const onUp = () => {
+    const onUp = (e) => {
+      // Dropped on the sidebar's trash icon -- delete instead of the usual
+      // snap-to-grid. Detected by what's actually under the cursor (the
+      // trash button's own data-role="trash-target") rather than any
+      // canvas-local geometry, since the sidebar isn't part of LabPanel's
+      // own coordinate system at all.
+      if (dragMovedRef.current && document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-role="trash-target"]')) {
+        setComponents((prev) => prev.filter((c) => c.id !== draggingId));
+        setSelectedId(null);
+        setDragPosBoth(null);
+        setDraggingId(null);
+        return;
+      }
       const pos = dragPosRef.current;
       if (pos) {
         setComponents((prev) => {
@@ -1232,7 +1264,11 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
   // not something App.jsx already has a handle on.
   const deselectAll = useCallback(() => setSelectedId(null), []);
 
-  useImperativeHandle(ref, () => ({ spawnParticle, resetParticles, deselectAll }), [spawnParticle, resetParticles, deselectAll]);
+  useImperativeHandle(
+    ref,
+    () => ({ spawnParticle, resetParticles, deselectAll, placeComponentAt }),
+    [spawnParticle, resetParticles, deselectAll, placeComponentAt],
+  );
 
   const renderComponent = (comp) => {
     const type = getComponentType(comp.type);

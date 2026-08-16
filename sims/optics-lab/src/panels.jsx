@@ -2,75 +2,110 @@ import { useState } from 'react';
 import { COMPONENT_TYPES } from './componentTypes.js';
 import { PlayIcon, StopIcon } from './controls.jsx';
 import Histogram from './Histogram.jsx';
+import trashCanImage from './assets/trash-can.png';
 
-// One icon-only button in the Build panel's component row, plus the space
-// above it (in BuildPanel) where its hover label appears -- same pattern as
-// AddComponentButton in the Stern-Gerlach sim's App.jsx.
-function ComponentButton({ type, active, disabled, title, onClick, onMouseEnter, onMouseLeave }) {
+// One icon in the sidebar's single column -- an add-component button, or
+// the trash-can delete-mode toggle below them. Reports its own hover in
+// and out (as { label, rect } / null) rather than rendering a label itself
+// -- the label floats *outside* the (thin) sidebar, so it's App.jsx that
+// actually renders it; see onHoverButton and BuildPanel's own doc comment.
+// imageScale shrinks just the <img> within the button's own hover/active
+// circle (default 1 = fills it, same as every icon but the two
+// beamsplitters) -- npbs.png/pbs.png are drawn edge-to-edge in their own
+// source canvas, unlike every other icon here which already has some
+// built-in margin, so at the same nominal size they're the only two that
+// visibly touch the circle.
+function SidebarIconButton({ image, label, active, disabled, title, ariaLabel, dataRole, onMouseDown, onClick, onHoverButton, imageScale = 1 }) {
   return (
     <button
       type="button"
-      className={`control-bar-button icon-only-button icon-only-button-square ${active ? 'active' : ''}`}
-      aria-label={`Add ${type.label}`}
+      className={`sidebar-icon-button ${active ? 'active' : ''}`}
+      aria-label={ariaLabel}
       title={title}
       disabled={disabled}
+      data-role={dataRole}
+      onMouseDown={onMouseDown}
       onClick={onClick}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
+      onMouseEnter={(e) => onHoverButton({ label, rect: e.currentTarget.getBoundingClientRect() })}
+      onMouseLeave={() => onHoverButton(null)}
     >
-      <img src={type.image} alt="" className="icon-only-button-image" draggable="false" />
+      <img
+        src={image}
+        alt=""
+        className="sidebar-icon-button-image"
+        draggable="false"
+        style={imageScale !== 1 ? { maxWidth: `${imageScale * 100}%`, maxHeight: `${imageScale * 100}%` } : undefined}
+      />
     </button>
   );
 }
 
-// Top overlay panel: place/remove components. Unlike the Stern-Gerlach
-// sim's build panel, there are no measurement bases to set here (that'll
-// live elsewhere) and there's no fixed set of "legal" placement sites --
-// any unoccupied grid square works, so LabPanel does all of that checking
-// itself once a component is armed for placement.
-// Capped at one laser -- see LabPanel's own enforcement of this at
-// the actual placement site; this is just what keeps a second one from
-// ever getting armed.
-export function BuildPanel({ buildMode, armPlacement, toggleRemoveMode, components }) {
-  const [hovered, setHovered] = useState(null);
+// npbs/pbs get a smaller imageScale than the rest -- see SidebarIconButton's
+// own comment on why.
+const SIDEBAR_ICON_SCALE = { npbs: 0.75, pbs: 0.75 };
+
+// Left-edge overlay sidebar: place/delete components, Adobe-toolbar style --
+// a single thin column of icons, each showing a bold label outside the
+// sidebar on hover (see SidebarIconButton/onHoverButton) instead of the
+// button growing to fit text. Unlike the Stern-Gerlach sim's build panel,
+// there are no measurement bases to set here (that lives elsewhere) and
+// there's no fixed set of "legal" placement sites -- any unoccupied grid
+// square works, so LabPanel does all of that checking itself once a
+// component is armed for placement.
+//
+// Each add-icon starts its own click-vs-drag gesture on mousedown (see
+// App.jsx's handleBuildButtonMouseDown, called here as onButtonMouseDown) --
+// a plain click arms click-to-place (unchanged from before: a ghost that
+// follows the cursor until a second click drops it), while an actual drag
+// drops it wherever the mouse is released, mirroring how an already-placed
+// component can be clicked to select or dragged to move. The trash icon
+// is simpler: it's not itself draggable, just a click-to-toggle "delete
+// mode" button (same as the old "Remove Components" button) -- but it *is*
+// a drop target for dragging an already-placed component onto (see
+// LabPanel's own drag-release handler, which looks for this button's own
+// data-role="trash-target" under the cursor).
+//
+// Capped at one laser -- see LabPanel's own enforcement of this at the
+// actual placement site; this is just what keeps a second one from ever
+// getting armed.
+export function BuildPanel({ buildMode, onButtonMouseDown, toggleRemoveMode, components, onHoverButton }) {
   const placingId = buildMode?.place ?? null;
   const removing = buildMode === 'remove';
   const hasLaser = components.some((c) => c.type === 'laser');
 
   return (
-    <>
-      <h3 style={{ margin: '0 0 0px 0', fontWeight: 'bold' }}>Build Experiment</h3>
-
-      <p className="add-component-heading">
-        {'Add: ' + (COMPONENT_TYPES.find((c) => c.id === hovered)?.label ?? '')}
-      </p>
-      <div className="add-component-row">
+    <div className="sidebar-panel">
+      <div className="sidebar-heading">Add</div>
+      <div className="sidebar-column">
         {COMPONENT_TYPES.map((type) => {
           const disabled = type.id === 'laser' && hasLaser;
           return (
-            <ComponentButton
+            <SidebarIconButton
               key={type.id}
-              type={type}
+              image={type.image}
+              label={type.label}
               active={placingId === type.id}
               disabled={disabled}
               title={disabled ? 'Only one laser allowed' : undefined}
-              onMouseEnter={() => setHovered(type.id)}
-              onMouseLeave={() => setHovered(null)}
-              onClick={(e) => armPlacement(type.id, e)}
+              ariaLabel={`Add ${type.label}`}
+              onMouseDown={(e) => { if (!disabled) onButtonMouseDown(type.id, e); }}
+              onHoverButton={onHoverButton}
+              imageScale={SIDEBAR_ICON_SCALE[type.id] ?? 1}
             />
           );
         })}
       </div>
-
-      <button
-        type="button"
-        className={`control-bar-button ${removing ? 'active-special' : ''}`}
-        aria-label="Remove components"
+      <div className="sidebar-divider" />
+      <SidebarIconButton
+        image={trashCanImage}
+        label="Delete"
+        active={removing}
+        ariaLabel="Toggle delete mode"
+        dataRole="trash-target"
         onClick={toggleRemoveMode}
-      >
-        Remove Components
-      </button>
-    </>
+        onHoverButton={onHoverButton}
+      />
+    </div>
   );
 }
 
