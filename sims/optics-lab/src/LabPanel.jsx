@@ -284,16 +284,21 @@ function getLaserEmission(comp) {
   return { x: cx + rotatedOffset.x, y: cy + rotatedOffset.y, dir };
 }
 
-// Every grid cell a placed (non-laser) component's footprint covers, keyed
-// "col,row" -> that component -- lets samplePhotonPath's marching loop
-// below test cell occupancy in O(1) rather than scanning `components` at
-// every step. The laser itself is left out: it's a source, not something a
-// photon can hit (including one reflected back into it), so it's simply
-// transparent.
+// Every grid cell a placed component's footprint covers, keyed "col,row" ->
+// that component -- lets samplePhotonPath's marching loop below test cell
+// occupancy in O(1) rather than scanning `components` at every step. The
+// laser is included too (unlike an earlier version of this sim): it blocks
+// a photon that re-enters its own footprint from any direction (e.g.
+// reflected back into it) exactly like a beam block does -- see walk's own
+// terminal-absorption dispatch. It never blocks the one photon it's
+// actively emitting, though: walk's marching loop always steps to the
+// *next* cell before testing cellMap, and getLaserEmission's own emission
+// point sits inside the laser's own footprint (its front cell, in the
+// direction it's firing) -- so that first step is what actually carries a
+// fresh photon clear of the laser's own cells, not anything cellMap-side.
 function buildCellMap(components) {
   const map = new Map();
   components.forEach((c) => {
-    if (c.type === 'laser') return;
     const type = getComponentType(c.type);
     const ft = getRotatedFootprint(type, c.rotation);
     for (let dc = 0; dc < ft.w; dc++) {
@@ -310,6 +315,16 @@ function buildCellMap(components) {
 // through" (computed inline in samplePhotonPath, since it's only needed
 // there).
 const SIDE_TO_EXIT_DIR = { top: { x: 0, y: -1 }, bottom: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } };
+
+// Which side of a detector's own footprint its "mouth" -- the one side that
+// actually senses an incoming photon -- opens onto, given its rotation.
+// Unrotated, the mouth faces left (detector.png's own slot is drawn on that
+// side); each 90° step turns it the same direction the CSS transform:
+// rotate(deg) turns the rendered image (clockwise on screen), so the mouth
+// cycles left -> top -> right -> bottom as rotation goes 0 -> 90 -> 180 ->
+// 270. A photon entering through any other side is blocked -- absorbed by
+// the detector's own body -- rather than passing through or being sensed.
+const DETECTOR_MOUTH_SIDE = { 0: 'left', 90: 'top', 180: 'right', 270: 'bottom' };
 
 // A 1x1 cell's own diagonal "mirror face" pairs up two of its four sides --
 // whichever two a beam entering along that diagonal reflects between. Which
@@ -458,6 +473,21 @@ const BLOCK_LOCAL_RECT = {
   x1: DETECTOR_PADDING + (BLOCK_CONTENT_SIZE - BLOCK_BOX_WIDTH) / 2 + BLOCK_BOX_WIDTH,
   y1: DETECTOR_PADDING + BLOCK_BOX_HEIGHT,
 };
+// Laser card layout, measured the same way as DETECTOR_LOCAL_RECT above --
+// laser.png is 589x300, not quite the 2:1 its own 2x1-cell footprint is, so
+// (like the detector) it's letterboxed a little on the sides once fit into
+// the same 6px-padded box every other component gets.
+const LASER_IMAGE_WIDTH = 589, LASER_IMAGE_HEIGHT = 300;
+const LASER_PADDED_WIDTH = DETECTOR_FULL_WIDTH - 2 * DETECTOR_PADDING;
+const LASER_PADDED_HEIGHT = DETECTOR_FULL_HEIGHT - 2 * DETECTOR_PADDING;
+const LASER_BOX_HEIGHT = LASER_PADDED_HEIGHT; // fits by height -- the padded box is wider (proportionally) than the image
+const LASER_BOX_WIDTH = LASER_BOX_HEIGHT * (LASER_IMAGE_WIDTH / LASER_IMAGE_HEIGHT);
+const LASER_OFFSET_X = DETECTOR_PADDING + (LASER_PADDED_WIDTH - LASER_BOX_WIDTH) / 2;
+const LASER_OFFSET_Y = DETECTOR_PADDING; // no vertical letterboxing -- fits exactly
+const LASER_LOCAL_RECT = {
+  x0: LASER_OFFSET_X, y0: LASER_OFFSET_Y,
+  x1: LASER_OFFSET_X + LASER_BOX_WIDTH, y1: LASER_OFFSET_Y + LASER_BOX_HEIGHT,
+};
 
 // Where the incoming ray -- entering a component's footprint along `dir`,
 // at transverse coordinate `carried` -- first crosses `rect`'s own near
@@ -580,20 +610,32 @@ function tracePaths(laserComp, cellMap, cols, rows, jitterOverride) {
     // the component's own *graphic* (see DETECTOR_LOCAL_RECT/
     // BLOCK_LOCAL_RECT -- measured against the actual rendered images, not
     // assumed) rather than stopping short at the cell's outer edge, so the
-    // photon visibly reaches the block/detector before it disappears. Uses
-    // the component's own real placement anchor, not necessarily (col,
+    // photon visibly reaches the block/detector/laser before it disappears.
+    // Uses the component's own real placement anchor, not necessarily (col,
     // row) -- the detector's 2x1 footprint might have been entered through
-    // either of its two cells.
-    if (type.physicsKind === 'block' || type.physicsKind === 'detector') {
+    // either of its two cells. A laser has no measured inset rect the way
+    // detector.png/beam-block.png do (see DETECTOR_LOCAL_RECT/
+    // BLOCK_LOCAL_RECT's own comments) -- it just blocks flush against its
+    // own full footprint instead, which is close enough for a component
+    // that's never meant to be hit in the first place.
+    //
+    // Only a detector actually *senses* what reaches it, and only through
+    // its own mouth side (see DETECTOR_MOUTH_SIDE) -- every other case here
+    // (a block, a laser, or a detector hit from any other side) is a dead
+    // end the same way: absorbed, not detected.
+    if (type.physicsKind === 'block' || type.physicsKind === 'detector' || type.physicsKind === 'laser') {
       const base = getDefaultFootprint(type);
       const offset = getRotationOffset(type, hitComp.rotation);
       const anchorX = hitComp.col * GRID_SIZE + offset.x;
       const anchorY = hitComp.row * GRID_SIZE + offset.y;
-      const rect = type.physicsKind === 'block' ? BLOCK_LOCAL_RECT : DETECTOR_LOCAL_RECT;
+      const rect = type.physicsKind === 'block' ? BLOCK_LOCAL_RECT
+        : type.physicsKind === 'detector' ? DETECTOR_LOCAL_RECT
+        : LASER_LOCAL_RECT;
       const point = rectEntryPoint(anchorX, anchorY, base, hitComp.rotation, rect, dir, pos);
       const dist = Math.hypot(point.x - pos.x, point.y - pos.y);
       const arrived = scaleState(state, pathPhaseFactor(dist));
-      const outcome = type.physicsKind === 'block' ? { type: 'absorbed' } : { type: 'detected', detectorId: hitComp.id };
+      const sensed = type.physicsKind === 'detector' && entrySide === DETECTOR_MOUTH_SIDE[hitComp.rotation];
+      const outcome = sensed ? { type: 'detected', detectorId: hitComp.id } : { type: 'absorbed' };
       results.push({ outcome, state: arrived, points: [...points, point], path: [...path, `${hitComp.id}:${outcome.type}`] });
       return;
     }
