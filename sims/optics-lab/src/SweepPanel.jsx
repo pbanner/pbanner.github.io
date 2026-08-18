@@ -98,27 +98,27 @@ export function SweepSpecModal({ component, initialConfig, onCancel, onStart }) 
               <span>Start</span>
               <div className="sweep-modal-field-input">
                 <input type="number" value={start} onChange={(e) => setStart(e.target.value)} placeholder="0" />
-                <span>°</span>
+                <span style={{ fontSize: '18px' }}>°</span>
               </div>
             </label>
             <label className="sweep-modal-field">
               <span>Stop</span>
               <div className="sweep-modal-field-input">
                 <input type="number" value={stop} onChange={(e) => setStop(e.target.value)} placeholder="360" />
-                <span>°</span>
+                <span style={{ fontSize: '18px' }}>°</span>
               </div>
             </label>
             <label className="sweep-modal-field">
               <span>Step</span>
               <div className="sweep-modal-field-input">
                 <input type="number" value={step} onChange={(e) => setStep(e.target.value)} placeholder="10" />
-                <span>°</span>
+                <span style={{ fontSize: '18px' }}>°</span>
               </div>
             </label>
           </div>
         ) : (
           <label className="sweep-modal-field sweep-modal-list-field">
-            <span>Values (comma or space separated, degrees)</span>
+            <span>Angles (degrees)</span>
             <input type="text" value={list} onChange={(e) => setList(e.target.value)} placeholder="0, 22.5, 45, 67.5, 90" />
           </label>
         )}
@@ -131,7 +131,7 @@ export function SweepSpecModal({ component, initialConfig, onCancel, onStart }) 
         <p className="sweep-modal-readout">
           {totalPhotons != null
             ? <>{values.length.toLocaleString()} points × {shots.toLocaleString()} shots = <strong>{totalPhotons.toLocaleString()} photons</strong></>
-            : 'Fill in every field to see how much data this will collect.'}
+            : 'Choose all the sweep parameters to see how much data this will collect.'}
         </p>
 
         {error && <p className="sweep-modal-error">{error}</p>}
@@ -576,7 +576,7 @@ export function SweepResultsPanel({ sweepState, components, onStop, onBack, onTa
   }, [sweepState.values, sweepState.points]);
 
   const trialCompiled = useMemo(() => compileTrialFunction(trialFnText), [trialFnText]);
-  
+
   const xAxisLabel = `${type ? type.label : 'Swept parameter'} Angle θ (degrees)`;
   const progressText = running
     ? `Running… ${sweepState.points.length} / ${sweepState.values.length} points`
@@ -702,10 +702,10 @@ export function SweepResultsPanel({ sweepState, components, onStop, onBack, onTa
           title={!component ? "The swept component was deleted -- nothing left to take data from." : undefined}
           onClick={onTakeManualPoint}
         >
-          Take data at current settings ({currentValue.toFixed(1)}°)
+          Take data at current setting ({currentValue.toFixed(1)}°)
         </button>
         <button type="button" className="control-bar-button" disabled={sweepState.points.length === 0 || busy} onClick={handleSaveCsv}>
-          Save Data (CSV)
+          Save data as CSV
         </button>
       </div>
     </div>

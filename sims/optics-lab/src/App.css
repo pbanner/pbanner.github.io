@@ -650,11 +650,20 @@
 }
 
 .waveplate-angle-readout-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
   font-size: 13px;
   color: #333;
+}
+
+.waveplate-angle-readout-row .sweep-angle-button {
+  position: absolute;
+  right: 100%;
+  margin-right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .waveplate-angle-readout {
@@ -918,6 +927,7 @@ input[type="range"]::-moz-range-track {
   font-weight: 500;
   color: #333;
   flex: 1 1 auto;
+  padding: 0px 5px;
 }
 
 .sweep-modal-field input[type="number"],
@@ -952,6 +962,7 @@ input[type="range"]::-moz-range-track {
   border: 1px solid #cfe4f7;
   border-radius: 6px;
   padding: 8px 10px;
+  line-height: 1.3;
 }
 
 .sweep-modal-readout strong {
