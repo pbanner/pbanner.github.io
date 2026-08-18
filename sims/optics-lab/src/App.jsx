@@ -36,6 +36,19 @@ export default function App() {
   // from inside LabPanel itself, since the Data Collection panel that
   // triggers it is a sibling, not a child, of LabPanel.
   const labPanelRef = useRef(null);
+
+  // Tracks whether this tab is the active one, so both particle production
+  // (continuous mode's spawn timer below) and the animation itself (inside
+  // LabPanel) can pause together while it's hidden, rather than each
+  // drifting out of sync based on whatever throttling the browser happens
+  // to apply to timers vs. rAF callbacks in background tabs -- same
+  // reasoning, and same pattern, as the Stern-Gerlach sim's own tabVisible.
+  const [tabVisible, setTabVisible] = useState(!document.hidden);
+  useEffect(() => {
+    const onVisibilityChange = () => setTabVisible(!document.hidden);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
   const [chartDisplayBools, setChartDisplayBools] = useState({
     showPercentages: 2,    // 0 = counts only, 1 = percentages only, 2 = both
     showErrorBars: false,
@@ -203,12 +216,12 @@ export default function App() {
   // timer.
   const laserPower = components.find((c) => c.type === 'laser')?.power;
   useEffect(() => {
-    if (dcMode.mode !== 'stream' || !dcMode.running) return;
+    if (dcMode.mode !== 'stream' || !dcMode.running || !tabVisible) return;
     if (!laserPower || laserPower <= 0) return;
     const intervalMs = 1000 / laserPower;
     const id = setInterval(() => { labPanelRef.current?.spawnParticle(); }, intervalMs);
     return () => clearInterval(id);
-  }, [dcMode.mode, dcMode.running, laserPower]);
+  }, [dcMode.mode, dcMode.running, laserPower, tabVisible]);
 
   const handleMakeOnePhoton = () => {
     labPanelRef.current?.deselectAll();
@@ -354,6 +367,7 @@ export default function App() {
           sweepState={sweepState}
           sweepLocked={sweepLocked}
           onOpenSweepModal={handleOpenSweepModal}
+          tabVisible={tabVisible}
         />
       </div>
 

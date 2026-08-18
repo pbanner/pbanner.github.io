@@ -997,7 +997,7 @@ function DeleteIcon({ size = 15, color = "#8b0000" }) {
   );
 }
 
-const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuildMode, components, setComponents, hoveredDetectorId, setHoveredDetectorId, sweepState, sweepLocked, onOpenSweepModal }, ref) {
+const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuildMode, components, setComponents, hoveredDetectorId, setHoveredDetectorId, sweepState, sweepLocked, onOpenSweepModal, tabVisible }, ref) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const photonCanvasRef = useRef(null);
@@ -1570,6 +1570,28 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
       }
     };
   }, []);
+
+  // Pause the animation loop while the tab is hidden, in lockstep with
+  // App's own pausing of particle production (see its tabVisible effect) --
+  // otherwise the two drift out of sync based on whatever throttling the
+  // browser happens to apply to timers vs. rAF callbacks in background
+  // tabs. In-flight particles (including sweep-burst ones -- this is the
+  // same tick loop/rafRef both share) are left exactly as they are, not
+  // cleared, so this is a true pause: resuming resets lastFrameRef to null
+  // so the next tick computes dt from zero, rather than treating the whole
+  // hidden interval as one giant elapsed frame and fast-forwarding every
+  // particle straight to wherever it'd have ended up.
+  useEffect(() => {
+    if (!tabVisible) {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    } else if (particlesRef.current.length > 0 && rafRef.current === null) {
+      lastFrameRef.current = null;
+      rafRef.current = requestAnimationFrame((now) => tickRef.current(now));
+    }
+  }, [tabVisible]);
 
   // Samples and animates one new photon from the (single, capped) placed
   // laser -- a no-op if there isn't one yet. Exposed to App.jsx via ref (see
