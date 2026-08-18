@@ -1,6 +1,7 @@
 .app-layout {
   display: flex;
-  height: 100vh;
+  height: 100vh; /* fallback for browsers that don't support dvh below */
+  height: 100dvh; /* the *actual* visible viewport height -- plain 100vh on mobile Safari is sized as if the address-bar/toolbar chrome were always hidden, so on load (chrome still showing) this app's own box comes out taller than what's actually visible, leaving a sliver at the bottom only reachable by scrolling the whole page (which .overflow: hidden below can't prevent, since it's *this* box's height that's wrong, not content overflowing a correctly-sized one) */
   width: 100%;
   background: #fff;
 }
