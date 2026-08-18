@@ -1,0 +1,1259 @@
+.app-layout {
+  position: relative;
+  height: 100vh;
+  width: 100%;
+  background: #fff;
+  overflow: hidden;
+}
+
+/* Canvas Area -- now fills the entire screen; the overlay panels float on
+   top of it (see .overlay-panel-stack) instead of sharing space with it. */
+.canvas-area {
+  position: absolute;
+  inset: 0;
+  background: #fafafa;
+  overflow: hidden;
+}
+
+/* Row of two floating panels, anchored along the bottom-right corner:
+   Data Collection Controls sits to the *left* of the histogram (last in
+   DOM order, so it's the rightmost row item), the two of them bottom-
+   aligned via align-items: flex-end (the cross axis of a row is vertical,
+   so "flex-end" here means "flush with the bottom", the same way it meant
+   "flush with the right" back when this was a column). (The build panel
+   used to live here too -- it's now the left-edge sidebar instead, see
+   .sidebar-panel below.)
+
+   No explicit width here -- each panel sets its own (see
+   .data-collection-panel / .data-plotting-panel below) so they don't have
+   to match. Left unset, this box's width shrink-wraps to the sum of its
+   children (standard abspos sizing when `left` and `width` are both auto
+   but `right` isn't), so Data Collection Controls automatically stays
+   flush against the histogram panel's own left edge -- including as that
+   edge moves when Chart Options collapses/expands (see .data-plotting-
+   panel.options-collapsed) -- with no explicit coordination needed; it's
+   just normal flex reflow. */
+.overlay-panel-stack {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 16px;
+  line-height: 1.6;
+  z-index: 10;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  pointer-events: none;
+}
+
+/* On-canvas overlay panel look -- same as the Stern-Gerlach sim's
+   .overlay-controls (border + radius + padding + translucent background),
+   which itself matches the Bloch sphere sim's Time Controls overlay. */
+.overlay-controls {
+  border: 2px solid #333;
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  pointer-events: auto; /* opts back in despite .overlay-panel-stack's pointer-events: none */
+}
+
+/* Left-edge sidebar -- an Adobe-toolbar-style single column of icon
+   buttons (see BuildPanel/SidebarIconButton in panels.jsx). An overlay in
+   its own right (not a member of .overlay-panel-stack), positioned and
+   styled the same way that stack's own panels are -- border/radius/
+   translucent background matching .overlay-controls -- just anchored to
+   the opposite (left) edge and shrink-wrapped to a single icon's width
+   instead of stretching to fit a whole card's worth of controls. */
+.sidebar-panel {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border: 2px solid #333;
+  border-radius: 12px;
+  padding: 10px 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+.sidebar-heading {
+  font-size: 16px;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 0px;
+}
+
+.sidebar-column {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-divider {
+  width: 100%;
+  height: 1px;
+  background: #aaa;
+  margin: 4px 0;
+}
+
+/* One icon in the sidebar's column -- a plain circular hover/active
+   highlight behind the image, no card or label of its own (see
+   .sidebar-hover-label for where the label actually renders). Gray on
+   hover reads as "you're over something interactive"; blue -- the same
+   blue used for the active state everywhere else in this sim (.control-
+   bar-button.active, the rotate button) -- marks "this is currently armed/
+   active" specifically, so the two states can't be confused with each
+   other even while hovering an already-active icon. */
+.sidebar-icon-button {
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.sidebar-icon-button:hover {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.sidebar-icon-button.active {
+  background: #3498db;
+}
+
+.sidebar-icon-button.active:hover {
+  background: #2f88c4;
+}
+
+.sidebar-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.sidebar-icon-button:disabled:hover {
+  background: transparent;
+}
+
+.sidebar-icon-button-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+/* A hovered sidebar icon's own label -- floats outside the (thin) sidebar
+   itself, in the canvas area, rather than the sidebar growing to fit text
+   (see App.jsx's hoveredSidebarButton). Plain viewport (fixed) coordinates
+   and a high z-index, same reasoning as .placement-message: it has to
+   render above the canvas and every other overlay panel it might land on
+   top of. */
+.sidebar-hover-label {
+  position: fixed;
+  pointer-events: none;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #999;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: bold;
+  color: #222;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+}
+
+.data-collection-panel {
+  flex: 0 0 auto;
+  width: 270px;
+}
+
+/* Wider than Data Collection Controls, and laid out horizontally inside
+   itself -- Chart Options on the left, the plot itself on the right --
+   matching the Stern-Gerlach sim's bottom control bar (options column and
+   .histogram-panel side by side) rather than stacking the plot underneath
+   the options. Width shrinks when the options column collapses (see
+   .options-collapsed below) -- .histogram-panel has a fixed width of its
+   own precisely so it's the card that changes size around it, not the
+   chart itself.
+
+   Explicit width *and* height, rather than leaning on flex-basis the way
+   .data-collection-panel does for its own (auto) sizing -- flex-basis sets
+   whichever dimension is the *main* axis, and .overlay-panel-stack's own
+   axis switched from vertical to horizontal when Data Collection Controls
+   moved beside the histogram instead of above it, so a flex-basis here
+   would now be pinning this panel's width instead of its height. */
+.data-plotting-panel {
+  flex: 0 0 auto;
+  width: 670px;
+  height: 280px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Collapsed width = .histogram-panel's own fixed 328px + this card's own
+   28px (14px * 2) of horizontal padding + 16px of breathing room for the
+   magnifier/options-toggle buttons overlaid at the histogram's left edge
+   (see .histogram-magnifier-toggle/.histogram-options-toggle) -- without
+   that last bit they'd sit flush against this card's own left edge, since
+   collapsing removes the options column that otherwise stands well clear
+   of them. */
+.data-plotting-panel.options-collapsed {
+  width: 480px;
+}
+
+.data-plotting-row {
+  display: flex;
+  flex-direction: row;
+  /* No effect while the options column is visible -- it and the histogram
+     panel already exactly fill the row between them then. Once collapsed,
+     this pushes the (fixed-width) histogram panel flush against the row's
+     right edge instead of leaving the card's now-extra width (the 16px
+     margin above) sitting unused on the right of a flush-left histogram --
+     i.e. turns that extra width into the histogram's own left margin. */
+  justify-content: flex-end;
+  gap: 14px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.data-plotting-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0px;
+  width: 190px;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+
+.overlay-panel-stack h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.overlay-panel-stack p {
+  margin: 0;
+  font-size: 13px;
+  color: #666;
+  line-height: 1.4;
+}
+
+.overlay-panel-stack label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+}
+
+.overlay-panel-stack input[type="checkbox"],
+.overlay-panel-stack input[type="radio"] {
+  cursor: pointer;
+}
+
+/* Checkboxes and inputs */
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.control-bar-button {
+  padding: 6px 6px;
+  margin: 2px 0px;
+  border: 1px solid #999;
+  background: #eee;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #111;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.control-bar-button:hover {
+  background: #ddd;
+  border-color: #bbb;
+}
+
+.control-bar-button.active {
+  background: #3498db;
+  color: white;
+  border-color: #3498db;
+}
+
+.control-bar-button.active-special {
+  background: #972323;
+  color: white;
+  border-color: #972323;
+}
+
+.control-bar-button:disabled {
+  background: #d0d0d0;
+  border-color: #bbb;
+}
+
+.icon-only-button {
+  height: 36px;
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-only-button-square {
+  min-width: 36px;
+  padding: 4px;
+}
+
+/* Placement ghost -- a half-opacity, full-scale preview of the component
+   currently armed for placement, following the cursor above everything
+   else on the page (including the overlay panels) until it's dropped. */
+.placement-ghost {
+  position: fixed;
+  pointer-events: none;
+  opacity: 0.5;
+  object-fit: contain;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.35));
+  z-index: 1000;
+}
+
+/* Guidance message under the placement ghost (see getPlacementMessage in
+   componentTypes.js) -- same floating-card look as .rotate-blocked-message,
+   but neutral gray rather than dark red since it's informational, not a
+   warning. */
+.placement-message {
+  position: fixed;
+  pointer-events: none;
+  transform: translate(-50%, 0);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #999;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #333;
+  white-space: pre-line;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  text-align: center;
+  line-height: 1.2;
+}
+
+/* Photon layer -- a dedicated canvas (see LabPanel's photonCanvasRef)
+   sandwiched between the "under" and "over" tiers of placed components (see
+   isPhotonDrawnUnder in componentTypes.js) so a photon animates beneath a
+   wave plate/beamsplitter's own icon but in front of everything else.
+   pointer-events: none so it never intercepts clicks/drags meant for the
+   components on either side of it. */
+.photon-canvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Components already placed on the grid. */
+.placed-component {
+  position: absolute;
+  object-fit: contain;
+  padding: 6px;
+  box-sizing: border-box;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.placed-component:hover {
+  filter: drop-shadow(0 0 5px rgba(52, 152, 219, 0.85));
+}
+
+/* Remove mode (see LabPanel's buildMode === 'remove' -> remove-mode class):
+   same glow, but dark red instead of blue, so hovering a component you're
+   about to delete doesn't read as the ordinary "you could pick this up"
+   blue hover. Pairs with the cell fill the draw effect already shows
+   underneath it (see the 'remove' highlightKind case). */
+.placed-component.remove-mode:hover {
+  filter: drop-shadow(0 0 5px rgba(255, 0, 0, 0.85));
+}
+
+/* Same glow as a direct mouse-over (.placed-component:hover above), but
+   class-driven so the histogram can trigger it on a detector by hovering
+   that detector's own bar in the chart, not just by the mouse literally
+   being over the canvas (see LabPanel's hoveredDetectorId/chartHovered
+   and Histogram's own bar hover). */
+.placed-component.chart-hover {
+  filter: drop-shadow(0 0 5px rgba(52, 152, 219, 0.85));
+}
+
+/* While a sweep burst is actually firing (see LabPanel's sweepLocked prop
+   and its own componentClass), nothing on the canvas is pickable or
+   clickable -- suppress every hover-driven glow above so mousing over a
+   component doesn't still invite "you could grab this." */
+.placed-component.sweep-locked:hover,
+.placed-component.sweep-locked.chart-hover {
+  filter: none;
+}
+
+/* Detector card -- a wrapper div (instead of a bare <img>, since an <img>
+   can't have children) holding the detector image plus a colored stripe
+   and a label/count text overlay. .placed-component's own padding is inert
+   here (it isn't the containing block for absolutely positioned children),
+   so it's turned off and replicated by .detector-content instead, sized
+   and positioned to land exactly where that 6px padding plus the image's
+   own object-fit: contain letterboxing would put it (see LabPanel's
+   DETECTOR_* constants) -- everything below is positioned in that box's
+   own unrotated coordinate frame, not the full unpadded footprint. */
+.placed-component.detector-component {
+  padding: 0;
+}
+
+.detector-content {
+  position: absolute;
+}
+
+.placed-component-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.detector-stripe {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.detector-text {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* transform (translate to center on left/top, plus the counter-rotation)
+   is set inline per-element in LabPanel.jsx -- see the comment on
+   textRotation there for why each needs its own rotation origin rather
+   than sharing one on a wrapper. */
+.detector-label,
+.detector-count {
+  position: absolute;
+  white-space: nowrap;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+}
+
+.detector-label {
+  font-weight: bold;
+  color: #666;
+}
+
+/* Theory-probability card (theoryScreenshotToggle, Shift+P/Shift+Q --
+   LabPanel.jsx swaps a detector into this instead of .detector-component
+   while active). A plain white card, same visual language as the Stern-
+   Gerlach sim's own canvas-drawn version, just built from real DOM/CSS
+   here since this sim's placed components are DOM elements rather than
+   canvas draws. */
+.placed-component.detector-theory-card {
+  padding: 0;
+  box-sizing: border-box;
+  background: #ffffff;
+  border: 2px solid #303030;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.detector-theory-question {
+  font-family: Arial, sans-serif;
+  font-size: 32px;
+  font-weight: bold;
+}
+
+.detector-theory-body {
+  width: 82%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0px;
+}
+
+.detector-theory-percent {
+  font-family: Arial, sans-serif;
+  font-size: 15px;
+  font-weight: bold;
+}
+
+.detector-theory-bar-track {
+  width: 100%;
+  height: 10px;
+  border: 1px solid #303030;
+  box-sizing: border-box;
+  margin-bottom: 4px;
+}
+
+.detector-theory-bar-fill {
+  height: 100%;
+}
+
+/* Rotate button -- floats just off the selected component's cell (see
+   ROTATE_BUTTON_GAP in LabPanel.jsx). Dark red is deliberately a different
+   red than the selection glow/occupied-cell highlight above, so the control
+   itself doesn't blend into either of those. */
+.rotate-button {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid #3498db;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+  z-index: 6;
+}
+
+.rotate-button:hover {
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.rotate-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  border: 2px solid #8b8b8b;
+}
+
+.rotate-button:disabled:hover {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+}
+
+.rotate-blocked-message {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #999;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: #555;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  z-index: 6;
+  line-height: 1.25;
+  text-align: center;
+}
+
+/* Delete button -- same size/shape/position pattern as .rotate-button
+   (see LabPanel's selectedComp block), but always dark red: red is
+   reserved for "this deletes something" throughout this sim, which is also
+   why the rotate button itself is blue rather than red now. */
+.delete-button {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid #8b0000;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+  z-index: 6;
+}
+
+.delete-button:hover {
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+/* Wave plate card -- a wrapper div (instead of a bare <img>, same reason as
+   the detector) holding the image plus a small qualitative indicator of
+   its fast-axis angle (comp.angle), visible whether or not it's selected. */
+.waveplate-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.waveplate-indicator {
+  position: absolute;
+  left: 50%;
+  width: 25%;
+  height: 5px;
+  background: #222222;
+  border-radius: 2px;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+/* WaveplateAngleControl -- the ruler + numeric readout shown to the right
+   of a selected wave plate (see LabPanel's selectedComp block). Vertical
+   centering on the anchor point is handled by the component itself, not
+   here -- see its own RULER_CENTER_OFFSET. */
+.waveplate-angle-control-anchor {
+  position: absolute;
+  z-index: 7;
+}
+
+.waveplate-angle-control {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.00);
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.waveplate-angle-heading {
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+  white-space: nowrap;
+}
+
+.waveplate-angle-ruler {
+  display: block;
+  cursor: ns-resize;
+  border-radius: 4px;
+}
+
+.waveplate-angle-readout-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: #333;
+}
+
+.waveplate-angle-readout-row .sweep-angle-button {
+  position: absolute;
+  right: 100%;
+  margin-right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.waveplate-angle-readout {
+  width: 50px;
+  text-align: right;
+  font-size: 13px;
+  padding: 4px 4px;
+  border: 1px solid #999;
+  border-radius: 2px;
+}
+input.waveplate-angle-readout::-webkit-outer-spin-button,
+input.waveplate-angle-readout::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+/* Firefox */
+input.waveplate-angle-readout[type=number] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+/* Vertical variant of .control-group (see SliderPlusTextboxControl's
+   `vertical` option) -- label, then the rotated range input below, then
+   the textbox, all centered instead of the horizontal layout's left-
+   aligned label over a side-by-side slider/textbox row. */
+.control-group-vertical {
+  align-items: center;
+  text-align: center;
+}
+
+/* There's no native vertical <input type="range">, so this is a plain
+   horizontal one rotated -90deg (turns its "right/max" end to point up,
+   the usual convention for a vertical slider) -- the wrapper reserves the
+   rotated element's actual on-screen footprint (tall and narrow) since a
+   CSS transform doesn't itself change what space an element's untransformed
+   box reserves in layout. */
+.vertical-range-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+}
+
+.vertical-range-wrap input[type="range"] {
+  transform: rotate(-90deg);
+}
+
+/* Histogram -- sits beside .data-plotting-options rather than below it, so
+   it stretches to fill the row's full height instead of needing its own
+   min-height. Same layout as the Stern-Gerlach sim's .histogram-panel/
+   .histogram-canvas-wrap/.histogram-loupe. Fixed width (rather than
+   flex: 1 1 auto filling whatever the options column leaves behind) so the
+   chart itself stays the same size whether or not that column is
+   collapsed -- see .data-plotting-panel.options-collapsed, which resizes
+   the *card* around this fixed size instead. 328px matches .data-plotting-
+   panel's default 560px width minus the options column (190px), the row's
+   gap (14px), and this card's own horizontal padding (28px). */
+.histogram-panel {
+  flex: 0 0 430px;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.histogram-canvas-wrap {
+  width: 100%;
+  height: 100%;
+}
+
+.histogram-canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.histogram-magnifier-toggle {
+  position: absolute;
+  top: 6px;
+  left: -24px;
+  z-index: 2;
+}
+
+/* Reopens the Chart Options column once it's been collapsed (see
+   DataPlottingPanel's "Hide Options >>" button, its counterpart while the
+   column is visible). Same horizontal position as the magnifier toggle
+   above -- vertical position (bottom) is set inline in Histogram.jsx,
+   computed against the plot's own bottom axis line rather than fixed here. */
+.histogram-options-toggle {
+  position: absolute;
+  left: -24px;
+  z-index: 2;
+}
+
+/* The magnifier loupe -- a small, separate canvas showing a zoomed crop of
+   the chart under the cursor. The circular shape and thick ring are plain
+   CSS (not canvas clipping): simpler, and avoids drawImage self-copy
+   ambiguity since the loupe is always a distinct canvas element from the
+   main chart it's sampling from. */
+.histogram-loupe {
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  border: 4px solid #333;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.histogram-loupe canvas {
+  display: block;
+}
+
+/* Responsive for smaller screens */
+@media (max-width: 800px) {
+  .data-collection-panel {
+    width: 260px;
+  }
+
+  .data-plotting-panel {
+    width: 420px;
+  }
+
+  .data-plotting-panel.options-collapsed {
+    width: 272px; /* .histogram-panel's 228px here + 28px card padding + 16px margin, same formula as the default breakpoint */
+  }
+
+  .data-plotting-options {
+    width: 150px;
+  }
+
+  .histogram-panel {
+    flex-basis: 228px; /* 420px card width - 150px options - 14px gap - 28px card padding */
+  }
+}
+
+/*
+All for making the slider not have different colors
+on left and right of the circle
+*/
+input[type="range"] {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #404040;
+  outline: none;
+  appearance: none;
+}
+/* Webkit browsers (Chrome, Safari) */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #3498db;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+/* Firefox */
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #3498db;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+input[type="range"]::-moz-range-track {
+  background: transparent;
+  border: none;
+}
+
+/* ---------------------------------------------------------------------
+   Parameter sweep (SweepPanel.jsx) -- WaveplateAngleControl's own "Sweep
+   Angle..." button, the spec modal it opens, the results panel that
+   replaces the histogram once a sweep starts running, and the green
+   highlight identifying the swept component on canvas throughout.
+   ------------------------------------------------------------------- */
+
+.sweep-angle-button {
+  margin: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Persistent green highlight on whichever component sweepState refers to
+   (see LabPanel's renderComponent) -- a different color than the blue
+   hover/selection glow and the red remove-mode one, so it reads as "this
+   is what the sweep panel is about" rather than either of those. */
+.placed-component.swept-component {
+  filter: drop-shadow(0 0 6px rgba(39, 174, 96, 0.9));
+}
+
+/* Scopes the angle indicator's smooth tween to just a sweep's own
+   automated steps (see LabPanel's fireSweepBurst/runSweep) -- applying
+   this transition unconditionally would make ordinary click-and-drag angle
+   edits feel laggy instead of direct. Duration is a hair under
+   SWEEP_TWEEN_MS in LabPanel.jsx so the tween finishes before the next
+   burst fires. */
+.sweep-tweening .waveplate-indicator {
+  transition: top 0.3s ease;
+}
+
+/* Spec modal -- a dimmed full-screen backdrop (unlike every other panel in
+   this sim, all docked overlays), so filling it out reads as a deliberate,
+   focused step rather than something to half-fill and ignore. See
+   SweepSpecModal's own comment for why. */
+.sweep-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.6);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sweep-modal-card {
+  background: #ffffff;
+  border: 2px solid #333;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  padding: 20px 24px;
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sweep-modal-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: bold;
+  color: #222;
+}
+
+.sweep-modal-mode-toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.sweep-modal-mode-toggle .control-bar-button {
+  flex: 1 1 auto;
+  margin: 0;
+}
+
+.sweep-modal-range-row {
+  display: flex;
+  gap: 10px;
+}
+
+.sweep-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+  flex: 1 1 auto;
+  padding: 0px 5px;
+}
+
+.sweep-modal-field input[type="number"],
+.sweep-modal-field input[type="text"] {
+  padding: 5px 7px;
+  border: 1px solid #999;
+  border-radius: 4px;
+  font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.sweep-modal-field-input {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sweep-modal-list-field input {
+  width: 100%;
+}
+
+.sweep-modal-shots-field input {
+  width: 100px;
+}
+
+.sweep-modal-readout {
+  margin: 0;
+  font-size: 13px;
+  color: #333;
+  background: #eef6fb;
+  border: 1px solid #cfe4f7;
+  border-radius: 6px;
+  padding: 8px 10px;
+  line-height: 1.3;
+}
+
+.sweep-modal-readout strong {
+  color: #1a5a8a;
+}
+
+.sweep-modal-error {
+  margin: 0;
+  font-size: 12.5px;
+  color: #a02020;
+}
+
+.sweep-modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.sweep-modal-buttons .control-bar-button {
+  margin: 0;
+  padding: 7px 16px;
+}
+
+/* Results panel -- takes the histogram's own slot in .overlay-panel-stack
+   (see App.jsx), but taller: the extra height is fine since that stack
+   bottom-aligns its children (align-items: flex-end), so a taller panel
+   here just extends further up rather than disturbing Data Collection
+   Controls' own position beside it. */
+.sweep-results-panel {
+  width: 670px;
+  height: 420px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sweep-results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sweep-results-header .control-bar-button {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sweep-results-header-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sweep-results-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The badge itself just hosts StaleWarningIcon plus its own native title
+   tooltip (see SweepResultsPanel's staleBadge) -- cursor: help signals
+   there's something to hover for, same as a native title attribute
+   anywhere else. */
+.sweep-stale-badge {
+  display: inline-flex;
+  cursor: help;
+}
+
+/* Collapsed state shows only the header + progress line -- override the
+   base panel's fixed height (sized to fit the full plot) so the panel
+   actually shrinks instead of leaving empty space below those two rows. */
+.sweep-results-panel-collapsed {
+  height: auto;
+}
+
+.sweep-results-subheader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sweep-results-progress {
+  margin: 0;
+  font-size: 12.5px;
+  color: #555;
+}
+
+.sweep-legend {
+  display: flex;
+  gap: 12px;
+}
+
+.sweep-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #333;
+}
+
+.sweep-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+/* Wraps the plot proper plus its axis labels: a rotated "Counts" label to
+   the left (rendered as HTML/CSS rather than drawn on the canvas, so the
+   canvas's own padding/geometry math doesn't need to account for it) and
+   the x-axis label underneath. */
+.sweep-plot-outer {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 4px;
+}
+
+.sweep-plot-ylabel {
+  flex: 0 0 auto;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 12px;
+  color: #555;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.sweep-plot-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sweep-plot-xlabel {
+  flex: 0 0 auto;
+  text-align: center;
+  font-size: 12px;
+  color: #555;
+}
+
+.sweep-plot-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: #fafafa;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+
+.sweep-plot-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.sweep-plot-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid #999;
+  border-radius: 6px;
+  padding: 6px 9px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #222;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  z-index: 2;
+}
+
+.sweep-trial-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.sweep-trial-row label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+  flex: 1 1 auto;
+  cursor: default;
+}
+
+.sweep-trial-row input[type="text"] {
+  flex: 1 1 auto;
+  padding: 5px 7px;
+  border: 1px solid #999;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+}
+
+.sweep-trial-help-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.sweep-trial-help-button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #999;
+  border-radius: 50%;
+  background: #fff;
+  color: #555;
+  font-size: 13px;
+  font-weight: bold;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sweep-trial-help-popover {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 8px;
+  width: 260px;
+  background: #fff;
+  border: 1px solid #999;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #333;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 5;
+}
+
+.sweep-trial-help-popover p {
+  margin: 4px 0;
+}
+
+.sweep-trial-help-popover code {
+  background: #f0f0f0;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+}
+
+.sweep-trial-help-close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  color: #888;
+  cursor: pointer;
+}
+
+/* Only present in the DOM when there's an actual error (see
+   SweepResultsPanel's conditional render) -- its appearance is meant to
+   read as a loud visual cue, not a subtle inline hint. */
+.sweep-trial-error-row {
+  flex: 0 0 auto;
+  background: #fdecea;
+  border: 1px solid #e0a0a0;
+  border-radius: 4px;
+  padding: 6px 9px;
+  font-size: 12px;
+  color: #a02020;
+}
+
+.sweep-manual-row {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+}
+
+.sweep-manual-row .control-bar-button {
+  margin: 0;
+  flex: 1 1 0;
+}
