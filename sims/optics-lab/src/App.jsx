@@ -314,9 +314,10 @@ export default function App() {
   // reachable (see SweepResultsPanel) once a sweep is stopped/finished, so
   // there's no cancelledRef/running-state bookkeeping needed here.
   const handleTakeManualPoint = () => {
-    if (!sweepState) return;
+    if (!sweepState || manualPointRunning) return;
     const comp = components.find((c) => c.id === sweepState.componentId);
-    const value = comp?.angle ?? 0;
+    if (!comp) return; // the swept component itself was deleted -- nothing left to read an angle from
+    const value = comp.angle ?? 0;
     setManualPointRunning(true);
     labPanelRef.current?.runManualPoint({
       value,
@@ -421,6 +422,7 @@ export default function App() {
             onStop={handleStopSweep}
             onBack={handleBackFromSweep}
             onTakeManualPoint={handleTakeManualPoint}
+            manualPointRunning={manualPointRunning}
           />
         ) : (
           <DataPlottingPanel

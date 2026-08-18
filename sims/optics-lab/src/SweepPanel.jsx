@@ -214,6 +214,41 @@ function CollapseIcon({ size = 10 }) {
   );
 }
 
+// Red "stale data" badge shown next to the results panel's title once the
+// apparatus has drifted from whatever it looked like when the data on
+// screen was actually collected (see the staleness check in
+// SweepResultsPanel) -- drawn as SVG for the same font-independence reason
+// as every other icon here. The tooltip is the native title attribute
+// (see its own wrapping span) rather than a custom hover popover: a plain
+// hover-triggered tooltip is exactly what was asked for, and needs no
+// hover state of its own to manage.
+function StaleWarningIcon({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="8" cy="8" r="8" fill="#c0392b" />
+      <rect x="7" y="3.5" width="2" height="6" rx="1" fill="#fff" />
+      <circle cx="8" cy="11.5" r="1.15" fill="#fff" />
+    </svg>
+  );
+}
+
+// A signature of everything about the apparatus that matters for whether
+// previously-collected sweep data still reflects it -- every component's
+// own settings, except: sweptComponentId's own angle (that's the whole
+// point of a sweep, not a change worth flagging) and count (a detector's
+// live tally, forever changing on its own and irrelevant to a sweep's own
+// -- separately tallied -- counts; see fireSweepBurst).
+function experimentFingerprint(components, sweptComponentId) {
+  return JSON.stringify(
+    components.map((c) => {
+      const stripped = { ...c };
+      delete stripped.count;
+      if (c.id === sweptComponentId) delete stripped.angle;
+      return stripped;
+    })
+  );
+}
+
 // Binomial standard error of a count k out of n trials, in *count* units
 // (not the usual fraction-domain sqrt(p(1-p)/n)) -- this plot deliberately
 // shows raw counts rather than a normalized fraction (see SweepScatterPlot's
@@ -486,7 +521,7 @@ function downloadCsv(filename, csvText) {
 // purely "how much of this panel is on screen right now," unrelated to the
 // sweep's own run/lock/data lifecycle, so a fresh sweep always reopens
 // uncollapsed regardless of how the last one was left.
-export function SweepResultsPanel({ sweepState, components, onStop, onBack, onTakeManualPoint }) {
+export function SweepResultsPanel({ sweepState, components, onStop, onBack, onTakeManualPoint, manualPointRunning }) {
   const [trialFnText, setTrialFnText] = useState('');
   const [helpOpen, setHelpOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -494,6 +529,37 @@ export function SweepResultsPanel({ sweepState, components, onStop, onBack, onTa
   const type = getComponentType(component?.type);
   const currentValue = component?.angle ?? 0;
   const running = sweepState.phase === 'running';
+  const busy = running || manualPointRunning;
+
+  // Snapshotted once, on mount, rather than recomputed from the live
+  // `type` above -- the swept component still exists at that point (a
+  // sweep can't start on one that doesn't), so this captures its label for
+  // good. Recomputing it live would otherwise make the panel's own title
+  // fall back to a generic "Angle Sweep" the moment that component gets
+  // deleted, right as the stale-data badge (see below) is already the
+  // signal for "something about the apparatus changed" -- the title
+  // shouldn't also be reacting to that.
+  const [title] = useState(() => (type ? `${type.label} Angle Sweep` : 'Angle Sweep'));
+
+  // Whether the apparatus has drifted from whatever it looked like the last
+  // time a point actually landed -- baselineFingerprintRef starts out
+  // matching (nothing's been touched yet) and is only ever refreshed right
+  // when a new point arrives (see the effect below), since that's the one
+  // moment the live apparatus and the data are guaranteed to agree; every
+  // other change (placing/moving/deleting a component, rotating one,
+  // editing some *other* wave plate's angle -- anything but the swept
+  // component's own angle, see experimentFingerprint) leaves the two
+  // diverged until the next point is taken.
+  const currentFingerprint = experimentFingerprint(components, sweepState.componentId);
+  const [baselineFingerprint, setBaselineFingerprint] = useState(currentFingerprint);
+  const lastPointCountRef = useRef(sweepState.points.length);
+  useEffect(() => {
+    if (sweepState.points.length !== lastPointCountRef.current) {
+      lastPointCountRef.current = sweepState.points.length;
+      setBaselineFingerprint(currentFingerprint);
+    }
+  }, [sweepState.points.length, currentFingerprint]);
+  const stale = currentFingerprint !== baselineFingerprint;
 
   const detectors = useMemo(
     () => components.filter((c) => c.type === 'detector').map((c, i) => ({ id: c.id, label: `D${i + 1}`, colorId: c.colorId })),
@@ -510,8 +576,7 @@ export function SweepResultsPanel({ sweepState, components, onStop, onBack, onTa
   }, [sweepState.values, sweepState.points]);
 
   const trialCompiled = useMemo(() => compileTrialFunction(trialFnText), [trialFnText]);
-
-  const title = type ? `${type.label} Angle Sweep` : 'Angle Sweep';
+  
   const xAxisLabel = `${type ? type.label : 'Swept parameter'} Angle θ (degrees)`;
   const progressText = running
     ? `Running… ${sweepState.points.length} / ${sweepState.values.length} points`
@@ -523,11 +588,24 @@ export function SweepResultsPanel({ sweepState, components, onStop, onBack, onTa
     downloadCsv(filename, csv);
   };
 
+  const staleBadge = stale && (
+    <span
+      className="sweep-stale-badge"
+      title="Experiment is different from when this data was collected."
+      aria-label="Experiment is different from when this data was collected."
+    >
+      <StaleWarningIcon />
+    </span>
+  );
+
   if (collapsed) {
     return (
       <div className="overlay-controls sweep-results-panel sweep-results-panel-collapsed">
         <div className="sweep-results-header">
-          <h3 style={{ margin: 0, fontWeight: 'bold' }}>{title}</h3>
+          <div className="sweep-results-title-row">
+            <h3 style={{ margin: 0, fontWeight: 'bold' }}>{title}</h3>
+            {staleBadge}
+          </div>
           <div className="sweep-results-header-buttons">
             <button type="button" className="control-bar-button" onClick={() => setCollapsed(false)}>
               <ShowIcon /> Show
@@ -543,7 +621,10 @@ export function SweepResultsPanel({ sweepState, components, onStop, onBack, onTa
   return (
     <div className="overlay-controls sweep-results-panel">
       <div className="sweep-results-header">
-        <h3 style={{ margin: 0, fontWeight: 'bold' }}>{title}</h3>
+        <div className="sweep-results-title-row">
+          <h3 style={{ margin: 0, fontWeight: 'bold' }}>{title}</h3>
+          {staleBadge}
+        </div>
         <div className="sweep-results-header-buttons">
           <button type="button" className="control-bar-button" onClick={() => setCollapsed(true)}>
             <CollapseIcon /> Collapse
@@ -614,10 +695,16 @@ export function SweepResultsPanel({ sweepState, components, onStop, onBack, onTa
       )}
 
       <div className="sweep-manual-row">
-        <button type="button" className="control-bar-button" disabled={running} onClick={onTakeManualPoint}>
+        <button
+          type="button"
+          className="control-bar-button"
+          disabled={busy || !component}
+          title={!component ? "The swept component was deleted -- nothing left to take data from." : undefined}
+          onClick={onTakeManualPoint}
+        >
           Take data at current settings ({currentValue.toFixed(1)}°)
         </button>
-        <button type="button" className="control-bar-button" disabled={sweepState.points.length === 0 || running} onClick={handleSaveCsv}>
+        <button type="button" className="control-bar-button" disabled={sweepState.points.length === 0 || busy} onClick={handleSaveCsv}>
           Save Data (CSV)
         </button>
       </div>

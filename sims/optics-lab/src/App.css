@@ -1009,6 +1009,21 @@ input[type="range"]::-moz-range-track {
   gap: 8px;
 }
 
+.sweep-results-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The badge itself just hosts StaleWarningIcon plus its own native title
+   tooltip (see SweepResultsPanel's staleBadge) -- cursor: help signals
+   there's something to hover for, same as a native title attribute
+   anywhere else. */
+.sweep-stale-badge {
+  display: inline-flex;
+  cursor: help;
+}
+
 /* Collapsed state shows only the header + progress line -- override the
    base panel's fixed height (sized to fit the full plot) so the panel
    actually shrinks instead of leaving empty space below those two rows. */
