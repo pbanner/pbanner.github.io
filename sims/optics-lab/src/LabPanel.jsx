@@ -47,13 +47,13 @@ const DETECTOR_COUNT_TOP = 132 * (DETECTOR_BOX_HEIGHT / 200);
 // footprint by THEORY_BAR_CARD_MULTIPLIER -- there's no room to spare here
 // without the card overlapping a neighboring cell).
 
-// A mousedown/mouseup pair on a placed component counts as a "click" (select
-// it) rather than a drag as long as the cursor never moved more than this
-// far in between -- keeps a slightly-shaky click from being misread as an
-// intent to move the component. Exported for App.jsx's own build-panel
-// click-vs-drag handling (see handleBuildButtonMouseDown there), which
-// makes the same distinction for *placing* a new component that this makes
-// for moving an already-placed one.
+// A pointerdown/pointerup pair on a placed component counts as a "click"
+// (select it) rather than a drag as long as the cursor never moved more
+// than this far in between -- keeps a slightly-shaky click from being
+// misread as an intent to move the component. Exported for App.jsx's own
+// build-panel click-vs-drag handling (see handleBuildButtonPointerDown
+// there), which makes the same distinction for *placing* a new component
+// that this makes for moving an already-placed one.
 export const CLICK_MOVE_THRESHOLD = 4; // px
 
 // Rotate/delete buttons: sit just off the selected component's cell, offset
@@ -1224,9 +1224,13 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
   }, [cols, rows, setComponents, sweepLocked]);
 
   // Placement (click to drop an armed component) and remove-mode's initial
-  // click both happen on mousedown, so a plain click removes one component
-  // while a press-and-drag erases everything the cursor passes over.
-  const handleCanvasMouseDown = (e) => {
+  // click both happen on pointerdown, so a plain click removes one
+  // component while a press-and-drag erases everything the cursor passes
+  // over. Pointer events (not mouse events) throughout this file's whole
+  // drag/erase machinery so it all works with touch/pen input too -- see
+  // WaveplateAngleControl's own pointerdown for why a mouse-only
+  // implementation silently breaks dragging on an iPad.
+  const handleCanvasPointerDown = (e) => {
     if (sweepLocked) return;
     if (buildMode === 'remove') {
       removingRef.current = true;
@@ -1284,22 +1288,23 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
       return;
     }
     // A click that lands on empty canvas (not on a component -- see
-    // handleComponentMouseDown, which never lets this fire for those)
+    // handleComponentPointerDown, which never lets this fire for those)
     // deselects, same as clicking a selected component a second time.
     if (!buildMode) setSelectedId(null);
   };
 
-  const handleCanvasMouseMove = (e) => {
+  const handleCanvasPointerMove = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     setHoveredCell(cellFromPoint(e.clientX - rect.left, e.clientY - rect.top, cols, rows));
   };
 
-  const handleCanvasMouseLeave = () => setHoveredCell(null);
+  const handleCanvasPointerLeave = () => setHoveredCell(null);
 
-  // Continue a remove-mode drag-erase even if the mouse briefly leaves the
-  // canvas, and always release it on mouseup wherever that happens.
+  // Continue a remove-mode drag-erase even if the pointer briefly leaves
+  // the canvas, and always release it on pointerup (or pointercancel --
+  // e.g. an OS gesture stealing the touch mid-drag) wherever that happens.
   useEffect(() => {
     if (buildMode !== 'remove') return;
     const onMove = (e) => {
@@ -1308,18 +1313,21 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
     const onUp = () => {
       removingRef.current = false;
     };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
     return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
     };
   }, [buildMode, eraseAtClientPos]);
 
   // A placed component's own <img> sits on top of the canvas, so a
-  // mousedown that lands on it never reaches handleCanvasMouseDown -- while
-  // removing, handle the erase here directly instead of starting a drag.
-  const handleComponentMouseDown = (e, comp) => {
+  // pointerdown that lands on it never reaches handleCanvasPointerDown --
+  // while removing, handle the erase here directly instead of starting a
+  // drag.
+  const handleComponentPointerDown = (e, comp) => {
     if (sweepLocked) return;
     if (buildMode === 'remove') {
       e.stopPropagation();
@@ -1334,7 +1342,7 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
   // Moving an already-placed component: free-follow the cursor, then snap
   // to the nearest grid cell on release (reverting if that cell is taken).
   // A release that never moved past CLICK_MOVE_THRESHOLD is treated as a
-  // plain click instead -- see the mouseup handler below.
+  // plain click instead -- see the pointerup handler below.
   const startDrag = (e, comp) => {
     if (buildMode) return; // don't fight with placement/remove mode
     e.stopPropagation();
@@ -1408,11 +1416,13 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
       setDraggingId(null);
     };
 
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
     return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
     };
   }, [draggingId, cols, rows, setComponents]);
 
@@ -1795,7 +1805,7 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
             key={comp.id}
             className={`${componentClass} detector-theory-card ${chartHovered ? 'chart-hover' : ''}`}
             style={componentStyle}
-            onMouseDown={(e) => handleComponentMouseDown(e, comp)}
+            onPointerDown={(e) => handleComponentPointerDown(e, comp)}
             onMouseEnter={() => { if (!buildMode) setHoveredDetectorId(comp.id); }}
             onMouseLeave={() => { if (!buildMode) setHoveredDetectorId((prev) => (prev === comp.id ? null : prev)); }}
           >
@@ -1818,7 +1828,7 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
           key={comp.id}
           className={`${componentClass} detector-component ${chartHovered ? 'chart-hover' : ''}`}
           style={componentStyle}
-          onMouseDown={(e) => handleComponentMouseDown(e, comp)}
+          onPointerDown={(e) => handleComponentPointerDown(e, comp)}
           onMouseEnter={() => { if (!buildMode) setHoveredDetectorId(comp.id); }}
           onMouseLeave={() => { if (!buildMode) setHoveredDetectorId((prev) => (prev === comp.id ? null : prev)); }}
         >
@@ -1877,7 +1887,7 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
           key={comp.id}
           className={`${componentClass} waveplate-component`}
           style={componentStyle}
-          onMouseDown={(e) => handleComponentMouseDown(e, comp)}
+          onPointerDown={(e) => handleComponentPointerDown(e, comp)}
         >
           <img src={type.image} alt={type.label} className="waveplate-image" draggable="false" />
           <div className="waveplate-indicator" style={{ top: `${indicatorTopPercent}%` }} />
@@ -1893,7 +1903,7 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
         className={componentClass}
         style={componentStyle}
         draggable="false"
-        onMouseDown={(e) => handleComponentMouseDown(e, comp)}
+        onPointerDown={(e) => handleComponentPointerDown(e, comp)}
       />
     );
   };
@@ -1902,10 +1912,10 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
     <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
       <canvas
         ref={canvasRef}
-        onMouseDown={handleCanvasMouseDown}
+        onPointerDown={handleCanvasPointerDown}
         onClick={handleCanvasClick}
-        onMouseMove={handleCanvasMouseMove}
-        onMouseLeave={handleCanvasMouseLeave}
+        onPointerMove={handleCanvasPointerMove}
+        onPointerLeave={handleCanvasPointerLeave}
         style={{ cursor, display: 'block', touchAction: 'none' }}
       />
       {/* Everything that stops or redirects a photon outside of itself

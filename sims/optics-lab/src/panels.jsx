@@ -15,7 +15,7 @@ import trashCanImage from './assets/trash-can.png';
 // source canvas, unlike every other icon here which already has some
 // built-in margin, so at the same nominal size they're the only two that
 // visibly touch the circle.
-function SidebarIconButton({ image, label, active, disabled, title, ariaLabel, dataRole, onMouseDown, onClick, onHoverButton, imageScale = 1 }) {
+function SidebarIconButton({ image, label, active, disabled, title, ariaLabel, dataRole, onPointerDown, onClick, onHoverButton, imageScale = 1 }) {
   return (
     <button
       type="button"
@@ -24,7 +24,7 @@ function SidebarIconButton({ image, label, active, disabled, title, ariaLabel, d
       title={title}
       disabled={disabled}
       data-role={dataRole}
-      onMouseDown={onMouseDown}
+      onPointerDown={onPointerDown}
       onClick={onClick}
       onMouseEnter={(e) => onHoverButton({ label, rect: e.currentTarget.getBoundingClientRect() })}
       onMouseLeave={() => onHoverButton(null)}
@@ -53,12 +53,15 @@ const SIDEBAR_ICON_SCALE = { npbs: 0.75, pbs: 0.75 };
 // square works, so LabPanel does all of that checking itself once a
 // component is armed for placement.
 //
-// Each add-icon starts its own click-vs-drag gesture on mousedown (see
-// App.jsx's handleBuildButtonMouseDown, called here as onButtonMouseDown) --
-// a plain click arms click-to-place (unchanged from before: a ghost that
-// follows the cursor until a second click drops it), while an actual drag
-// drops it wherever the mouse is released, mirroring how an already-placed
-// component can be clicked to select or dragged to move. The trash icon
+// Each add-icon starts its own click-vs-drag gesture on pointerdown (see
+// App.jsx's handleBuildButtonPointerDown, called here as
+// onButtonPointerDown) -- a plain click arms click-to-place (unchanged from
+// before: a ghost that follows the cursor until a second click drops it),
+// while an actual drag drops it wherever the pointer is released, mirroring
+// how an already-placed component can be clicked to select or dragged to
+// move. Pointer events rather than mouse events so this drag-to-place
+// gesture works with touch/pen input, not just a mouse -- see
+// WaveplateAngleControl's own pointerdown for why. The trash icon
 // is simpler: it's not itself draggable, just a click-to-toggle "delete
 // mode" button (same as the old "Remove Components" button) -- but it *is*
 // a drop target for dragging an already-placed component onto (see
@@ -74,7 +77,7 @@ const SIDEBAR_ICON_SCALE = { npbs: 0.75, pbs: 0.75 };
 // already-placed case already does: placing/removing components mid-sweep
 // would invalidate the data it's collecting, same reasoning as LabPanel's
 // own sweepLocked gate on canvas interaction.
-export function BuildPanel({ buildMode, onButtonMouseDown, toggleRemoveMode, components, onHoverButton, locked = false }) {
+export function BuildPanel({ buildMode, onButtonPointerDown, toggleRemoveMode, components, onHoverButton, locked = false }) {
   const placingId = buildMode?.place ?? null;
   const removing = buildMode === 'remove';
   const hasLaser = components.some((c) => c.type === 'laser');
@@ -94,7 +97,7 @@ export function BuildPanel({ buildMode, onButtonMouseDown, toggleRemoveMode, com
               disabled={disabled}
               title={locked ? 'Locked while a sweep is running' : disabled ? 'Only one laser allowed' : undefined}
               ariaLabel={`Add ${type.label}`}
-              onMouseDown={(e) => { if (!disabled) onButtonMouseDown(type.id, e); }}
+              onPointerDown={(e) => { if (!disabled) onButtonPointerDown(type.id, e); }}
               onHoverButton={onHoverButton}
               imageScale={SIDEBAR_ICON_SCALE[type.id] ?? 1}
             />

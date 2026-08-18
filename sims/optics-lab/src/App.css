@@ -127,6 +127,7 @@
   justify-content: center;
   cursor: pointer;
   box-sizing: border-box;
+  touch-action: none; /* the drag-to-place gesture needs every pointermove itself, not the browser's own scroll/pan gesture on top of it */
 }
 
 .sidebar-icon-button:hover {
@@ -647,6 +648,7 @@
   display: block;
   cursor: ns-resize;
   border-radius: 4px;
+  touch-action: none; /* the ruler drag needs every pointermove itself, not the browser's own scroll/pan gesture on top of it */
 }
 
 .waveplate-angle-readout-row {

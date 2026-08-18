@@ -109,8 +109,14 @@ export default function App() {
   // ghost immediately too -- there'd be nothing to distinguish a drag *from*
   // otherwise until it was too late to show the ghost following it from
   // the start.
+  // Pointer events, not mouse events -- this whole click-vs-drag gesture
+  // hinges on a live stream of move events between the down and the up,
+  // which Safari doesn't reliably synthesize from a touch/pen drag (see
+  // WaveplateAngleControl's own pointerdown for the same reasoning), so a
+  // mouse-only implementation here means dragging a new component onto the
+  // grid silently does nothing on an iPad.
   const buildDragRef = useRef(null);
-  const handleBuildButtonMouseDown = (componentId, e) => {
+  const handleBuildButtonPointerDown = (componentId, e) => {
     const wasAlreadyArmed = buildMode?.place === componentId;
     buildDragRef.current = { componentId, startX: e.clientX, startY: e.clientY, moved: false, wasAlreadyArmed };
     if (!wasAlreadyArmed) {
@@ -124,8 +130,8 @@ export default function App() {
       if (Math.hypot(ev.clientX - d.startX, ev.clientY - d.startY) > CLICK_MOVE_THRESHOLD) d.moved = true;
     };
     const onUp = (ev) => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
       const d = buildDragRef.current;
       buildDragRef.current = null;
       if (!d) return;
@@ -147,8 +153,8 @@ export default function App() {
       // waiting for a second click on the canvas (handled by LabPanel's
       // own handleCanvasClick).
     };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
   };
 
   const toggleRemoveMode = () => {
@@ -162,8 +168,8 @@ export default function App() {
   useEffect(() => {
     if (!buildMode?.place) return;
     const onMove = (e) => setGhostPos({ x: e.clientX, y: e.clientY });
-    window.addEventListener('mousemove', onMove);
-    return () => window.removeEventListener('mousemove', onMove);
+    window.addEventListener('pointermove', onMove);
+    return () => window.removeEventListener('pointermove', onMove);
   }, [buildMode]);
 
   // Escape backs out of placement/remove mode, same as the Stern-Gerlach sim.
@@ -378,7 +384,7 @@ export default function App() {
           disturbing that stack's own layout. */}
       <BuildPanel
         buildMode={buildMode}
-        onButtonMouseDown={handleBuildButtonMouseDown}
+        onButtonPointerDown={handleBuildButtonPointerDown}
         toggleRemoveMode={toggleRemoveMode}
         components={components}
         onHoverButton={setHoveredSidebarButton}

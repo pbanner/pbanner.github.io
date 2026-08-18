@@ -128,7 +128,16 @@ export default function WaveplateAngleControl({ angle, onChangeAngle, onSweepCli
     ctx.strokeRect(1, 1, RULER_WIDTH - 2, RULER_HEIGHT - 2);
   }, [angle]);
 
-  const handleRulerMouseDown = (e) => {
+  // Pointer events (not mouse events) so this drags equally well with a
+  // finger or Apple Pencil on a touchscreen, not just an actual mouse --
+  // Safari doesn't reliably synthesize a live stream of mousemove events
+  // from a touch/pen drag, especially over a <canvas>, so a mouse-only
+  // implementation here silently never moves on an iPad. preventDefault on
+  // the initial pointerdown (backed by the ruler's own touch-action: none
+  // in App.css) stops the page itself from scrolling/panning underneath
+  // the gesture.
+  const handleRulerPointerDown = (e) => {
+    e.preventDefault();
     draggingRef.current = true;
     dragStartYRef.current = e.clientY;
     dragStartAngleRef.current = angle;
@@ -149,11 +158,13 @@ export default function WaveplateAngleControl({ angle, onChangeAngle, onSweepCli
       onChangeAngle(Math.round(next * 2) / 2);
     };
     const onUp = () => { draggingRef.current = false; };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
     return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
     };
   }, [onChangeAngle]);
 
@@ -167,7 +178,7 @@ export default function WaveplateAngleControl({ angle, onChangeAngle, onSweepCli
       <canvas
         ref={canvasRef}
         className="waveplate-angle-ruler"
-        onMouseDown={handleRulerMouseDown}
+        onPointerDown={handleRulerPointerDown}
       />
       <div className="waveplate-angle-readout-row">
         {onSweepClick && (
