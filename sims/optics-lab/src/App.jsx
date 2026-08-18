@@ -117,6 +117,19 @@ export default function App() {
   // grid silently does nothing on an iPad.
   const buildDragRef = useRef(null);
   const handleBuildButtonPointerDown = (componentId, e) => {
+    // Touch (and often pen) pointers get *implicit* capture on whatever
+    // element the pointerdown's hit-test actually landed on -- e.target,
+    // the icon's own <img>, not e.currentTarget (the button our listener
+    // is attached to; a capture release call has to target the exact
+    // element that holds it, or it throws) -- per the Pointer Events spec;
+    // a mouse pointer never does. Left alone, that capture means every
+    // subsequent pointermove for this gesture keeps targeting that <img>,
+    // so the canvas's own hover highlight (see LabPanel's
+    // handleCanvasPointerMove/hoveredCell) never lights up while dragging a
+    // new component across it on a touchscreen, even though the exact same
+    // drag with a mouse hits the canvas normally. Releasing it immediately
+    // restores ordinary hit-testing for the rest of the drag.
+    try { e.target.releasePointerCapture(e.pointerId); } catch { /* nothing was captured (e.g. a mouse pointer) -- nothing to release */ }
     const wasAlreadyArmed = buildMode?.place === componentId;
     buildDragRef.current = { componentId, startX: e.clientX, startY: e.clientY, moved: false, wasAlreadyArmed };
     if (!wasAlreadyArmed) {
