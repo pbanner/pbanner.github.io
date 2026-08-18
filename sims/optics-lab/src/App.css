@@ -829,8 +829,10 @@ input[type="range"]::-moz-range-track {
    ------------------------------------------------------------------- */
 
 .sweep-angle-button {
-  margin-top: 4px;
-  width: 100%;
+  margin: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 /* Persistent green highlight on whichever component sweepState refers to
@@ -992,6 +994,19 @@ input[type="range"]::-moz-range-track {
   gap: 6px;
 }
 
+.sweep-results-header-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Collapsed state shows only the header + progress line -- override the
+   base panel's fixed height (sized to fit the full plot) so the panel
+   actually shrinks instead of leaving empty space below those two rows. */
+.sweep-results-panel-collapsed {
+  height: auto;
+}
+
 .sweep-results-subheader {
   display: flex;
   align-items: center;
@@ -1023,6 +1038,45 @@ input[type="range"]::-moz-range-track {
   height: 10px;
   border-radius: 2px;
   display: inline-block;
+}
+
+/* Wraps the plot proper plus its axis labels: a rotated "Counts" label to
+   the left (rendered as HTML/CSS rather than drawn on the canvas, so the
+   canvas's own padding/geometry math doesn't need to account for it) and
+   the x-axis label underneath. */
+.sweep-plot-outer {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 4px;
+}
+
+.sweep-plot-ylabel {
+  flex: 0 0 auto;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 12px;
+  color: #555;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.sweep-plot-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sweep-plot-xlabel {
+  flex: 0 0 auto;
+  text-align: center;
+  font-size: 12px;
+  color: #555;
 }
 
 .sweep-plot-wrap {
@@ -1082,20 +1136,89 @@ input[type="range"]::-moz-range-track {
   font-family: 'Courier New', monospace;
 }
 
-.sweep-trial-error {
+.sweep-trial-help-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.sweep-trial-help-button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #999;
+  border-radius: 50%;
+  background: #fff;
+  color: #555;
+  font-size: 13px;
+  font-weight: bold;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sweep-trial-help-popover {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 8px;
+  width: 260px;
+  background: #fff;
+  border: 1px solid #999;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #333;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 5;
+}
+
+.sweep-trial-help-popover p {
+  margin: 4px 0;
+}
+
+.sweep-trial-help-popover code {
+  background: #f0f0f0;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+}
+
+.sweep-trial-help-close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  color: #888;
+  cursor: pointer;
+}
+
+/* Only present in the DOM when there's an actual error (see
+   SweepResultsPanel's conditional render) -- its appearance is meant to
+   read as a loud visual cue, not a subtle inline hint. */
+.sweep-trial-error-row {
+  flex: 0 0 auto;
+  background: #fdecea;
+  border: 1px solid #e0a0a0;
+  border-radius: 4px;
+  padding: 6px 9px;
   font-size: 12px;
   color: #a02020;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 160px;
 }
 
 .sweep-manual-row {
   flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
 }
 
 .sweep-manual-row .control-bar-button {
   margin: 0;
-  width: 100%;
+  flex: 1 1 0;
 }

@@ -187,20 +187,33 @@ const PARTICLE_RADIUS = 4;
 const PARTICLE_COLOR = '#3498db'; // same blue as .control-bar-button etc.
 // Parameter sweep (App.jsx's sweepState) -- see fireSweepBurst/runSweep
 // below. A burst fires every one of its shots synchronously (cheap; each is
-// just a samplePhotonPath call), but only animates up to this many of them
-// -- past that the swarm would just be visual noise, and it'd cost real
-// frame time to draw. The tallied point is exact regardless; only the
-// on-screen sample is capped.
-const SWEEP_ANIMATE_CAP = 40;
+// just a samplePhotonPath call), but only animates a fraction of them --
+// past that the swarm would just be visual noise, and it'd cost real frame
+// time to draw. The tallied point is exact regardless; only the on-screen
+// sample is capped. A fraction rather than a fixed count so a bigger ask
+// (more shots per point) still visibly reads as "more photons," rather than
+// every burst past ~40 shots looking identical on screen.
+const SWEEP_ANIMATE_FRACTION = 0.1;
+// Each animated photon in a burst starts SWEEP_STAGGER_MS after the one
+// before it, instead of all of them departing in one simultaneous
+// lockstep swarm -- since they share the same trajectory and speed, a
+// staggered start is exactly a spatial spread along the beam direction by
+// the time they're actually on screen, reading as a stream rather than a
+// single blob, and it's what gives raising shots-per-point a small, real
+// (but bounded -- see fireSweepBurst's own use of this) time cost, on top
+// of the exact tally it was already going to compute regardless of whether
+// any of it gets drawn.
+const SWEEP_STAGGER_MS = 15;
 // Pause after changing the swept property, before firing the next burst --
 // long enough to actually see the on-canvas indicator (e.g. a wave plate's
 // angle tick) tween to its new value, short enough that a many-point sweep
 // doesn't feel sluggish between points.
 const SWEEP_TWEEN_MS = 350;
-// Floor on how long a burst's own flight animation is waited out before
-// moving to the next point -- without this, a burst that's entirely
-// absorbed one grid cell from the laser (near-zero flight distance) would
-// barely register on screen before the next point started.
+// Floor on how long a burst's own flight animation (staggered starts
+// included) is waited out before moving to the next point -- without this,
+// a burst that's entirely absorbed one grid cell from the laser (near-zero
+// flight distance) would barely register on screen before the next point
+// started.
 const SWEEP_MIN_BURST_MS = 400;
 // Extra straight travel (px), in the same direction, tacked onto an
 // unterminated photon's final segment so it visibly continues past the
@@ -1490,6 +1503,14 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
       const finished = [];
       particlesRef.current.forEach((p) => {
         let remaining = dt;
+        // Sweep bursts stagger each animated photon's own departure (see
+        // fireSweepBurst) -- startDelay is undefined for every ordinary
+        // (non-sweep) particle, so this is a no-op for them.
+        if (p.startDelay) {
+          const consumed = Math.min(p.startDelay, remaining);
+          p.startDelay -= consumed;
+          remaining -= consumed;
+        }
         while (remaining > 0 && p.segmentIndex < p.segments.length) {
           const seg = p.segments[p.segmentIndex];
           const dur = (segmentLength(seg) / PARTICLE_SPEED) * 1000;
@@ -1582,28 +1603,31 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
 
   // Fires `shots` independent photons at the given (already-current) setup,
   // tallying every outcome exactly (see tallySweepOutcome) but animating
-  // only up to SWEEP_ANIMATE_CAP of them as a simultaneous swarm rather
-  // than one at a time -- a sweep's wall-clock cost is meant to scale with
-  // how many points it has, not with shots-per-point (see runSweep's own
-  // comment), and shots run synchronously here regardless, so raising
-  // shots-per-point doesn't cost extra animation time either way. Animated
-  // particles are tagged isSweep so the tick loop's own detected-count bump
-  // (which feeds the *live* histogram) leaves them alone -- a sweep's tally
-  // only ever reaches the caller through the point this returns, never
-  // through a placed detector's own comp.count.
+  // only a SWEEP_ANIMATE_FRACTION slice of them, each starting
+  // SWEEP_STAGGER_MS after the last (see its own comment) rather than as a
+  // simultaneous swarm -- a sweep's wall-clock cost is meant to scale
+  // mostly with how many points it has (see runSweep's own comment), but
+  // with a small, deliberate cost from shots-per-point too, via how long
+  // that staggered departure ends up taking. Animated particles are tagged
+  // isSweep so the tick loop's own detected-count bump (which feeds the
+  // *live* histogram) leaves them alone -- a sweep's tally only ever
+  // reaches the caller through the point this returns, never through a
+  // placed detector's own comp.count.
   const fireSweepBurst = useCallback((laserComp, cellMap, shots) => {
     const point = { counts: {}, absorbed: 0, escaped: 0, total: shots };
+    const animateCap = Math.max(1, Math.round(shots * SWEEP_ANIMATE_FRACTION));
     const animated = [];
-    let maxFlightMs = 0;
+    let maxTotalMs = 0;
     for (let i = 0; i < shots; i++) {
       const sampled = samplePhotonPath(laserComp, cellMap, cols, rows);
       tallySweepOutcome(point, sampled.outcome);
-      if (animated.length < SWEEP_ANIMATE_CAP) {
+      if (animated.length < animateCap) {
         const { segments, outcome } = buildPhotonSegments(sampled);
         if (segments.length > 0) {
           const flightMs = segments.reduce((sum, seg) => sum + (segmentLength(seg) / PARTICLE_SPEED) * 1000, 0);
-          maxFlightMs = Math.max(maxFlightMs, flightMs);
-          animated.push({ segments, outcome, segmentIndex: 0, segmentElapsed: 0, isSweep: true });
+          const startDelay = animated.length * SWEEP_STAGGER_MS;
+          maxTotalMs = Math.max(maxTotalMs, startDelay + flightMs);
+          animated.push({ segments, outcome, segmentIndex: 0, segmentElapsed: 0, isSweep: true, startDelay });
         }
       }
     }
@@ -1614,7 +1638,7 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
         rafRef.current = requestAnimationFrame((now) => tickRef.current(now));
       }
     }
-    return { point, flightMs: Math.max(maxFlightMs, SWEEP_MIN_BURST_MS) };
+    return { point, flightMs: Math.max(maxTotalMs, SWEEP_MIN_BURST_MS) };
   }, [cols, rows]);
 
   // Runs a full parameter sweep: for each value, sets the swept component's

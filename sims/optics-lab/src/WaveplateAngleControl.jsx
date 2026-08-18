@@ -50,8 +50,9 @@ function wrapDegrees(deg) {
 // without any actual scrolling/translation happening.
 //
 // onSweepClick is optional -- passing it renders a "Sweep Angle..." button
-// below the readout, LabPanel's own entry point into the sweep spec modal
-// (see App.jsx's sweepState). Left off entirely (as opposed to just hidden)
+// to the left of the numeric readout, LabPanel's own entry point into the
+// sweep spec modal (see App.jsx's sweepState). Left off entirely (as
+// opposed to just hidden)
 // while a sweep is already active, rather than disabled, since "click to
 // configure another sweep" isn't a meaningful action to dangle in front of
 // someone mid-run.
@@ -169,6 +170,11 @@ export default function WaveplateAngleControl({ angle, onChangeAngle, onSweepCli
         onMouseDown={handleRulerMouseDown}
       />
       <div className="waveplate-angle-readout-row">
+        {onSweepClick && (
+          <button type="button" className="control-bar-button sweep-angle-button" onClick={onSweepClick} title="Sweep this wave plate's angle">
+            Sweep Angle…
+          </button>
+        )}
         <input
           type="number"
           step="0.1"
@@ -183,11 +189,6 @@ export default function WaveplateAngleControl({ angle, onChangeAngle, onSweepCli
         />
         <span style={{ fontSize: '18px' }}>°</span>
       </div>
-      {onSweepClick && (
-        <button type="button" className="control-bar-button sweep-angle-button" onClick={onSweepClick}>
-          Sweep Angle…
-        </button>
-      )}
     </div>
   );
 }
