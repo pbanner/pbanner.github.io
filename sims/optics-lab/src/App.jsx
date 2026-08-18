@@ -64,6 +64,12 @@ export default function App() {
   // other effects/callbacks.
   const sweepCancelledRef = useRef(false);
   const sweepRunningRef = useRef(false);
+  // True only for the duration of a single "take data at current settings"
+  // burst (see handleTakeManualPoint) -- a full sweep run has its own
+  // running phase (sweepState.phase), but a manual point is a one-off
+  // outside that phase, so it needs its own flag to fold into sweepLocked
+  // below and lock the canvas/build panel for its own burst.
+  const [manualPointRunning, setManualPointRunning] = useState(false);
 
   // Which detector (by id) is currently hovered, shared between LabPanel and
   // the Histogram so hovering either one highlights the other -- lifted up
@@ -311,14 +317,15 @@ export default function App() {
     if (!sweepState) return;
     const comp = components.find((c) => c.id === sweepState.componentId);
     const value = comp?.angle ?? 0;
+    setManualPointRunning(true);
     labPanelRef.current?.runManualPoint({
       value,
       shotsPerPoint: sweepState.shotsPerPoint,
       onPoint: (point) => setSweepState((prev) => (prev ? { ...prev, points: [...prev.points, point] } : prev)),
-    });
+    }).then(() => setManualPointRunning(false));
   };
 
-  const sweepLocked = sweepState?.phase === 'running';
+  const sweepLocked = sweepState?.phase === 'running' || manualPointRunning;
 
   const armedType = buildMode?.place ? COMPONENT_TYPES.find((c) => c.id === buildMode.place) : null;
 
@@ -344,6 +351,7 @@ export default function App() {
           hoveredDetectorId={effectiveHoveredDetectorId}
           setHoveredDetectorId={setHoveredDetectorId}
           sweepState={sweepState}
+          sweepLocked={sweepLocked}
           onOpenSweepModal={handleOpenSweepModal}
         />
       </div>

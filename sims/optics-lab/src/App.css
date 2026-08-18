@@ -406,6 +406,15 @@
   filter: drop-shadow(0 0 5px rgba(52, 152, 219, 0.85));
 }
 
+/* While a sweep burst is actually firing (see LabPanel's sweepLocked prop
+   and its own componentClass), nothing on the canvas is pickable or
+   clickable -- suppress every hover-driven glow above so mousing over a
+   component doesn't still invite "you could grab this." */
+.placed-component.sweep-locked:hover,
+.placed-component.sweep-locked.chart-hover {
+  filter: none;
+}
+
 /* Detector card -- a wrapper div (instead of a bare <img>, since an <img>
    can't have children) holding the detector image plus a colored stripe
    and a label/count text overlay. .placed-component's own padding is inert

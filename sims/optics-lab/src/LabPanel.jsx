@@ -997,7 +997,7 @@ function DeleteIcon({ size = 15, color = "#8b0000" }) {
   );
 }
 
-const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuildMode, components, setComponents, hoveredDetectorId, setHoveredDetectorId, sweepState, onOpenSweepModal }, ref) {
+const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuildMode, components, setComponents, hoveredDetectorId, setHoveredDetectorId, sweepState, sweepLocked, onOpenSweepModal }, ref) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const photonCanvasRef = useRef(null);
@@ -1005,14 +1005,15 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
   const [hoveredCell, setHoveredCell] = useState(null);
 
   // sweepActive: a sweep is being specified, is running, or is showing
-  // results for some component -- App.jsx enforces one at a time. sweepLocked
-  // is the narrower "photons are actually being fired right now" case: only
-  // then does canvas interaction actually need to freeze (see every
-  // `if (sweepLocked) return;` guard below), since a completed sweep still
-  // showing its results is a perfectly fine time to hand-adjust the swept
-  // property before clicking "take data at current settings" again.
+  // results for some component -- App.jsx enforces one at a time.
+  // sweepLocked (a prop, computed by App.jsx) is the narrower "photons are
+  // actually being fired right now" case, covering both a full sweep run
+  // and a single manual "take data at current settings" burst -- only then
+  // does canvas interaction actually need to freeze (see every
+  // `if (sweepLocked) return;` guard below), since a completed sweep
+  // sitting idle between points is a perfectly fine time to hand-adjust the
+  // swept property before firing another one.
   const sweepActive = sweepState != null;
-  const sweepLocked = sweepState?.phase === 'running';
 
   // In-flight photons -- a mutable ref (not React state) updated every
   // animation frame, same reasoning as the Stern-Gerlach sim's own
@@ -1474,6 +1475,12 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     ctx.fillStyle = PARTICLE_COLOR;
     particlesRef.current.forEach((p) => {
+      // Staggered sweep-burst particles (see fireSweepBurst) sit queued
+      // with segmentElapsed still at 0 until their own startDelay runs out
+      // -- without this check they'd all render stacked at the laser's
+      // mouth the instant the burst fires, rather than appearing one by
+      // one as they actually depart.
+      if (p.startDelay > 0) return;
       const seg = p.segments[p.segmentIndex];
       if (!seg) return;
       const dur = (segmentLength(seg) / PARTICLE_SPEED) * 1000;
@@ -1712,7 +1719,12 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
     // laggy, not smooth, if it applied to ordinary click-and-drag angle
     // edits too.
     const isSweptComponent = sweepState?.componentId === comp.id;
-    const componentClass = `placed-component ${isDragging ? 'dragging' : ''} ${buildMode === 'remove' ? 'remove-mode' : ''} ${isSweptComponent ? 'swept-component' : ''} ${isSweptComponent && sweepLocked ? 'sweep-tweening' : ''}`;
+    // sweep-locked suppresses the ordinary hover glow (see .placed-component
+    // :hover in App.css) while photons are actually firing (sweepLocked) --
+    // nothing's actually pickable or clickable then (every handler above
+    // guards on the same flag), so inviting a hover with "you could grab
+    // this" styling would be misleading.
+    const componentClass = `placed-component ${isDragging ? 'dragging' : ''} ${buildMode === 'remove' ? 'remove-mode' : ''} ${isSweptComponent ? 'swept-component' : ''} ${isSweptComponent && sweepLocked ? 'sweep-tweening' : ''} ${sweepLocked ? 'sweep-locked' : ''}`;
     const componentStyle = {
       left: anchorX + offset.x,
       top: anchorY + offset.y,
