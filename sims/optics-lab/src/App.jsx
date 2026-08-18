@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import './App.css';
 import LabPanel, { GRID_SIZE, CLICK_MOVE_THRESHOLD } from './LabPanel.jsx';
 import { BuildPanel, DataCollectionPanel, DataPlottingPanel } from './panels.jsx';
+import { SweepSpecModal, SweepResultsPanel } from './SweepPanel.jsx';
 import { COMPONENT_TYPES, getDefaultFootprint, getPlacementMessage } from './componentTypes.js';
 
 // Gap between the placement ghost's own bottom edge and the guidance
@@ -42,6 +43,27 @@ export default function App() {
     showTotal: true,
     showTheory: false,
   });
+
+  // Parameter sweep -- null outside sweep mode entirely (one at a time, see
+  // LabPanel's own sweepActive). phase is 'specifying' (the spec modal is
+  // up), 'running', or 'done'. componentId is whichever wave plate the
+  // sweep is for; values/shotsPerPoint are fixed once a sweep starts;
+  // points grows live as LabPanel's runSweep reports each resolved point
+  // back (see handleStartSweep below).
+  const [sweepState, setSweepState] = useState(null);
+  // Last-used spec-modal config (mode/start/stop/step/list/shots), kept
+  // around purely to prefill the modal next time -- saves re-typing a range
+  // a student is just widening or re-running with more shots.
+  const [lastSweepConfig, setLastSweepConfig] = useState(null);
+  // Flips true right before a run starts, false once it (naturally or via
+  // Stop) finishes -- polled by runSweep's loop between steps, and by the
+  // experimentSignature auto-reset effect below, which would otherwise
+  // treat every one of the sweep's own angle steps as a fresh experiment
+  // and wipe the very particles/counts the sweep just produced. A ref, not
+  // state: nothing needs to re-render off it, it's only ever read inside
+  // other effects/callbacks.
+  const sweepCancelledRef = useRef(false);
+  const sweepRunningRef = useRef(false);
 
   // Which detector (by id) is currently hovered, shared between LabPanel and
   // the Histogram so hovering either one highlights the other -- lifted up
@@ -216,7 +238,12 @@ export default function App() {
   // so a detector actually being hit (which also goes through
   // setComponents, many times a second while photons are flowing) doesn't
   // retrigger this -- only a change to the experiment's own layout/settings
-  // does. Skips its very first run (mount), since there's nothing to reset yet.
+  // does. Skips its very first run (mount), since there's nothing to reset
+  // yet, and every run while a sweep is active (sweepRunningRef) -- a
+  // sweep's own angle steps go through this exact same signature, and
+  // without the guard every one of them would read as "a new experiment"
+  // and wipe the sweep's own in-flight burst and the live histogram's
+  // counts right as they're produced.
   const experimentSignature = JSON.stringify(components.map((c) => {
     const stripped = { ...c };
     delete stripped.count;
@@ -228,9 +255,70 @@ export default function App() {
       isFirstExperimentSignature.current = false;
       return;
     }
+    if (sweepRunningRef.current) return;
     labPanelRef.current?.resetParticles();
     setComponents((prev) => prev.map((c) => (c.type === 'detector' ? { ...c, count: 0 } : c)));
   }, [experimentSignature]);
+
+  // WaveplateAngleControl's own "Sweep Angle..." button (see LabPanel's
+  // selectedComp block) opens the spec modal for that component. Only one
+  // sweep at a time -- there's no other entry point that could call this
+  // while sweepState is already set (the button itself is hidden then).
+  const handleOpenSweepModal = (componentId) => {
+    labPanelRef.current?.deselectAll();
+    setSweepState({ phase: 'specifying', componentId });
+  };
+
+  const handleCancelSweepSpec = () => setSweepState(null);
+
+  // Confirming the spec modal: commits to the run. sweepRunningRef flips
+  // true *before* runSweep is called (not inside it) so the very first
+  // angle step's own setComponents can't race the experimentSignature
+  // effect above. onPoint appends to sweepState.points as each one resolves
+  // -- a functional update, since this closure's own `sweepState` would
+  // otherwise go stale across the many points a long sweep reports back.
+  const handleStartSweep = (config) => {
+    const componentId = sweepState.componentId;
+    setLastSweepConfig(config);
+    setSweepState({ phase: 'running', componentId, values: config.values, shotsPerPoint: config.shots, points: [] });
+    sweepCancelledRef.current = false;
+    sweepRunningRef.current = true;
+    labPanelRef.current?.runSweep({
+      componentId,
+      values: config.values,
+      shotsPerPoint: config.shots,
+      cancelledRef: sweepCancelledRef,
+      onPoint: (point) => setSweepState((prev) => (prev ? { ...prev, points: [...prev.points, point] } : prev)),
+    }).then(() => {
+      sweepRunningRef.current = false;
+      setSweepState((prev) => (prev ? { ...prev, phase: 'done' } : prev));
+    });
+  };
+
+  // Stop just raises the flag runSweep's own loop polls between steps --
+  // the transition to 'done' happens where handleStartSweep's own promise
+  // resolves, not here, so both "ran to completion" and "stopped early"
+  // land in the same place.
+  const handleStopSweep = () => { sweepCancelledRef.current = true; };
+
+  const handleBackFromSweep = () => setSweepState(null);
+
+  // "Take data at current settings" -- appends one more point at whatever
+  // the swept component's angle already is, without touching it. Only
+  // reachable (see SweepResultsPanel) once a sweep is stopped/finished, so
+  // there's no cancelledRef/running-state bookkeeping needed here.
+  const handleTakeManualPoint = () => {
+    if (!sweepState) return;
+    const comp = components.find((c) => c.id === sweepState.componentId);
+    const value = comp?.angle ?? 0;
+    labPanelRef.current?.runManualPoint({
+      value,
+      shotsPerPoint: sweepState.shotsPerPoint,
+      onPoint: (point) => setSweepState((prev) => (prev ? { ...prev, points: [...prev.points, point] } : prev)),
+    });
+  };
+
+  const sweepLocked = sweepState?.phase === 'running';
 
   const armedType = buildMode?.place ? COMPONENT_TYPES.find((c) => c.id === buildMode.place) : null;
 
@@ -255,6 +343,8 @@ export default function App() {
           setComponents={setComponents}
           hoveredDetectorId={effectiveHoveredDetectorId}
           setHoveredDetectorId={setHoveredDetectorId}
+          sweepState={sweepState}
+          onOpenSweepModal={handleOpenSweepModal}
         />
       </div>
 
@@ -269,6 +359,7 @@ export default function App() {
         toggleRemoveMode={toggleRemoveMode}
         components={components}
         onHoverButton={setHoveredSidebarButton}
+        locked={sweepLocked}
       />
 
       {/* A hovered sidebar icon's own bold label -- floats outside the
@@ -305,17 +396,44 @@ export default function App() {
             onResetData={handleResetData}
             laserPower={laserPower}
             onChangeLaserPower={handleChangeLaserPower}
+            locked={sweepLocked}
           />
         </div>
-        <DataPlottingPanel
-          chartDisplayBools={chartDisplayBools}
-          setChartDisplayBools={setChartDisplayBools}
-          components={components}
-          hoverEnabled={!buildMode}
-          hoveredDetectorId={effectiveHoveredDetectorId}
-          setHoveredDetectorId={setHoveredDetectorId}
-        />
+        {/* Once a sweep has started running (not just while its spec modal
+            is up -- see sweepState.phase), its results panel takes this
+            same slot instead of the usual histogram, all the way through
+            the 'done' phase, until Back is pressed. Showing both at once
+            would leave it ambiguous which "counts" a student is even
+            looking at, since a sweep's own tallies never touch the
+            detectors' live comp.count (see LabPanel's fireSweepBurst). */}
+        {sweepState && sweepState.phase !== 'specifying' ? (
+          <SweepResultsPanel
+            sweepState={sweepState}
+            components={components}
+            onStop={handleStopSweep}
+            onBack={handleBackFromSweep}
+            onTakeManualPoint={handleTakeManualPoint}
+          />
+        ) : (
+          <DataPlottingPanel
+            chartDisplayBools={chartDisplayBools}
+            setChartDisplayBools={setChartDisplayBools}
+            components={components}
+            hoverEnabled={!buildMode}
+            hoveredDetectorId={effectiveHoveredDetectorId}
+            setHoveredDetectorId={setHoveredDetectorId}
+          />
+        )}
       </div>
+
+      {sweepState?.phase === 'specifying' && (
+        <SweepSpecModal
+          component={components.find((c) => c.id === sweepState.componentId)}
+          initialConfig={lastSweepConfig}
+          onCancel={handleCancelSweepSpec}
+          onStart={handleStartSweep}
+        />
+      )}
 
       {/* Placement ghost: a half-opacity, full-scale preview of the armed
           component that follows the cursor everywhere, including over the

@@ -185,6 +185,23 @@ function getRotationOffset(type, rotation) {
 const PARTICLE_SPEED = 300; // px/sec, matches the Stern-Gerlach sim's own particles
 const PARTICLE_RADIUS = 4;
 const PARTICLE_COLOR = '#3498db'; // same blue as .control-bar-button etc.
+// Parameter sweep (App.jsx's sweepState) -- see fireSweepBurst/runSweep
+// below. A burst fires every one of its shots synchronously (cheap; each is
+// just a samplePhotonPath call), but only animates up to this many of them
+// -- past that the swarm would just be visual noise, and it'd cost real
+// frame time to draw. The tallied point is exact regardless; only the
+// on-screen sample is capped.
+const SWEEP_ANIMATE_CAP = 40;
+// Pause after changing the swept property, before firing the next burst --
+// long enough to actually see the on-canvas indicator (e.g. a wave plate's
+// angle tick) tween to its new value, short enough that a many-point sweep
+// doesn't feel sluggish between points.
+const SWEEP_TWEEN_MS = 350;
+// Floor on how long a burst's own flight animation is waited out before
+// moving to the next point -- without this, a burst that's entirely
+// absorbed one grid cell from the laser (near-zero flight distance) would
+// barely register on screen before the next point started.
+const SWEEP_MIN_BURST_MS = 400;
 // Extra straight travel (px), in the same direction, tacked onto an
 // unterminated photon's final segment so it visibly continues past the
 // canvas edge before being destroyed, rather than stopping right at the
@@ -907,6 +924,24 @@ function buildPhotonSegments(sampled) {
   return { segments, outcome };
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Folds one photon's outcome into a sweep point's running tally --
+// counts-by-detector plus absorbed/escaped, the raw material
+// SweepResultsPanel turns into fractions/error bars. Kept separate from
+// samplePhotonPath itself since a sweep point tallies many photons, not one.
+function tallySweepOutcome(point, outcome) {
+  if (outcome.type === 'detected') {
+    point.counts[outcome.detectorId] = (point.counts[outcome.detectorId] ?? 0) + 1;
+  } else if (outcome.type === 'absorbed') {
+    point.absorbed += 1;
+  } else {
+    point.escaped += 1;
+  }
+}
+
 // Lowest-unused-index color assignment for detectors, same scheme as the
 // Stern-Gerlach sim's particle counters -- reused (not re-picked at random)
 // whenever a detector is removed, so colors stay stable and predictable as
@@ -949,12 +984,22 @@ function DeleteIcon({ size = 15, color = "#8b0000" }) {
   );
 }
 
-const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuildMode, components, setComponents, hoveredDetectorId, setHoveredDetectorId }, ref) {
+const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuildMode, components, setComponents, hoveredDetectorId, setHoveredDetectorId, sweepState, onOpenSweepModal }, ref) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const photonCanvasRef = useRef(null);
   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
   const [hoveredCell, setHoveredCell] = useState(null);
+
+  // sweepActive: a sweep is being specified, is running, or is showing
+  // results for some component -- App.jsx enforces one at a time. sweepLocked
+  // is the narrower "photons are actually being fired right now" case: only
+  // then does canvas interaction actually need to freeze (see every
+  // `if (sweepLocked) return;` guard below), since a completed sweep still
+  // showing its results is a perfectly fine time to hand-adjust the swept
+  // property before clicking "take data at current settings" again.
+  const sweepActive = sweepState != null;
+  const sweepLocked = sweepState?.phase === 'running';
 
   // In-flight photons -- a mutable ref (not React state) updated every
   // animation frame, same reasoning as the Stern-Gerlach sim's own
@@ -1149,6 +1194,7 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
   }, [components, canvasDims, displayBools, buildMode, hoveredCell, draggingId, dragPos, cols, rows, selectedComp, previewPaths]);
 
   const eraseAtClientPos = useCallback((clientX, clientY) => {
+    if (sweepLocked) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -1161,12 +1207,13 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
       const ft = getRotatedFootprint(getComponentType(c.type), c.rotation);
       return !footprintsOverlap(cell.col, cell.row, 1, 1, c.col, c.row, ft.w, ft.h);
     }));
-  }, [cols, rows, setComponents]);
+  }, [cols, rows, setComponents, sweepLocked]);
 
   // Placement (click to drop an armed component) and remove-mode's initial
   // click both happen on mousedown, so a plain click removes one component
   // while a press-and-drag erases everything the cursor passes over.
   const handleCanvasMouseDown = (e) => {
+    if (sweepLocked) return;
     if (buildMode === 'remove') {
       removingRef.current = true;
       eraseAtClientPos(e.clientX, e.clientY);
@@ -1185,6 +1232,7 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
   // again) or leaves that entirely to the caller, as the drag-and-drop path
   // does (it always clears buildMode on release, successful or not).
   const placeComponentAt = useCallback((componentId, clientX, clientY) => {
+    if (sweepLocked) return false;
     const canvas = canvasRef.current;
     if (!canvas) return false;
     const rect = canvas.getBoundingClientRect();
@@ -1212,9 +1260,10 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
     });
     setSelectedId(null); // a fresh placement always starts deselected, not whatever was selected before
     return true;
-  }, [components, cols, rows, setComponents]);
+  }, [components, cols, rows, setComponents, sweepLocked]);
 
   const handleCanvasClick = (e) => {
+    if (sweepLocked) return;
     if (buildMode?.place) {
       // single-shot placement, same as the Stern-Gerlach sim's build mode
       if (placeComponentAt(buildMode.place, e.clientX, e.clientY)) setBuildMode(null);
@@ -1257,6 +1306,7 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
   // mousedown that lands on it never reaches handleCanvasMouseDown -- while
   // removing, handle the erase here directly instead of starting a drag.
   const handleComponentMouseDown = (e, comp) => {
+    if (sweepLocked) return;
     if (buildMode === 'remove') {
       e.stopPropagation();
       removingRef.current = true;
@@ -1363,6 +1413,7 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
   // but the rotation state itself still just cycles through all four --
   // no special-casing needed here.
   const rotateSelected = () => {
+    if (sweepLocked) return;
     setComponents((prev) => {
       const comp = prev.find((c) => c.id === selectedId);
       if (!comp || !canRotateComponent(prev, comp, cols, rows)) return prev;
@@ -1371,6 +1422,7 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
   };
 
   const deleteSelected = () => {
+    if (sweepLocked) return;
     setComponents((prev) => prev.filter((c) => c.id !== selectedId));
     setSelectedId(null);
   };
@@ -1455,7 +1507,11 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
       });
 
       if (finished.length > 0) {
-        const detected = finished.filter((p) => p.outcome.type === 'detected');
+        // isSweep particles (see fireSweepBurst) are purely visual here --
+        // their outcomes were already tallied into their own sweep point,
+        // so they don't also bump a detector's live comp.count the way a
+        // normal single/continuous-mode photon does.
+        const detected = finished.filter((p) => p.outcome.type === 'detected' && !p.isSweep);
         if (detected.length > 0) {
           setComponents((prev) => {
             const hits = new Map();
@@ -1524,10 +1580,94 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
   // not something App.jsx already has a handle on.
   const deselectAll = useCallback(() => setSelectedId(null), []);
 
+  // Fires `shots` independent photons at the given (already-current) setup,
+  // tallying every outcome exactly (see tallySweepOutcome) but animating
+  // only up to SWEEP_ANIMATE_CAP of them as a simultaneous swarm rather
+  // than one at a time -- a sweep's wall-clock cost is meant to scale with
+  // how many points it has, not with shots-per-point (see runSweep's own
+  // comment), and shots run synchronously here regardless, so raising
+  // shots-per-point doesn't cost extra animation time either way. Animated
+  // particles are tagged isSweep so the tick loop's own detected-count bump
+  // (which feeds the *live* histogram) leaves them alone -- a sweep's tally
+  // only ever reaches the caller through the point this returns, never
+  // through a placed detector's own comp.count.
+  const fireSweepBurst = useCallback((laserComp, cellMap, shots) => {
+    const point = { counts: {}, absorbed: 0, escaped: 0, total: shots };
+    const animated = [];
+    let maxFlightMs = 0;
+    for (let i = 0; i < shots; i++) {
+      const sampled = samplePhotonPath(laserComp, cellMap, cols, rows);
+      tallySweepOutcome(point, sampled.outcome);
+      if (animated.length < SWEEP_ANIMATE_CAP) {
+        const { segments, outcome } = buildPhotonSegments(sampled);
+        if (segments.length > 0) {
+          const flightMs = segments.reduce((sum, seg) => sum + (segmentLength(seg) / PARTICLE_SPEED) * 1000, 0);
+          maxFlightMs = Math.max(maxFlightMs, flightMs);
+          animated.push({ segments, outcome, segmentIndex: 0, segmentElapsed: 0, isSweep: true });
+        }
+      }
+    }
+    if (animated.length > 0) {
+      particlesRef.current = [...particlesRef.current, ...animated];
+      if (rafRef.current === null) {
+        lastFrameRef.current = null;
+        rafRef.current = requestAnimationFrame((now) => tickRef.current(now));
+      }
+    }
+    return { point, flightMs: Math.max(maxFlightMs, SWEEP_MIN_BURST_MS) };
+  }, [cols, rows]);
+
+  // Runs a full parameter sweep: for each value, sets the swept component's
+  // property, pauses briefly (SWEEP_TWEEN_MS -- long enough to see its
+  // on-canvas indicator tween to the new value), fires a burst of
+  // `shotsPerPoint` photons, waits out their flight, and only *then* reports
+  // the resolved point via onPoint -- so the results panel's plot fills in
+  // one point at a time as the sweep actually runs, not all at once at the
+  // end. Reads/writes a local copy of `components` rather than the live
+  // prop: setComponents is async, and this loop can't afford to race its
+  // own re-renders to find out what it just set. The *displayed* angle
+  // still updates every step (setComponents is still called, for that) --
+  // it's just never read back through props for the physics here, only
+  // through this local copy. Safe only because App.jsx locks out every
+  // other way `components` could change while a sweep is running (see
+  // sweepLocked) -- otherwise this local copy could drift from reality.
+  // cancelledRef is polled between every await so Stop can cut a run short
+  // without waiting for it to finish naturally.
+  const runSweep = useCallback(async ({ componentId, values, shotsPerPoint, onPoint, cancelledRef }) => {
+    let local = components;
+    for (const value of values) {
+      if (cancelledRef.current) break;
+      local = local.map((c) => (c.id === componentId ? { ...c, angle: value } : c));
+      setComponents(local);
+      await sleep(SWEEP_TWEEN_MS);
+      if (cancelledRef.current) break;
+
+      const laserComp = local.find((c) => c.type === 'laser');
+      if (!laserComp) break; // laser got removed somehow -- nothing left to sweep with
+      const cellMap = buildCellMap(local);
+      const { point, flightMs } = fireSweepBurst(laserComp, cellMap, shotsPerPoint);
+      await sleep(flightMs);
+      if (cancelledRef.current) break;
+      onPoint({ value, ...point });
+    }
+  }, [components, setComponents, fireSweepBurst]);
+
+  // The "take data at current settings" button's own single-point version
+  // of the above -- same burst/wait mechanics, but never touches the swept
+  // property itself (the point it's for is whatever value already is).
+  const runManualPoint = useCallback(async ({ value, shotsPerPoint, onPoint }) => {
+    const laserComp = components.find((c) => c.type === 'laser');
+    if (!laserComp) return;
+    const cellMap = buildCellMap(components);
+    const { point, flightMs } = fireSweepBurst(laserComp, cellMap, shotsPerPoint);
+    await sleep(flightMs);
+    onPoint({ value, ...point });
+  }, [components, fireSweepBurst]);
+
   useImperativeHandle(
     ref,
-    () => ({ spawnParticle, resetParticles, deselectAll, placeComponentAt }),
-    [spawnParticle, resetParticles, deselectAll, placeComponentAt],
+    () => ({ spawnParticle, resetParticles, deselectAll, placeComponentAt, runSweep, runManualPoint }),
+    [spawnParticle, resetParticles, deselectAll, placeComponentAt, runSweep, runManualPoint],
   );
 
   const renderComponent = (comp) => {
@@ -1537,7 +1677,18 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
     const isDragging = comp.id === draggingId;
     const anchorX = isDragging && dragPos ? dragPos.x : comp.col * GRID_SIZE;
     const anchorY = isDragging && dragPos ? dragPos.y : comp.row * GRID_SIZE;
-    const componentClass = `placed-component ${isDragging ? 'dragging' : ''} ${buildMode === 'remove' ? 'remove-mode' : ''}`;
+    // swept-component: a persistent green highlight identifying which optic
+    // sweepState refers to (see App.jsx) -- there's no text label on the
+    // component itself, so this is the only thing disambiguating "the
+    // sweep" once its spec modal's own header is gone. Lasts as long as
+    // sweepState does (any phase), not just while it's actually running.
+    // sweep-tweening only applies during that running phase, scoping the
+    // angle indicator's own smooth transition (see .waveplate-indicator in
+    // App.css) to just the automated steps of a sweep -- it'd read as
+    // laggy, not smooth, if it applied to ordinary click-and-drag angle
+    // edits too.
+    const isSweptComponent = sweepState?.componentId === comp.id;
+    const componentClass = `placed-component ${isDragging ? 'dragging' : ''} ${buildMode === 'remove' ? 'remove-mode' : ''} ${isSweptComponent ? 'swept-component' : ''} ${isSweptComponent && sweepLocked ? 'sweep-tweening' : ''}`;
     const componentStyle = {
       left: anchorX + offset.x,
       top: anchorY + offset.y,
@@ -1708,7 +1859,7 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
       {components.filter((c) => !isPhotonDrawnUnder(getComponentType(c.type))).map(renderComponent)}
       <canvas ref={photonCanvasRef} className="photon-canvas" />
       {components.filter((c) => isPhotonDrawnUnder(getComponentType(c.type))).map(renderComponent)}
-      {selectedComp && (() => {
+      {selectedComp && !sweepLocked && (() => {
         const ft = getRotatedFootprint(getComponentType(selectedComp.type), selectedComp.rotation);
         const growUp = selectedComp.row > 0;
         const cx = selectedComp.col * GRID_SIZE + (ft.w * GRID_SIZE) / 2;
@@ -1777,7 +1928,7 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
           </>
         );
       })()}
-      {selectedComp && hasAngleControl(getComponentType(selectedComp.type)) && (() => {
+      {selectedComp && !sweepLocked && hasAngleControl(getComponentType(selectedComp.type)) && (() => {
         const ft = getRotatedFootprint(getComponentType(selectedComp.type), selectedComp.rotation);
         const anchorX = (selectedComp.col + ft.w) * GRID_SIZE + WAVEPLATE_CONTROL_GAP;
         const anchorY = selectedComp.row * GRID_SIZE + (ft.h * GRID_SIZE) / 2;
@@ -1788,6 +1939,7 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
               onChangeAngle={(newAngle) => {
                 setComponents((prev) => prev.map((c) => (c.id === selectedComp.id ? { ...c, angle: newAngle } : c)));
               }}
+              onSweepClick={!sweepActive ? () => onOpenSweepModal(selectedComp.id) : undefined}
             />
           </div>
         );

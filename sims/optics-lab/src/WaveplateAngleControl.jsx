@@ -48,7 +48,14 @@ function wrapDegrees(deg) {
 // angle) * PX_PER_DEGREE away from center) -- so changing the angle reads
 // as the tape scrolling past a fixed pointer, the way a real dial would,
 // without any actual scrolling/translation happening.
-export default function WaveplateAngleControl({ angle, onChangeAngle }) {
+//
+// onSweepClick is optional -- passing it renders a "Sweep Angle..." button
+// below the readout, LabPanel's own entry point into the sweep spec modal
+// (see App.jsx's sweepState). Left off entirely (as opposed to just hidden)
+// while a sweep is already active, rather than disabled, since "click to
+// configure another sweep" isn't a meaningful action to dangle in front of
+// someone mid-run.
+export default function WaveplateAngleControl({ angle, onChangeAngle, onSweepClick }) {
   const canvasRef = useRef(null);
   const draggingRef = useRef(false);
   const dragStartYRef = useRef(0);
@@ -176,6 +183,11 @@ export default function WaveplateAngleControl({ angle, onChangeAngle }) {
         />
         <span style={{ fontSize: '18px' }}>°</span>
       </div>
+      {onSweepClick && (
+        <button type="button" className="control-bar-button sweep-angle-button" onClick={onSweepClick}>
+          Sweep Angle…
+        </button>
+      )}
     </div>
   );
 }

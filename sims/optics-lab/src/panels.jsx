@@ -68,7 +68,13 @@ const SIDEBAR_ICON_SCALE = { npbs: 0.75, pbs: 0.75 };
 // Capped at one laser -- see LabPanel's own enforcement of this at the
 // actual placement site; this is just what keeps a second one from ever
 // getting armed.
-export function BuildPanel({ buildMode, onButtonMouseDown, toggleRemoveMode, components, onHoverButton }) {
+//
+// locked (true while a sweep is actively running -- see App.jsx's
+// sweepState) disables every button here the same way the one-laser-
+// already-placed case already does: placing/removing components mid-sweep
+// would invalidate the data it's collecting, same reasoning as LabPanel's
+// own sweepLocked gate on canvas interaction.
+export function BuildPanel({ buildMode, onButtonMouseDown, toggleRemoveMode, components, onHoverButton, locked = false }) {
   const placingId = buildMode?.place ?? null;
   const removing = buildMode === 'remove';
   const hasLaser = components.some((c) => c.type === 'laser');
@@ -78,7 +84,7 @@ export function BuildPanel({ buildMode, onButtonMouseDown, toggleRemoveMode, com
       <div className="sidebar-heading">Add</div>
       <div className="sidebar-column">
         {COMPONENT_TYPES.map((type) => {
-          const disabled = type.id === 'laser' && hasLaser;
+          const disabled = locked || (type.id === 'laser' && hasLaser);
           return (
             <SidebarIconButton
               key={type.id}
@@ -86,7 +92,7 @@ export function BuildPanel({ buildMode, onButtonMouseDown, toggleRemoveMode, com
               label={type.label}
               active={placingId === type.id}
               disabled={disabled}
-              title={disabled ? 'Only one laser allowed' : undefined}
+              title={locked ? 'Locked while a sweep is running' : disabled ? 'Only one laser allowed' : undefined}
               ariaLabel={`Add ${type.label}`}
               onMouseDown={(e) => { if (!disabled) onButtonMouseDown(type.id, e); }}
               onHoverButton={onHoverButton}
@@ -100,6 +106,8 @@ export function BuildPanel({ buildMode, onButtonMouseDown, toggleRemoveMode, com
         image={trashCanImage}
         label="Delete"
         active={removing}
+        disabled={locked}
+        title={locked ? 'Locked while a sweep is running' : undefined}
         ariaLabel="Toggle delete mode"
         dataRole="trash-target"
         onClick={toggleRemoveMode}
@@ -118,7 +126,13 @@ export function BuildPanel({ buildMode, onButtonMouseDown, toggleRemoveMode, com
 // on-canvas selection panel, that can edit it. This panel stays mostly
 // presentational: onMakeOnePhoton/onToggleRunning/onResetData/
 // onChangeLaserPower are all App.jsx's own handlers/state.
-export function DataCollectionPanel({ dcMode, setDcMode, onMakeOnePhoton, onToggleRunning, onResetData, laserPower, onChangeLaserPower }) {
+//
+// locked (true while a sweep is actively running) disables every control
+// here rather than hiding them -- a sweep's own photons don't go through
+// this panel at all (see LabPanel's fireSweepBurst), but firing more from
+// here at the same time would still race the sweep's own particle/count
+// bookkeeping, so it's blocked for the same reason BuildPanel is.
+export function DataCollectionPanel({ dcMode, setDcMode, onMakeOnePhoton, onToggleRunning, onResetData, laserPower, onChangeLaserPower, locked = false }) {
   const hasLaser = laserPower != null;
   return (
     <>
@@ -135,6 +149,7 @@ export function DataCollectionPanel({ dcMode, setDcMode, onMakeOnePhoton, onTogg
                   type="radio"
                   name="opticsDCmode"
                   checked={dcMode.mode === 'single'}
+                  disabled={locked}
                   onChange={() => setDcMode({ ...dcMode, mode: 'single' })}
                 />
                 One at a time
@@ -144,6 +159,7 @@ export function DataCollectionPanel({ dcMode, setDcMode, onMakeOnePhoton, onTogg
                   type="radio"
                   name="opticsDCmode"
                   checked={dcMode.mode === 'stream'}
+                  disabled={locked}
                   onChange={() => setDcMode({ ...dcMode, mode: 'stream' })}
                 />
                 Continuous
@@ -159,6 +175,7 @@ export function DataCollectionPanel({ dcMode, setDcMode, onMakeOnePhoton, onTogg
               min={0.0}
               max={100}
               step={1.0}
+              disabled={locked}
             />
           )}
 
@@ -166,6 +183,7 @@ export function DataCollectionPanel({ dcMode, setDcMode, onMakeOnePhoton, onTogg
             <button
               className="control-bar-button"
               style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flex: '1 1 auto', minWidth: '80px' }}
+              disabled={locked}
               onClick={dcMode.mode === 'single' ? onMakeOnePhoton : onToggleRunning}
             >
               {dcMode.mode === 'single'
@@ -177,6 +195,7 @@ export function DataCollectionPanel({ dcMode, setDcMode, onMakeOnePhoton, onTogg
             <button
               className="control-bar-button"
               style={{ flex: '1 1 auto', minWidth: '80px' }}
+              disabled={locked}
               onClick={onResetData}
             >
               Reset Data
