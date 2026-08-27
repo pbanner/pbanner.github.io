@@ -5,6 +5,7 @@
 // Exports *only* components (constants live in axisOptions.js instead) so
 // Vite's Fast Refresh can still hot-swap this file.
 
+import { useState } from 'react';
 import { SG_OPTION_LABELS, SG_OPTION_BASES, RAD_TO_DEG, DEG_TO_RAD, roundDeg } from './axisOptions';
 
 // A stepper through X/Y/Z (or, in `advanced` mode, raw theta/phi textboxes)
@@ -89,6 +90,15 @@ export function AxisStepper({ label, value, advanced, onStep, onSetAdvanced, onS
 }
 
 export function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step, disabled = false }) {
+  const [editing, setEditing] = useState(false);
+  const [textValue, setTextValue] = useState('');
+  const displayValue = editing ? textValue : valueNum;
+
+  const commitText = (raw) => {
+    const v = parseFloat(raw);
+    if (!Number.isNaN(v)) onChangeNum(v);
+  };
+
   return (
     <div className="control-group">
       <label style={{ margin: '-0.25em 0em' }}>{label}</label>
@@ -108,11 +118,11 @@ export function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, ma
           min={min}
           max={max}
           step={step}
-          value={valueNum}
-          onChange={(e) => {
-            const v = parseFloat(e.target.value);
-            if (!Number.isNaN(v)) onChangeNum(v);
-          }}
+          value={displayValue}
+          onFocus={() => { setTextValue(valueNum); setEditing(true); }}
+          onChange={(e) => setTextValue(e.target.value)}
+          onBlur={() => { setEditing(false); commitText(textValue); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
           style={{ width: '70px', padding: '2px' }}
           disabled={disabled}
         />
