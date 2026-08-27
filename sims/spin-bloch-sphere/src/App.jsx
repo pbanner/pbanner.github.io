@@ -230,6 +230,15 @@ function PauseIcon({ size = '0.9em' }) {
 
 // For rendering a label, slider, AND textbox all at once
 function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step, disabled = false }) {
+  const [editing, setEditing] = useState(false);
+  const [textValue, setTextValue] = useState('');
+  const displayValue = editing ? textValue : valueNum;
+
+  const commitText = (raw) => {
+    const v = parseFloat(raw);
+    if (!Number.isNaN(v)) onChangeNum(v);
+  };
+
   return (
     <div className="control-group">
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -249,11 +258,11 @@ function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step
           min={min}
           max={max}
           step={step}
-          value={valueNum}
-          onChange={(e) => {
-            const v = parseFloat(e.target.value);
-            if (!Number.isNaN(v)) onChangeNum(v);
-          }}
+          value={displayValue}
+          onFocus={() => { setTextValue(valueNum); setEditing(true); }}
+          onChange={(e) => setTextValue(e.target.value)}
+          onBlur={() => { setEditing(false); commitText(textValue); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
           style={{ width: '70px', padding: '2px' }}
           disabled={disabled}
         />
