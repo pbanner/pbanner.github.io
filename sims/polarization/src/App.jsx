@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import './App.css';
-import Panel1 from './panels/Panel1';
 import Panel2 from './panels/Panel2';
 import Panel3 from './panels/Panel3';
 
@@ -14,7 +13,7 @@ function AngleControl({ label, valueDeg, onChangeDeg, min, max, step }) {
 
   const commitText = (raw) => {
     const v = parseFloat(raw);
-    if (!Number.isNaN(v)) onChangeNum(v);
+    if (!Number.isNaN(v)) onChangeDeg(v);
   };
 
   return (
@@ -36,7 +35,7 @@ function AngleControl({ label, valueDeg, onChangeDeg, min, max, step }) {
           max={max}
           step={step}
           value={displayValue}
-          onFocus={() => { setTextValue(valueNum); setEditing(true); }}
+          onFocus={() => { setTextValue(valueDeg); setEditing(true); }}
           onChange={(e) => setTextValue(e.target.value)}
           onBlur={() => { setEditing(false); commitText(textValue); }}
           onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
@@ -53,7 +52,7 @@ export default function App() {
     gridOn: true,             // Displaying the grid
   });
   const [polState, setPolState] = useState({
-    theta: Math.atan(1),           // splits the amplitude between the two field components
+    theta: 0,                 //Math.atan(1) splits the amplitude between the two field components
     phi: 0 * (Math.PI / 180),     // relative phase between them (V minus H)
   });
   const [panel2displayBools, setPanel2displayBools] = useState({
@@ -66,7 +65,6 @@ export default function App() {
     <div className="app-layout">
       {/* Main Canvas Area */}
       <div className="canvas-area">
-        {activePanel === 1 && <Panel1 displayBools={displayBools} />}
         {activePanel === 2 && <Panel2 polState={polState} setPolState={setPolState} panel2displayBools={panel2displayBools} />}
         {activePanel === 3 && <Panel3 displayBools={displayBools} />}
       </div>
