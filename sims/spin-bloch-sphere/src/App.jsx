@@ -199,7 +199,7 @@ function evolveSpin(spinState, field, t, basisRef) {
   const intoRotatingFrame = rotateAroundAxis(s0, n, -field.phase1);
   const precessed = omegaEff < 1e-9
     ? intoRotatingFrame
-    : rotateAroundAxis(intoRotatingFrame, normalize(beff), -omegaEff * t);
+    : rotateAroundAxis(intoRotatingFrame, normalize(beff), omegaEff * t);
 
   return rotateAroundAxis(precessed, n, Phi);
 }
@@ -986,7 +986,7 @@ function BlochSphere({ spinState, magneticField, paused, setPaused, timeSec, set
   const frameAxisPhysics = unitVectorFromAngles(magneticField.theta0, magneticField.phi0);
   const frameAxisThree = blochToThree(frameAxisPhysics.x, frameAxisPhysics.y, frameAxisPhysics.z);
   const frameOmega = controlBools.frameLocked
-    ? (magneticField.rotatingComponent ? -magneticField.omega1 : magneticField.mag0)
+    ? (magneticField.rotatingComponent ? -magneticField.omega1 : -magneticField.mag0)
     : rotatingFrame;
 
   return (
