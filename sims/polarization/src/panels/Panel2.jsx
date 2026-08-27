@@ -604,7 +604,7 @@ function AnimControls({ paused, setPaused, onHomeView, animDisplayBools, setAnim
       <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginBottom: '5px' }}>
         <button className="control-button" onClick={() => setPaused((p) => !p)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', margin: 0, fontSize: '1.1rem' }}>
           {paused ? <PlayIcon /> : <PauseIcon />}
-          {paused ? 'Start' : 'Pause'}
+          {paused ? 'Play' : 'Pause'}
         </button>
         <button className="control-button" onClick={onHomeView} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', margin: 0, fontSize: '1.1rem' }}>
           {/* <HomeIcon /> */}
@@ -714,7 +714,7 @@ export default function Panel2({ polState, setPolState, panel2displayBools }) {
   const { theta, phi } = polState;
   const { animation: showAnimation, ellipse: showEllipse, sphere: showSphere } = panel2displayBools;
   const [paused, setPaused] = useState(false);
-  const [animDisplayBools, setAnimDisplayBools] = useState({ compFields: false, totalField: true, obsPlane: true, obsPlaneEllipse: false, compEllipses: false, compArrows: false, totalArrow: true });
+  const [animDisplayBools, setAnimDisplayBools] = useState({ compFields: true, totalField: true, obsPlane: true, obsPlaneEllipse: false, compEllipses: false, compArrows: true, totalArrow: true });
   // Component basis the red/blue field vectors and curtains are decomposed
   // into: an amplitude-split angle and a relative phase, same parametrization
   // as the physical polarization state itself. (0, 0) = H/V, matching
