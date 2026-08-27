@@ -1004,16 +1004,15 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
   const [hoveredCell, setHoveredCell] = useState(null);
 
-  // sweepActive: a sweep is being specified, is running, or is showing
-  // results for some component -- App.jsx enforces one at a time.
-  // sweepLocked (a prop, computed by App.jsx) is the narrower "photons are
-  // actually being fired right now" case, covering both a full sweep run
-  // and a single manual "take data at current settings" burst -- only then
-  // does canvas interaction actually need to freeze (see every
+  // sweepLocked (a prop, computed by App.jsx) is "photons are actually
+  // being fired right now" -- true during a full sweep run and during a
+  // single manual "take data at current settings" burst. Only then does
+  // canvas interaction actually need to freeze (see every
   // `if (sweepLocked) return;` guard below), since a completed sweep
   // sitting idle between points is a perfectly fine time to hand-adjust the
-  // swept property before firing another one.
-  const sweepActive = sweepState != null;
+  // swept property before firing another one -- or starting a fresh sweep
+  // on it (see the "Sweep Angle..." button below), which just replaces the
+  // idle one's results.
 
   // In-flight photons -- a mutable ref (not React state) updated every
   // animation frame, same reasoning as the Stern-Gerlach sim's own
@@ -2007,7 +2006,7 @@ const LabPanel = forwardRef(function LabPanel({ displayBools, buildMode, setBuil
               onChangeAngle={(newAngle) => {
                 setComponents((prev) => prev.map((c) => (c.id === selectedComp.id ? { ...c, angle: newAngle } : c)));
               }}
-              onSweepClick={!sweepActive ? () => onOpenSweepModal(selectedComp.id) : undefined}
+              onSweepClick={sweepState?.phase !== 'specifying' ? () => onOpenSweepModal(selectedComp.id) : undefined}
             />
           </div>
         );

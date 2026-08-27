@@ -300,8 +300,11 @@ export default function App() {
 
   // WaveplateAngleControl's own "Sweep Angle..." button (see LabPanel's
   // selectedComp block) opens the spec modal for that component. Only one
-  // sweep at a time -- there's no other entry point that could call this
-  // while sweepState is already set (the button itself is hidden then).
+  // sweep at a time -- the button itself is hidden while one is actually
+  // running or already being specified (LabPanel's sweepLocked / phase
+  // check), but stays available once a sweep goes idle showing 'done'
+  // results, so clicking it again just starts a fresh sweep in place of
+  // the one being shown, rather than requiring a Back press first.
   const handleOpenSweepModal = (componentId) => {
     labPanelRef.current?.deselectAll();
     setSweepState({ phase: 'specifying', componentId });
