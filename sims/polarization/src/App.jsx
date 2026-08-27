@@ -10,7 +10,7 @@ const toRad = (deg) => deg * (Math.PI / 180);
 function AngleControl({ label, valueDeg, onChangeDeg, min, max, step }) {
   const [editing, setEditing] = useState(false);
   const [textValue, setTextValue] = useState('');
-  const displayValue = editing ? textValue : valueNum;
+  const displayValue = editing ? textValue : valueDeg;
 
   const commitText = (raw) => {
     const v = parseFloat(raw);
@@ -79,22 +79,16 @@ export default function App() {
             <h2>Panels</h2>
             <div className="nav-buttons">
               <button 
-                className={`nav-button ${activePanel === 1 ? 'active' : ''}`}
-                onClick={() => setActivePanel(1)}
-              >
-                Panel 1: Polarization Measurement
-              </button>
-              <button 
                 className={`nav-button ${activePanel === 2 ? 'active' : ''}`}
                 onClick={() => setActivePanel(2)}
               >
-                Panel 2: Physics of Polarization
+                Panel 1: Physics of Polarization
               </button>
               <button 
                 className={`nav-button ${activePanel === 3 ? 'active' : ''}`}
-                onClick={() => setActivePanel(3)}
+                onClick={() => setActivePanel(3)} disabled={true}
               >
-                Panel 3: Birefringence
+                Panel 2: Birefringence
               </button>
             </div>
           </div>
