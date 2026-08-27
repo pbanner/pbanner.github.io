@@ -15,7 +15,7 @@ const SPHERE_AXIS_LABEL_EXTENT = 0.15;
 
 const DATA_COLLECTION_CAMERA_PAN = [-0.36, 0, -0.36];
 
-const FIELD_MAGNITUDE_DISPLAY_FACTOR = 0.2;
+const FIELD_MAGNITUDE_DISPLAY_FACTOR = 0.5;
 
 // A stable placeholder array for <Line> refs that get updated through imperative handles
 const LINE_PLACEHOLDER_POINTS = [[0, 0, 0], [0, 0, 0.001]];
@@ -1530,7 +1530,7 @@ export default function App() {
               <div className="control-group">
                 <SliderPlusTextboxControl label="θ (°)" valueNum={(magneticField.theta0 * 180 / Math.PI).toFixed(1)} onChangeNum={(val) => updateField({ theta0: val * Math.PI / 180 })} min={0.0} max={180.0} step={1.0} />
                 <SliderPlusTextboxControl label="φ (°)" valueNum={(magneticField.phi0 * 180 / Math.PI).toFixed(1)} onChangeNum={(val) => updateField({ phi0: val * Math.PI / 180 })} min={-180.0} max={180.0} step={1.0} />
-                <SliderPlusTextboxControl label="Mag." valueNum={magneticField.mag0.toFixed(1)} onChangeNum={(val) => updateField({ mag0: val })} min={0.0} max={5.0} step={0.1} />
+                <SliderPlusTextboxControl label="Mag." valueNum={magneticField.mag0.toFixed(1)} onChangeNum={(val) => updateField({ mag0: val })} min={0.0} max={2.5} step={0.1} />
                 <div className="control-group" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '8px', marginTop: '0.25em' }}>
                   <h6 style={{ margin: 0 }}>Transverse Rotating Component</h6>
                   <input
@@ -1545,7 +1545,7 @@ export default function App() {
                       label="Mag."
                       valueNum={magneticField.mag1.toFixed(1)}
                       onChangeNum={(val) => updateField({ mag1: val })}
-                      min={0.0} max={10.0} step={0.1}
+                      min={0.0} max={2.5} step={0.1}
                     />
                     {/* The sign flip is intention here */}
                     <SliderPlusTextboxControl
