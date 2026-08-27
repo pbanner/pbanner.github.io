@@ -8,6 +8,15 @@ const toDeg = (rad) => rad * (180 / Math.PI);
 const toRad = (deg) => deg * (Math.PI / 180);
 
 function AngleControl({ label, valueDeg, onChangeDeg, min, max, step }) {
+  const [editing, setEditing] = useState(false);
+  const [textValue, setTextValue] = useState('');
+  const displayValue = editing ? textValue : valueNum;
+
+  const commitText = (raw) => {
+    const v = parseFloat(raw);
+    if (!Number.isNaN(v)) onChangeNum(v);
+  };
+
   return (
     <div className="control-group">
       <label style={{ margin: '-0.25em 0em' }}>{label}: {valueDeg.toFixed(1)}°</label>
@@ -26,11 +35,11 @@ function AngleControl({ label, valueDeg, onChangeDeg, min, max, step }) {
           min={min}
           max={max}
           step={step}
-          value={valueDeg}
-          onChange={(e) => {
-            const v = parseFloat(e.target.value);
-            if (!Number.isNaN(v)) onChangeDeg(v);
-          }}
+          value={displayValue}
+          onFocus={() => { setTextValue(valueNum); setEditing(true); }}
+          onChange={(e) => setTextValue(e.target.value)}
+          onBlur={() => { setEditing(false); commitText(textValue); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
           style={{ width: '70px', padding: '2px' }}
         />
       </div>
