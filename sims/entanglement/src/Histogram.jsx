@@ -37,6 +37,14 @@ const LOUPE_INK_SCALE = 1 / LOUPE_ZOOM * 2.0; // shrinks line widths/font sizes 
 const HOVER_BORDER_COLOR = '#000000';
 const HOVER_BORDER_WIDTH = 2.5;
 
+// This sim always has exactly two fixed analyzers -- index 0 is the one
+// measuring the left-going particle, index 1 the right-going one -- so
+// detector labels read "Left"/"Right" rather than the Stern-Gerlach sim's
+// generic "SG1"/"SG2" (which numbered an arbitrary, user-built chain).
+function sideLabel(sgIndex) {
+  return sgIndex === 0 ? 'Left' : 'Right';
+}
+
 // Every PC currently placed in the experiment, in a stable left-to-right
 // order (by SG index, then up before down) -- this is what turns into one
 // bar each.
@@ -353,7 +361,7 @@ export default function Histogram({ experiment, displayBools, setDisplayBools })
         ctx.font = '12px Arial';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
-        const detectorLabelText = `SG${d.sgIndex + 1}`;
+        const detectorLabelText = sideLabel(d.sgIndex);
         const detectorArrowSize = 11;
         const detectorArrowGap = 3;
         const detectorTextWidth = ctx.measureText(detectorLabelText).width;
@@ -390,7 +398,7 @@ export default function Histogram({ experiment, displayBools, setDisplayBools })
           ctx.fillStyle = PC_COLORS[d.colorId] ?? '#999999';
           ctx.fillRect(legendX0 + LEGEND_PADDING, rowY - LEGEND_SWATCH_SIZE / 2, LEGEND_SWATCH_SIZE, LEGEND_SWATCH_SIZE);
           ctx.fillStyle = AXIS_COLOR;
-          ctx.fillText(`SG${d.sgIndex + 1} ${d.arm}`, legendX0 + LEGEND_PADDING + LEGEND_SWATCH_SIZE + 6, rowY);
+          ctx.fillText(`${sideLabel(d.sgIndex)} ${d.arm}`, legendX0 + LEGEND_PADDING + LEGEND_SWATCH_SIZE + 6, rowY);
         });
         // Add the theory line at the end
         if (theoryOn) {
