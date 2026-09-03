@@ -4,6 +4,7 @@ import { PC_COLORS } from './colors';
 import { drawArrow } from './canvasArrow';
 import sgImage from './assets/sg/SG.png';
 import pcImage from './assets/sg/PC.png';
+import bbImage from './assets/sg/BB.png';
 import ovenImage from './assets/sg/oven.png';
 import ovenOffImage from './assets/sg/ovenOff.png';
 
@@ -39,6 +40,10 @@ const PC_COUNT_CENTER_Y = 132 * (PC_HEIGHT / 200) - PC_HEIGHT / 2;
 const PC_LABEL_CENTER_Y = 50 * (PC_HEIGHT / 200) - PC_HEIGHT / 2;
 const PC_HIGHLIGHT_PADDING = 6;
 const PC_HIGHLIGHT_LINE_WIDTH = 3;
+// A blocked side's SG + two detectors are replaced by a single beam block,
+// same footprint the Stern-Gerlach sim uses for one.
+const BB_HEIGHT = 50;
+const BB_WIDTH = 9;
 
 // Out-arc geometry (oven -> SG is a straight line; SG -> detector is this
 // arc) -- same radius/angle the Stern-Gerlach sim uses for its own
@@ -186,10 +191,11 @@ function pointOnSegment(seg, t) {
 // One particle's full animation path, in local coordinates: a straight run
 // from the oven edge to the SG's input, a fixed pause "inside" the SG, then
 // the output arc to whichever detector `arm` sends it to. Every particle
-// here always ends at a detector -- there's no build mode, no beam blocks,
-// no chain to run off the end of -- so this is considerably simpler than
-// the Stern-Gerlach sim's buildAnimationPath, which had to handle all of
-// those.
+// that reaches an SG here always ends at a detector -- there's no build
+// mode, no chain to run off the end of -- so this is considerably simpler
+// than the Stern-Gerlach sim's buildAnimationPath, which had to handle all
+// of that. A *blocked* side's particle never calls this at all -- see
+// buildBlockedLocalPath below.
 function buildLocalPath(axis, arm) {
   const sgInputLocalY = axis - SG_HEIGHT / 2 + SG_INPUT_Y;
   const offset = (Math.random() - 0.5) * BEAM_TRANSVERSE_WIDTH;
@@ -199,6 +205,16 @@ function buildLocalPath(axis, arm) {
     { type: 'wait', x: SG_X0_LOCAL, y: sgInputLocalY + offset, ms: SG_PROCESSING_MS },
     { ...arc, r: arc.r + offset, type: 'arc' },
   ];
+}
+
+// A blocked side has no SG to measure through -- its particle just travels
+// a short straight run from the oven edge to wherever the beam block sits
+// (the SG's old position) and is absorbed there. No transverse jitter here
+// (unlike buildLocalPath): there's no detector to aim at on this side, so a
+// clean straight line into the block reads better than a wandering one.
+function buildBlockedLocalPath(axis) {
+  const blockX = SG_X0_LOCAL + SG_WIDTH / 2;
+  return [{ type: 'line', x0: 0, y0: axis, x1: blockX, y1: axis }];
 }
 
 const LabPanel = forwardRef(function LabPanel(
@@ -213,6 +229,7 @@ const LabPanel = forwardRef(function LabPanel(
   const [ovenOffImageRef, ovenOffImageLoaded] = useImage(ovenOffImage);
   const [sgImageRef, sgImageLoaded] = useImage(sgImage);
   const [pcImageRef, pcImageLoaded] = useImage(pcImage);
+  const [bbImageRef, bbImageLoaded] = useImage(bbImage);
   // Live, per-frame-mutated particle list -- deliberately a ref, not state,
   // so 60fps position updates don't re-render the whole app. particleCount
   // (a prop, real state owned by App) is the only piece of this the rest of
@@ -286,12 +303,17 @@ const LabPanel = forwardRef(function LabPanel(
       ctx.drawImage(ovenImg.current, ovenCenterX - OVEN_WIDTH / 2, axis - OVEN_HEIGHT / 2, OVEN_WIDTH, OVEN_HEIGHT);
     }
 
-    if (!imageReady(sgImageRef) || !imageReady(pcImageRef)) return;
-
-    [{ side: 'L', sgIndex: 0 }, { side: 'R', sgIndex: 1 }].forEach(({ side, sgIndex }) => {
+    [{ side: 'L', sgIndex: 0, label: 'Left' }, { side: 'R', sgIndex: 1, label: 'Right' }].forEach(({ side, sgIndex, label }) => {
       const sg = experiment[sgIndex];
 
       withSide(ctx, side, ovenCenterX, () => {
+        if (sg.blocked) {
+          if (!imageReady(bbImageRef)) return;
+          ctx.drawImage(bbImageRef.current, SG_X0_LOCAL + SG_WIDTH / 2 - BB_WIDTH / 2, axis - BB_HEIGHT / 2, BB_WIDTH, BB_HEIGHT);
+          return;
+        }
+        if (!imageReady(sgImageRef) || !imageReady(pcImageRef)) return;
+
         ctx.drawImage(sgImageRef.current, SG_X0_LOCAL, axis - SG_HEIGHT / 2, SG_WIDTH, SG_HEIGHT);
 
         ctx.fillStyle = '#303030';
@@ -316,15 +338,15 @@ const LabPanel = forwardRef(function LabPanel(
           ctx.fillRect(PC_STRIPE_CENTER_X - PC_STRIPE_WIDTH / 2, -PC_HEIGHT / 2, PC_STRIPE_WIDTH, PC_HEIGHT);
           ctx.restore();
 
-          // "SGn" label with the direction arrow -- same wording the
-          // histogram puts under each bar, so a detector reads identically
-          // in both places. drawArrow's shape is left-right symmetric, so
-          // (unlike text) it needs no unflipping of its own.
+          // "Left"/"Right" label with the direction arrow -- same wording
+          // the histogram puts under each bar, so a detector reads
+          // identically in both places. drawArrow's shape is left-right
+          // symmetric, so (unlike text) it needs no unflipping of its own.
           ctx.fillStyle = '#666';
           ctx.font = 'bold 12px Arial';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          drawUnflippedText(ctx, side, `SG${sgIndex + 1}`, PC_TEXT_CENTER_X, PC_LABEL_CENTER_Y - 7);
+          drawUnflippedText(ctx, side, label, PC_TEXT_CENTER_X, PC_LABEL_CENTER_Y - 7);
           drawArrow(ctx, PC_TEXT_CENTER_X, PC_LABEL_CENTER_Y + 8, 11, arm === 'up' ? 'up' : 'down');
 
           // Running count
@@ -349,7 +371,7 @@ const LabPanel = forwardRef(function LabPanel(
         });
       });
     });
-  }, [experiment, expMode, displayBools, axis, canvasDims, hoveredDetector, pcImageRef, ovenImageRef, ovenOffImageRef, sgImageRef]);
+  }, [experiment, expMode, displayBools, axis, canvasDims, hoveredDetector, pcImageRef, bbImageRef, ovenImageRef, ovenOffImageRef, sgImageRef]);
 
   const drawParticles = useCallback((ctx) => {
     const ovenCenterX = canvasDims.width / 2;
@@ -402,18 +424,22 @@ const LabPanel = forwardRef(function LabPanel(
         if (p.segmentIndex >= p.segments.length) finished.push(p);
       });
 
-      // Every particle here always ends at a fixed detector -- there's no
-      // beam block or open chain end to check for, unlike the Stern-Gerlach
-      // sim's equivalent step.
+      // A particle whose side is blocked was absorbed by the beam block,
+      // not a detector, so it earns no count -- everything else always ends
+      // at a fixed detector (there's no open chain end to check for, unlike
+      // the Stern-Gerlach sim's equivalent step).
       if (finished.length > 0) {
-        setExperiment((prev) => {
-          const next = [...prev];
-          finished.forEach((p) => {
-            const sgIndex = p.side === 'L' ? 0 : 1;
-            next[sgIndex] = { ...next[sgIndex], [p.arm]: { ...next[sgIndex][p.arm], data: next[sgIndex][p.arm].data + 1 } };
+        const detectorHits = finished.filter((p) => !p.blocked);
+        if (detectorHits.length > 0) {
+          setExperiment((prev) => {
+            const next = [...prev];
+            detectorHits.forEach((p) => {
+              const sgIndex = p.side === 'L' ? 0 : 1;
+              next[sgIndex] = { ...next[sgIndex], [p.arm]: { ...next[sgIndex][p.arm], data: next[sgIndex][p.arm].data + 1 } };
+            });
+            return next;
           });
-          return next;
-        });
+        }
         particlesRef.current = particlesRef.current.filter((p) => !finished.includes(p));
         setParticleCount(particlesRef.current.length);
       }
@@ -460,13 +486,23 @@ const LabPanel = forwardRef(function LabPanel(
   // joint singlet distribution (samplePairOutcome), then each gets its own
   // independent animation path -- same length on both sides (a straight run
   // plus one fixed-angle arc), so the pair reads as leaving the oven and
-  // arriving at their detectors together.
+  // arriving at their detectors together. A blocked side still needs a
+  // basis to feed samplePairOutcome (the joint state is defined however
+  // both sides happen to be set), but its own sampled arm is simply
+  // discarded -- that particle gets the short "walk into the wall" path
+  // instead, and is never credited to a detector.
   const spawnParticle = () => {
     const { armL, armR } = samplePairOutcome(experiment[0].basis, experiment[1].basis);
+    const leftBlocked = experiment[0].blocked;
+    const rightBlocked = experiment[1].blocked;
     particlesRef.current = [
       ...particlesRef.current,
-      { side: 'L', arm: armL, segments: buildLocalPath(axis, armL), segmentIndex: 0, segmentElapsed: 0 },
-      { side: 'R', arm: armR, segments: buildLocalPath(axis, armR), segmentIndex: 0, segmentElapsed: 0 },
+      leftBlocked
+        ? { side: 'L', arm: null, blocked: true, segments: buildBlockedLocalPath(axis), segmentIndex: 0, segmentElapsed: 0 }
+        : { side: 'L', arm: armL, blocked: false, segments: buildLocalPath(axis, armL), segmentIndex: 0, segmentElapsed: 0 },
+      rightBlocked
+        ? { side: 'R', arm: null, blocked: true, segments: buildBlockedLocalPath(axis), segmentIndex: 0, segmentElapsed: 0 }
+        : { side: 'R', arm: armR, blocked: false, segments: buildLocalPath(axis, armR), segmentIndex: 0, segmentElapsed: 0 },
     ];
     setParticleCount(particlesRef.current.length);
     if (rafRef.current === null) {
@@ -491,7 +527,7 @@ const LabPanel = forwardRef(function LabPanel(
     const canvas = canvasRef.current;
     if (!canvas) return;
     drawScene(canvas.getContext('2d'));
-  }, [experiment, expMode, ovenImageLoaded, ovenOffImageLoaded, sgImageLoaded, pcImageLoaded, axis, canvasDims, displayBools, drawScene]);
+  }, [experiment, expMode, ovenImageLoaded, ovenOffImageLoaded, sgImageLoaded, pcImageLoaded, bbImageLoaded, axis, canvasDims, displayBools, drawScene]);
 
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>

@@ -10,10 +10,13 @@ import { SG_OPTION_LABELS, SG_OPTION_BASES, RAD_TO_DEG, DEG_TO_RAD, roundDeg } f
 
 // A stepper through X/Y/Z (or, in `advanced` mode, raw theta/phi textboxes)
 // for any [theta, phi] axis value. Deliberately knows nothing about *what*
-// the axis belongs to (an SG's measurement basis, or one arm's field) --
-// callers wire that up themselves via onStep/onSetAdvanced/onSetAngle. See
-// SGBasisStepper in App.jsx and FieldOverlayPanel in LabPanel.jsx for the
-// two callers.
+// the axis belongs to (an analyzer's measurement basis, or one arm's field)
+// -- callers wire that up themselves via onStep/onSetAdvanced/onSetAngle.
+// `showAdvancedToggle` controls only whether the "Set by angles"/"Set by
+// axis" button itself renders here -- a caller that wants that button
+// somewhere else in its own layout (see AnalyzerStepper in App.jsx) passes
+// showAdvancedToggle={false} and renders an equivalent button itself, while
+// still driving `advanced` to switch between the two views below.
 export function AxisStepper({ label, value, advanced, onStep, onSetAdvanced, onSetAngle, disabled, showAdvancedToggle = true }) {
   const currentIndex = SG_OPTION_BASES.findIndex(
     ([theta, phi]) => theta === value[0] && phi === value[1]
@@ -22,7 +25,7 @@ export function AxisStepper({ label, value, advanced, onStep, onSetAdvanced, onS
   return (
     <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', padding: '6px' }}>
       <label style={{ fontSize: '14px', fontWeight: '500', marginRight: '5px' }}>{label}</label>
-      {showAdvancedToggle && advanced ? (
+      {advanced ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <label style={{ width: '12px' }}>θ</label>

@@ -25,17 +25,28 @@ function StopIcon({ size = '0.9em' }) {
   );
 }
 
+// Fixed detector colors for each side -- colorId only lives on the up/down
+// objects themselves, so restoring a side's two detectors after a beam
+// block is unchecked (see setBlocked below) needs to know what to put back.
+const DETECTOR_COLOR_IDS = {
+  0: { up: 0, down: 1 }, // left
+  1: { up: 2, down: 3 }, // right
+};
+
 // Thin adapter from the generic AxisStepper (controls.jsx) to "this is
 // analyzer `index`'s own measurement basis" -- same role as the
-// Stern-Gerlach sim's SGBasisStepper, just without the "advanced" theta/phi
-// toggle or the chain-position bookkeeping that sim needs to support adding
-// and removing apparatuses (this sim always has exactly two: index 0, the
-// left analyzer measuring the left-going particle, and index 1, the right
-// one).
+// Stern-Gerlach sim's SGBasisStepper, plus this sim's own two additions:
+// the "Set by angles" toggle (rendered as its own button here, rather than
+// AxisStepper's built-in one, so it can sit on its own row alongside the
+// beam-block checkbox -- see the layout comment below) and the checkbox
+// itself. There's no chain-position bookkeeping to worry about, unlike the
+// Stern-Gerlach sim's version -- this sim always has exactly two analyzers:
+// index 0 measures the left-going particle, index 1 the right-going one.
 function AnalyzerStepper({ index, sg, setExperiment, disabled, resetDataCollection }) {
   const currentIndex = SG_OPTION_BASES.findIndex(
     ([theta, phi]) => theta === sg.basis[0] && phi === sg.basis[1]
   );
+  const label = index === 0 ? 'Left' : 'Right';
 
   const step = (delta) => {
     setExperiment((prev) => {
@@ -48,15 +59,78 @@ function AnalyzerStepper({ index, sg, setExperiment, disabled, resetDataCollecti
     resetDataCollection(); // a basis change is a setup change -- old counts no longer apply
   };
 
+  const setAngle = (which, value) => {
+    setExperiment((prev) => {
+      const next = [...prev];
+      const [theta, phi] = next[index].basis;
+      next[index] = { ...next[index], basis: which === 'theta' ? [value, phi] : [theta, value] };
+      return next;
+    });
+    resetDataCollection();
+  };
+
+  const setAdvanced = (advanced) => {
+    setExperiment((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], advanced };
+      return next;
+    });
+    // Not a basis change -- same angle, just a different way to edit it --
+    // so no resetDataCollection() here.
+  };
+
+  // Blocking a side swaps its SG + two detectors out for a single beam
+  // block: there's no analyzer basis to measure in any more, so up/down go
+  // to null (which also makes Histogram.jsx's getDetectors stop showing
+  // bars for them, the same way a Stern-Gerlach-sim arm with nothing placed
+  // on it shows no bar). Unblocking recreates fresh, zeroed detectors with
+  // this side's own fixed colors.
+  const setBlocked = (blocked) => {
+    setExperiment((prev) => {
+      const next = [...prev];
+      const colors = DETECTOR_COLOR_IDS[index];
+      next[index] = {
+        ...next[index],
+        blocked,
+        up: blocked ? null : { type: 'pc', data: 0, colorId: colors.up },
+        down: blocked ? null : { type: 'pc', data: 0, colorId: colors.down },
+      };
+      return next;
+    });
+    resetDataCollection();
+  };
+
   return (
-    <AxisStepper
-      label={`SG${index + 1} (${index === 0 ? 'Left' : 'Right'})`}
-      value={sg.basis}
-      advanced={false}
-      onStep={step}
-      showAdvancedToggle={false}
-      disabled={disabled}
-    />
+    // Label + stepper (or, once "Set by angles" is on, the theta/phi
+    // textboxes in its place) share one row; the toggle button and the
+    // beam-block checkbox sit on their own row underneath, so switching to
+    // angle entry never has to fight that row for horizontal space.
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+      <AxisStepper
+        label={label}
+        value={sg.basis}
+        advanced={sg.advanced}
+        onStep={step}
+        onSetAngle={setAngle}
+        showAdvancedToggle={false}
+        disabled={disabled || sg.blocked}
+      />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 6px 6px 6px' }}>
+        <button
+          type="button"
+          className={`control-bar-button advanced-toggle-button ${sg.advanced ? 'active' : ''}`}
+          aria-label={`Toggle advanced controls for ${label}`}
+          onClick={() => setAdvanced(!sg.advanced)}
+          disabled={disabled || sg.blocked}
+        >
+          {sg.advanced ? 'Set by axis' : 'Set by angles'}
+        </button>
+        <label style={{ fontSize: '13px' }}>
+          <input type="checkbox" checked={sg.blocked} onChange={(e) => setBlocked(e.target.checked)} disabled={disabled} />
+          Block this particle
+        </label>
+      </div>
+    </div>
   );
 }
 
@@ -64,8 +138,8 @@ function AnalyzerStepper({ index, sg, setExperiment, disabled, resetDataCollecti
 // distinguish the four *detectors* (left-up, left-down, right-up,
 // right-down), one PC_COLORS entry each, not the two particles themselves.
 const INITIAL_EXPERIMENT = [
-  { basis: [0, 0], up: { type: 'pc', data: 0, colorId: 0 }, down: { type: 'pc', data: 0, colorId: 1 } }, // SG1 -- left
-  { basis: [0, 0], up: { type: 'pc', data: 0, colorId: 2 }, down: { type: 'pc', data: 0, colorId: 3 } }, // SG2 -- right
+  { basis: [0, 0], advanced: false, blocked: false, up: { type: 'pc', data: 0, colorId: 0 }, down: { type: 'pc', data: 0, colorId: 1 } }, // left
+  { basis: [0, 0], advanced: false, blocked: false, up: { type: 'pc', data: 0, colorId: 2 }, down: { type: 'pc', data: 0, colorId: 3 } }, // right
 ];
 
 export default function App() {
@@ -112,8 +186,8 @@ export default function App() {
     setExpMode((prev) => ({ ...prev, running: false }));
     setExperiment((prev) => prev.map((sg) => ({
       ...sg,
-      up: { ...sg.up, data: 0 },
-      down: { ...sg.down, data: 0 },
+      up: sg.up ? { ...sg.up, data: 0 } : sg.up,
+      down: sg.down ? { ...sg.down, data: 0 } : sg.down,
     })));
   };
 
