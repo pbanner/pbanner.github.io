@@ -218,11 +218,25 @@ function buildBlockedLocalPath(axis) {
 }
 
 const LabPanel = forwardRef(function LabPanel(
-  { experiment, setExperiment, expMode, displayBools, setParticleCount, resetToken, tabVisible, hoveredDetector },
+  { experiment, setExperiment, expMode, displayBools, setParticleCount, resetToken, tabVisible, hoveredDetector, onCoincidence },
   ref
 ) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
+  // Ever-increasing id, shared by the two particles spawned from the same
+  // pair -- how the tick loop below recognizes which finished particles are
+  // partners. pendingCoincidencesRef holds, per pairId, whichever arm(s)
+  // have finished *so far*: each particle gets its own independent random
+  // transverse-offset jitter (see buildLocalPath), which gives the two
+  // sides of a pair very slightly different arc lengths and so very
+  // slightly different travel times -- often enough that they finish a
+  // frame or two apart rather than in the very same tick. Buffering
+  // whichever side finishes first here, across however many ticks it takes
+  // for its partner to show up, is what makes coincidence-crediting
+  // correct despite that -- crediting only same-tick finishes silently
+  // dropped a large fraction of genuine pairs in testing.
+  const nextPairIdRef = useRef(0);
+  const pendingCoincidencesRef = useRef(new Map());
   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
   const [axis, setAxis] = useState(300); // y-coordinate of halfway down the canvas
   const [ovenImageRef, ovenImageLoaded] = useImage(ovenImage);
@@ -456,6 +470,24 @@ const LabPanel = forwardRef(function LabPanel(
             });
             return next;
           });
+
+          // A coincidence is one *pair's* joint outcome, not each particle's
+          // own hit -- credit it once both of a pairId's particles have
+          // reached a detector, however many ticks apart that turns out to
+          // be (see pendingCoincidencesRef's own comment for why it can't
+          // assume "same tick").
+          if (onCoincidence) {
+            detectorHits.forEach((p) => {
+              const entry = pendingCoincidencesRef.current.get(p.pairId) ?? {};
+              entry[p.side] = p.arm;
+              if (entry.L && entry.R) {
+                onCoincidence(entry.L, entry.R);
+                pendingCoincidencesRef.current.delete(p.pairId);
+              } else {
+                pendingCoincidencesRef.current.set(p.pairId, entry);
+              }
+            });
+          }
         }
         particlesRef.current = particlesRef.current.filter((p) => !finished.includes(p));
         setParticleCount(particlesRef.current.length);
@@ -512,14 +544,18 @@ const LabPanel = forwardRef(function LabPanel(
     const { armL, armR } = samplePairOutcome(experiment[0].basis, experiment[1].basis);
     const leftBlocked = experiment[0].blocked;
     const rightBlocked = experiment[1].blocked;
+    // Both particles below share this same id -- it's how the tick loop's
+    // coincidence crediting recognizes them as one pair's two halves rather
+    // than two unrelated detector hits that happened to land together.
+    const pairId = nextPairIdRef.current++;
     particlesRef.current = [
       ...particlesRef.current,
       leftBlocked
-        ? { side: 'L', arm: null, blocked: true, segments: buildBlockedLocalPath(axis), segmentIndex: 0, segmentElapsed: 0 }
-        : { side: 'L', arm: armL, blocked: false, segments: buildLocalPath(axis, armL), segmentIndex: 0, segmentElapsed: 0 },
+        ? { side: 'L', arm: null, blocked: true, pairId, segments: buildBlockedLocalPath(axis), segmentIndex: 0, segmentElapsed: 0 }
+        : { side: 'L', arm: armL, blocked: false, pairId, segments: buildLocalPath(axis, armL), segmentIndex: 0, segmentElapsed: 0 },
       rightBlocked
-        ? { side: 'R', arm: null, blocked: true, segments: buildBlockedLocalPath(axis), segmentIndex: 0, segmentElapsed: 0 }
-        : { side: 'R', arm: armR, blocked: false, segments: buildLocalPath(axis, armR), segmentIndex: 0, segmentElapsed: 0 },
+        ? { side: 'R', arm: null, blocked: true, pairId, segments: buildBlockedLocalPath(axis), segmentIndex: 0, segmentElapsed: 0 }
+        : { side: 'R', arm: armR, blocked: false, pairId, segments: buildLocalPath(axis, armR), segmentIndex: 0, segmentElapsed: 0 },
     ];
     setParticleCount(particlesRef.current.length);
     if (rafRef.current === null) {
@@ -530,9 +566,14 @@ const LabPanel = forwardRef(function LabPanel(
 
   useImperativeHandle(ref, () => ({ spawnParticle }));
 
-  // Reset: clears every in-flight particle whenever App bumps resetToken
+  // Reset: clears every in-flight particle whenever App bumps resetToken,
+  // and any half-completed pair sitting in pendingCoincidencesRef -- an
+  // interrupted pair's still-in-flight partner is cleared right along with
+  // it, so it would otherwise sit there forever unmatched (harmless, but
+  // needless to keep around).
   useEffect(() => {
     particlesRef.current = [];
+    pendingCoincidencesRef.current.clear();
     setParticleCount(0);
   }, [resetToken, setParticleCount]);
 

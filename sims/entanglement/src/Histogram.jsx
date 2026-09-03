@@ -21,11 +21,6 @@ const MAX_BAR_WIDTH = 60;    // a bar never grows wider than this, however few d
 const ERROR_BAR_WIDTH_RATIO = 0.4;
 const BAR_LABEL_CLASH_HEIGHT = 18; // same-SG neighbors whose bars differ by at least this many px sit far enough apart vertically that their labels can't actually clash, so the horizontal offset is skipped
 const ERROR_BAR_WIDTH_MIN = 20;
-const LEGEND_WIDTH = 100;
-const LEGEND_GAP = 14;
-const LEGEND_PADDING = 8;
-const LEGEND_SWATCH_SIZE = 12;
-const LEGEND_ROW_HEIGHT = 18;
 const TOTAL_COLOR = '#303030';
 const THEORY_LINE_COLOR = '#707070';
 const THEORY_LINE_WIDTH = 2;
@@ -43,6 +38,70 @@ const HOVER_BORDER_WIDTH = 2.5;
 // generic "SG1"/"SG2" (which numbered an arbitrary, user-built chain).
 function sideLabel(sgIndex) {
   return sgIndex === 0 ? 'Left' : 'Right';
+}
+
+// Plain HTML/CSS, not canvas -- the joint (coincidence) counts this shows
+// replaced the old canvas-drawn legend (see the Histogram component's own
+// comment on `coincidences`), and a real <table> gets borders, shading, and
+// text alignment for free where hand-drawing the same grid in canvas would
+// have meant reimplementing all of that from scratch. `coincidences` is
+// { uu, ud, du, dd }, one count per joint outcome (u/d = up/down, first
+// letter the left particle's arm, second the right's) -- see App.jsx's
+// recordCoincidence for where these come from. The margins (row/column
+// sums) are exactly the same numbers as the main chart's Left/Right bars,
+// shown here too since that's the cross-check that makes a reader trust
+// the table: entanglement lives in the *joint* counts inside the box, not
+// in these marginal totals, which is why they're set apart with a rule
+// rather than folded into the grid.
+function CoincidenceTable({ coincidences, blocked }) {
+  if (blocked) {
+    return (
+      <div className="coincidence-table-empty">
+        No coincidences to show -- one side is blocked, so pairs are never
+        measured on both ends.
+      </div>
+    );
+  }
+
+  const { uu, ud, du, dd } = coincidences;
+  const leftUpMargin = uu + ud;
+  const leftDownMargin = du + dd;
+  const rightUpMargin = uu + du;
+  const rightDownMargin = ud + dd;
+
+  return (
+    <div className="coincidence-table-outer">
+      <table className="coincidence-table">
+        <tbody>
+          <tr>
+            <td className="ct-blank" />
+            <th className="ct-col-header">R&nbsp;&uarr;</th>
+            <th className="ct-col-header">R&nbsp;&darr;</th>
+            <td className="ct-blank" />
+          </tr>
+          <tr>
+            <th className="ct-row-header">L&nbsp;&uarr;</th>
+            <td className="ct-cell">{uu}</td>
+            <td className="ct-cell ct-opposite">{ud}</td>
+            <td className="ct-margin ct-row-margin">{leftUpMargin}</td>
+          </tr>
+          <tr>
+            <th className="ct-row-header">L&nbsp;&darr;</th>
+            <td className="ct-cell ct-opposite">{du}</td>
+            <td className="ct-cell">{dd}</td>
+            <td className="ct-margin ct-row-margin">{leftDownMargin}</td>
+          </tr>
+          <tr>
+            <td className="ct-blank" />
+            <td className="ct-margin ct-col-margin">{rightUpMargin}</td>
+            <td className="ct-margin ct-col-margin">{rightDownMargin}</td>
+            <td className="ct-blank" />
+          </tr>
+        </tbody>
+      </table>
+      <p className="coincidence-table-caption">shaded = opposite results<br />margins = the singles</p>
+    </div>
+  );
 }
 
 // Every PC currently placed in the experiment, in a stable left-to-right
@@ -79,7 +138,7 @@ function niceTicks(minTop, targetCount) {
   return ticks;
 }
 
-export default function Histogram({ experiment, displayBools, setDisplayBools }) {
+export default function Histogram({ experiment, displayBools, setDisplayBools, coincidences }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [canvasDims, setCanvasDims] = useState({ width: 300, height: 200 });
@@ -192,14 +251,8 @@ export default function Histogram({ experiment, displayBools, setDisplayBools })
     const maxTickLabelWidth = ticks.reduce((w, t) => Math.max(w, ctx.measureText(String(t)).width), 0);
     const paddingLeft = Y_AXIS_LABEL_MARGIN + Y_AXIS_LABEL_THICKNESS + TICK_LABEL_GAP + maxTickLabelWidth + TICK_LABEL_GAP;
 
-    const legendOn = displayBools.showLegend;
-    const legendX1 = width - PADDING_RIGHT;
-    const legendX0 = legendX1 - LEGEND_WIDTH;
-    const legendRowCount = detectors.length === 0 ? 1 : detectors.length + (theoryOn ? 1 : 0);
-    const legendBoxHeight = LEGEND_PADDING * 2 + legendRowCount * LEGEND_ROW_HEIGHT;
-
     const plotX0 = paddingLeft;
-    const plotX1 = legendOn ? legendX0 - LEGEND_GAP : width - PADDING_RIGHT;
+    const plotX1 = width - PADDING_RIGHT;
     const plotY0 = PADDING_TOP;
     const plotY1 = height - PADDING_BOTTOM;
 
@@ -378,45 +431,6 @@ export default function Histogram({ experiment, displayBools, setDisplayBools })
       });
     }
 
-    if (legendOn) {
-      const legendY0 = plotY0;
-      const legendY1 = legendY0 + legendBoxHeight;
-      ctx.strokeStyle = "#999999";
-      ctx.lineWidth = 1 * inkScale;
-      ctx.beginPath();
-      ctx.roundRect(legendX0, legendY0, LEGEND_WIDTH, legendY1 - legendY0, 5);
-      ctx.stroke()
-      ctx.font = `11px Arial`;
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      if (detectors.length === 0) {
-        ctx.fillStyle = TICK_LABEL_COLOR;
-        ctx.fillText('No detectors', legendX0 + LEGEND_PADDING, legendY0 + legendBoxHeight / 2);
-      } else {
-        detectors.forEach((d, i) => {
-          const rowY = legendY0 + LEGEND_PADDING + i * LEGEND_ROW_HEIGHT + LEGEND_ROW_HEIGHT / 2;
-          ctx.fillStyle = PC_COLORS[d.colorId] ?? '#999999';
-          ctx.fillRect(legendX0 + LEGEND_PADDING, rowY - LEGEND_SWATCH_SIZE / 2, LEGEND_SWATCH_SIZE, LEGEND_SWATCH_SIZE);
-          ctx.fillStyle = AXIS_COLOR;
-          ctx.fillText(`${sideLabel(d.sgIndex)} ${d.arm}`, legendX0 + LEGEND_PADDING + LEGEND_SWATCH_SIZE + 6, rowY);
-        });
-        // Add the theory line at the end
-        if (theoryOn) {
-          const rowY = legendY0 + LEGEND_PADDING + detectors.length * LEGEND_ROW_HEIGHT + LEGEND_ROW_HEIGHT / 2;
-          ctx.strokeStyle = THEORY_LINE_COLOR;
-          ctx.lineWidth = THEORY_LINE_WIDTH * inkScale;
-          //ctx.setLineDash(THEORY_LINE_DASH);
-          ctx.beginPath();
-          ctx.moveTo(legendX0 + LEGEND_PADDING, rowY);
-          ctx.lineTo(legendX0 + LEGEND_PADDING + LEGEND_SWATCH_SIZE, rowY);
-          ctx.stroke();
-          //ctx.setLineDash([]);
-          ctx.fillStyle = AXIS_COLOR;
-          ctx.fillText('Theoretical', legendX0 + LEGEND_PADDING + LEGEND_SWATCH_SIZE + 6, rowY);
-        }
-      }
-    }
-
     // Plot title
     ctx.fillStyle = TOTAL_COLOR;
     ctx.font = `bold 14px Arial`;
@@ -545,42 +559,54 @@ export default function Histogram({ experiment, displayBools, setDisplayBools })
   }, [magnifierOn, drawLoupe]);
 
   return (
-    <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
-      {/* Clipping layer holding the chart and the loupe. Being absolutely
-          positioned, it (and everything in it) drops out of the ancestors'
-          intrinsic-width calculation -- without this, the canvas's own
-          fixed pixel width feeds .histogram-panel's max-content, which
-          feeds the group's and .control-bar-content's, and since
-          .control-bar just scrolls (overflow-x: auto) rather than forcing
-          anything narrower, the canvas could only ever grow: nothing ever
-          shrank it back, so the ResizeObserver never fired again.
-          overflow: hidden then keeps the loupe from spilling past the
-          chart's bottom edge into the group's scrollable overflow (which
-          popped a vertical scrollbar, whose width in turn nudged the
-          layout and, via the same ratchet, never recovered).
-          The button deliberately sits OUTSIDE this layer so its negative
-          left offset isn't clipped. */}
-      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-        <canvas ref={canvasRef} style={{ display: 'block' }} />
-        {magnifierOn && (
-          <div ref={loupeWrapperRef} className="histogram-loupe" style={{ display: 'none' }}>
-            <canvas ref={loupeCanvasRef} />
-          </div>
-        )}
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'row', gap: '10px' }}>
+      {/* The chart's own allotted space -- containerRef (and so the
+          ResizeObserver above) measures only this div, not the table
+          alongside it, which is what lets the table claim a fixed slice of
+          width and the chart shrink to whatever's left, rather than the
+          chart always claiming the room and pushing the table out. */}
+      <div ref={containerRef} style={{ flex: '1 1 auto', minWidth: 0, height: '100%', position: 'relative' }}>
+        {/* Clipping layer holding the chart and the loupe. Being absolutely
+            positioned, it (and everything in it) drops out of the ancestors'
+            intrinsic-width calculation -- without this, the canvas's own
+            fixed pixel width feeds .histogram-panel's max-content, which
+            feeds the group's and .control-bar-content's, and since
+            .control-bar just scrolls (overflow-x: auto) rather than forcing
+            anything narrower, the canvas could only ever grow: nothing ever
+            shrank it back, so the ResizeObserver never fired again.
+            overflow: hidden then keeps the loupe from spilling past the
+            chart's bottom edge into the group's scrollable overflow (which
+            popped a vertical scrollbar, whose width in turn nudged the
+            layout and, via the same ratchet, never recovered).
+            The button deliberately sits OUTSIDE this layer so its negative
+            left offset isn't clipped. */}
+        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+          <canvas ref={canvasRef} style={{ display: 'block' }} />
+          {magnifierOn && (
+            <div ref={loupeWrapperRef} className="histogram-loupe" style={{ display: 'none' }}>
+              <canvas ref={loupeCanvasRef} />
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          className={`control-bar-button icon-only-button icon-only-button-square histogram-magnifier-toggle${magnifierOn ? ' active' : ''}`}
+          onClick={() => setMagnifierOn((on) => !on)}
+          title="Magnify"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <circle cx="11" cy="11" r="7" />
+            <line x1="16.2" y1="16.2" x2="21" y2="21" />
+            <line x1="11" y1="8" x2="11" y2="14" />
+            <line x1="8" y1="11" x2="14" y2="11" />
+          </svg>
+        </button>
       </div>
-      <button
-        type="button"
-        className={`control-bar-button icon-only-button icon-only-button-square histogram-magnifier-toggle${magnifierOn ? ' active' : ''}`}
-        onClick={() => setMagnifierOn((on) => !on)}
-        title="Magnify"
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-          <circle cx="11" cy="11" r="7" />
-          <line x1="16.2" y1="16.2" x2="21" y2="21" />
-          <line x1="11" y1="8" x2="11" y2="14" />
-          <line x1="8" y1="11" x2="14" y2="11" />
-        </svg>
-      </button>
+      {displayBools.showCoincidenceTable && (
+        <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center' }}>
+          <CoincidenceTable coincidences={coincidences} blocked={Boolean(experiment[0]?.blocked || experiment[1]?.blocked)} />
+        </div>
+      )}
     </div>
   );
 }

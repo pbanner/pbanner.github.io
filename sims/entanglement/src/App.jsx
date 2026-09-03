@@ -143,13 +143,17 @@ const INITIAL_EXPERIMENT = [
 ];
 
 export default function App() {
+  // setDisplayBools has no caller now that the grid checkbox below is
+  // commented out -- suppressed rather than removed, since re-enabling
+  // that checkbox needs it back.
+  // eslint-disable-next-line no-unused-vars
   const [displayBools, setDisplayBools] = useState({
     gridOn: true,
   });
   const [histDisplayBools, setHistDisplayBools] = useState({
     showPercentages: 2,    // 0 = counts only, 1 = percentages only, 2 = both
     showTheory: false,
-    showLegend: true,
+    showCoincidenceTable: true,
     showTotal: true,
     showErrorBars: false,
     hoveredDetector: null, // { sgIndex, arm } the mouse is over in the histogram, or null -- shared with LabPanel so it can highlight that detector
@@ -158,6 +162,16 @@ export default function App() {
   // stream mode. There's no `build` mode here -- the setup is fixed.
   const [expMode, setExpMode] = useState({ dc: 'single', running: false, rate: 20 });
   const [experiment, setExperiment] = useState(INITIAL_EXPERIMENT);
+  // Joint (coincidence) counts across both particles of a pair -- one entry
+  // per combination of arms, keyed the same way physics.js's
+  // jointProbabilities is (u/d = up/down, left letter first). This is
+  // separate from `experiment`'s own up/down.data counts, which are each
+  // detector's own *marginal* total and can't be un-mixed back into the
+  // four joint counts -- knowing "248 particles hit Left-down" doesn't say
+  // how many of those paired with a Right-up versus Right-down partner.
+  // LabPanel's recordCoincidence call (via its onCoincidence prop) is the
+  // only writer; Histogram's coincidence table is the only reader.
+  const [coincidences, setCoincidences] = useState({ uu: 0, ud: 0, du: 0, dd: 0 });
 
   // Pauses particle production (and, via the tabVisible prop, LabPanel's own
   // animation loop) while this tab isn't the active one -- same reasoning as
@@ -189,6 +203,16 @@ export default function App() {
       up: sg.up ? { ...sg.up, data: 0 } : sg.up,
       down: sg.down ? { ...sg.down, data: 0 } : sg.down,
     })));
+    setCoincidences({ uu: 0, ud: 0, du: 0, dd: 0 });
+  };
+
+  // LabPanel calls this once per pair, but only when *both* particles
+  // actually reached a detector (see its own tick loop) -- a blocked side
+  // never has a real arm to report, so a pair with either side blocked
+  // never gets here at all, and the table simply has nothing to show.
+  const recordCoincidence = (armL, armR) => {
+    const key = (armL === 'up' ? 'u' : 'd') + (armR === 'up' ? 'u' : 'd');
+    setCoincidences((prev) => ({ ...prev, [key]: prev[key] + 1 }));
   };
 
   const handleStartPause = () => {
@@ -222,6 +246,7 @@ export default function App() {
           resetToken={resetToken}
           tabVisible={tabVisible}
           hoveredDetector={histDisplayBools.hoveredDetector}
+          onCoincidence={recordCoincidence}
         />
       </div>
 
@@ -288,7 +313,7 @@ export default function App() {
           </div>
 
           {/* Histogram canvas area */}
-          <div className="control-bar-group" style={{ flexDirection: 'row', flex: '1 1 auto', gap: '10px', minWidth: histDisplayBools.showLegend ? '650px' : '450px' }}>
+          <div className="control-bar-group" style={{ flexDirection: 'row', flex: '1 1 auto', gap: '10px', minWidth: histDisplayBools.showCoincidenceTable ? '650px' : '450px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <h3 style={{ padding: '0px 0px 4px 0px' }}>Chart Options</h3>
               <div style={{ padding: '0px', display: 'flex', flexDirection: 'row', gap: '3px', alignItems: 'center' }}>
@@ -304,8 +329,8 @@ export default function App() {
                 Show error bars
               </label>
               <label style={{ padding: '0px 0 0 0' }}>
-                <input type="checkbox" checked={histDisplayBools.showLegend} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showLegend: e.target.checked })} />
-                Show legend
+                <input type="checkbox" checked={histDisplayBools.showCoincidenceTable} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showCoincidenceTable: e.target.checked })} />
+                Show coincidence table
               </label>
               <label style={{ padding: '0px 0 0 0' }}>
                 <input type="checkbox" checked={histDisplayBools.showTotal} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showTotal: e.target.checked })} />
@@ -319,7 +344,7 @@ export default function App() {
             </div>
             <div className="histogram-panel">
               <div className="histogram-canvas-wrap">
-                <Histogram experiment={experiment} displayBools={histDisplayBools} setDisplayBools={setHistDisplayBools} />
+                <Histogram experiment={experiment} displayBools={histDisplayBools} setDisplayBools={setHistDisplayBools} coincidences={coincidences} />
               </div>
             </div>
           </div>

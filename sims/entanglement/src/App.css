@@ -142,6 +142,76 @@
   height: 100%;
 }
 
+/* Coincidence table -- plain HTML/CSS, sitting alongside the histogram
+   canvas (not drawn on it); see Histogram.jsx's CoincidenceTable. */
+.coincidence-table-outer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.coincidence-table {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.coincidence-table th,
+.coincidence-table td {
+  padding: 5px 10px;
+  text-align: center;
+}
+
+.coincidence-table .ct-col-header,
+.coincidence-table .ct-row-header {
+  font-weight: 600;
+  color: #333;
+}
+
+.coincidence-table .ct-cell {
+  border: 1px solid #999;
+  min-width: 34px;
+  font-weight: 600;
+  color: #303030;
+}
+
+.coincidence-table .ct-cell.ct-opposite {
+  background: #e8ecfb;
+  border-color: #8fa0d8;
+}
+
+.coincidence-table .ct-margin {
+  color: #666;
+  font-weight: 500;
+}
+
+.coincidence-table .ct-row-margin {
+  border-left: 1px solid #999;
+}
+
+.coincidence-table .ct-col-margin {
+  border-top: 1px solid #999;
+}
+
+.coincidence-table .ct-blank {
+  border: none;
+}
+
+.coincidence-table-caption {
+  margin: 0;
+  font-size: 11px;
+  color: #888;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.coincidence-table-empty {
+  font-size: 13px;
+  color: #888;
+  text-align: center;
+  max-width: 150px;
+}
+
 .histogram-canvas-wrap canvas {
   display: block;
   width: 100%;
