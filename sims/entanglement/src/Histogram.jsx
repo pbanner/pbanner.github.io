@@ -40,6 +40,59 @@ function sideLabel(sgIndex) {
   return sgIndex === 0 ? 'Left' : 'Right';
 }
 
+// Local copy of canvasArrow.js's proportions (not exported from there) --
+// the table is plain HTML, so it can't call that module's canvas-only
+// drawArrow, but reproducing the exact same triangular-arrow shape as an
+// inline SVG path keeps it reading as the same "arrow" wherever it shows
+// up: bar labels, the on-canvas PC labels, and now these table headers.
+const ARROW_WIDTH_RATIO = 0.80;
+const ARROW_HEAD_RATIO = 0.50;
+const ARROW_STEM_RATIO = 0.16;
+
+function arrowPathD(size, direction) {
+  const headWidth = size * ARROW_WIDTH_RATIO;
+  const headHeight = size * ARROW_HEAD_RATIO;
+  const stemWidth = size * ARROW_STEM_RATIO;
+  const stemHeight = size - headHeight;
+  const half = size / 2;
+  const base = direction === 'down' ? 0 : size;  // the flat (stem) end's y
+  const tip = direction === 'down' ? size : 0;    // the pointed end's y
+  const sign = direction === 'down' ? -1 : 1;
+  const y1 = base;
+  const y2 = base - sign * stemHeight;
+  return [
+    `M ${half - stemWidth / 2} ${y1}`,
+    `L ${half - stemWidth / 2} ${y2}`,
+    `L ${half - headWidth / 2} ${y2}`,
+    `L ${half} ${tip}`,
+    `L ${half + headWidth / 2} ${y2}`,
+    `L ${half + stemWidth / 2} ${y2}`,
+    `L ${half + stemWidth / 2} ${y1}`,
+    'Z',
+  ].join(' ');
+}
+
+function TableArrow({ direction, size = 12 }) {
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: 'inline-block', verticalAlign: 'middle' }} aria-hidden="true">
+      <path d={arrowPathD(size, direction)} fill="currentColor" />
+    </svg>
+  );
+}
+
+// Enough horizontal room for a 5-digit count in every numeric cell, fixed
+// regardless of how many digits a count actually has right now. Sizing
+// cells to their own content instead used to make the table's own width
+// (and so the chart's own allotted space next to it -- see the comment on
+// containerRef below) shift every time a count crossed a digit boundary
+// (9 -> 10, 99 -> 100, ...), which fired the chart canvas's ResizeObserver
+// and produced a visible flash on every such resize -- frequent enough at
+// a high streaming rate to look like constant blinking. A fixed width
+// removes the resize trigger at its source rather than trying to debounce
+// or hide the resulting redraw.
+const CT_CELL_MIN_WIDTH = '9ch';
+const CT_BORDER = '1px solid #999';
+
 // Plain HTML/CSS, not canvas -- the joint (coincidence) counts this shows
 // replaced the old canvas-drawn legend (see the Histogram component's own
 // comment on `coincidences`), and a real <table> gets borders, shading, and
@@ -56,7 +109,7 @@ function sideLabel(sgIndex) {
 function CoincidenceTable({ coincidences, blocked }) {
   if (blocked) {
     return (
-      <div className="coincidence-table-empty">
+      <div style={{ fontSize: '13px', color: '#888', textAlign: 'center', maxWidth: '150px', margin: '0 16px' }}>
         No coincidences to show -- one side is blocked, so pairs are never
         measured on both ends.
       </div>
@@ -69,37 +122,43 @@ function CoincidenceTable({ coincidences, blocked }) {
   const rightUpMargin = uu + du;
   const rightDownMargin = ud + dd;
 
+  const headerStyle = { padding: '10px 10px', textAlign: 'center', fontWeight: 600, color: '#333' };
+  const cellStyle = { border: CT_BORDER, minWidth: CT_CELL_MIN_WIDTH, padding: '10px 10px', textAlign: 'center', fontWeight: 600, color: '#303030', fontVariantNumeric: 'tabular-nums' };
+  const oppositeStyle = { ...cellStyle, background: '#e8ecfb', borderColor: '#8fa0d8' };
+  const marginStyle = { minWidth: CT_CELL_MIN_WIDTH, padding: '10px 10px', textAlign: 'center', fontWeight: 500, color: '#666', fontVariantNumeric: 'tabular-nums' };
+  const blankStyle = { border: 'none', padding: '10px 10px' };
+
   return (
-    <div className="coincidence-table-outer">
-      <table className="coincidence-table">
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', margin: '0 16px' }}>
+      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#303030' }}>Coincidence Counts</h4>
+      <table style={{ borderCollapse: 'collapse', fontSize: '13px' }}>
         <tbody>
           <tr>
-            <td className="ct-blank" />
-            <th className="ct-col-header">R&nbsp;&uarr;</th>
-            <th className="ct-col-header">R&nbsp;&darr;</th>
-            <td className="ct-blank" />
+            <td style={blankStyle} />
+            <th style={headerStyle}>R <TableArrow direction="up" /></th>
+            <th style={headerStyle}>R <TableArrow direction="down" /></th>
+            <td style={blankStyle} />
           </tr>
           <tr>
-            <th className="ct-row-header">L&nbsp;&uarr;</th>
-            <td className="ct-cell">{uu}</td>
-            <td className="ct-cell ct-opposite">{ud}</td>
-            <td className="ct-margin ct-row-margin">{leftUpMargin}</td>
+            <th style={headerStyle}>L <TableArrow direction="up" /></th>
+            <td style={cellStyle}>{uu}</td>
+            <td style={oppositeStyle}>{ud}</td>
+            <td style={{ ...marginStyle, borderLeft: CT_BORDER }}>{leftUpMargin}</td>
           </tr>
           <tr>
-            <th className="ct-row-header">L&nbsp;&darr;</th>
-            <td className="ct-cell ct-opposite">{du}</td>
-            <td className="ct-cell">{dd}</td>
-            <td className="ct-margin ct-row-margin">{leftDownMargin}</td>
+            <th style={headerStyle}>L <TableArrow direction="down" /></th>
+            <td style={oppositeStyle}>{du}</td>
+            <td style={cellStyle}>{dd}</td>
+            <td style={{ ...marginStyle, borderLeft: CT_BORDER }}>{leftDownMargin}</td>
           </tr>
           <tr>
-            <td className="ct-blank" />
-            <td className="ct-margin ct-col-margin">{rightUpMargin}</td>
-            <td className="ct-margin ct-col-margin">{rightDownMargin}</td>
-            <td className="ct-blank" />
+            <td style={blankStyle} />
+            <td style={{ ...marginStyle, borderTop: CT_BORDER }}>{rightUpMargin}</td>
+            <td style={{ ...marginStyle, borderTop: CT_BORDER }}>{rightDownMargin}</td>
+            <td style={blankStyle} />
           </tr>
         </tbody>
       </table>
-      <p className="coincidence-table-caption">shaded = opposite results<br />margins = the singles</p>
     </div>
   );
 }
@@ -436,7 +495,7 @@ export default function Histogram({ experiment, displayBools, setDisplayBools, c
     ctx.font = `bold 14px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('Experimental Data' + (displayBools.showTotal ? ` (N = ${dataTotal})` : ''), (plotX0 + plotX1)/2, PADDING_TOP / 2);
+    ctx.fillText('Single-Detector Counts' + (displayBools.showTotal ? ` (N = ${dataTotal})` : ''), (plotX0 + plotX1)/2, PADDING_TOP / 2);
     }, [experiment, displayBools, canvasDims]);
 
   // Renders the loupe: re-runs the exact same drawHistogram routine against
