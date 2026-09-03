@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { samplePairOutcome } from './physics';
 import { PC_COLORS } from './colors';
-import { drawArrow } from './canvasArrow';
+import { drawArrow, arrowWidth } from './canvasArrow';
 import sgImage from './assets/sg/SG.png';
 import pcImage from './assets/sg/PC.png';
 import bbImage from './assets/sg/BB.png';
@@ -346,8 +346,25 @@ const LabPanel = forwardRef(function LabPanel(
           ctx.font = 'bold 12px Arial';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          drawUnflippedText(ctx, side, label, PC_TEXT_CENTER_X, PC_LABEL_CENTER_Y - 7);
-          drawArrow(ctx, PC_TEXT_CENTER_X, PC_LABEL_CENTER_Y + 8, 11, arm === 'up' ? 'up' : 'down');
+          const labelArrowSize = 11;
+          const labelArrowGap = 3;
+          const labelTextWidth = ctx.measureText(label).width;
+          const labelRowWidth = labelTextWidth + labelArrowGap + arrowWidth(labelArrowSize);
+          const labelRowX0 = PC_TEXT_CENTER_X - labelRowWidth / 2;
+          // Local +x maps to screen +x on the right side but screen -x on
+          // the (mirrored) left side -- see withSide -- so whichever piece
+          // gets the smaller *local* x has to flip too, to keep the
+          // on-screen reading order "label, then arrow" the same on both
+          // sides rather than reversing along with the mirror.
+          const labelFirst = side === 'R';
+          const firstWidth = labelFirst ? labelTextWidth : arrowWidth(labelArrowSize);
+          const secondWidth = labelFirst ? arrowWidth(labelArrowSize) : labelTextWidth;
+          const firstCenterX = labelRowX0 + firstWidth / 2;
+          const secondCenterX = labelRowX0 + firstWidth + labelArrowGap + secondWidth / 2;
+          const labelCenterX = labelFirst ? firstCenterX : secondCenterX;
+          const arrowCenterX = labelFirst ? secondCenterX : firstCenterX;
+          drawUnflippedText(ctx, side, label, labelCenterX, PC_LABEL_CENTER_Y);
+          drawArrow(ctx, arrowCenterX, PC_LABEL_CENTER_Y, labelArrowSize, arm === 'up' ? 'up' : 'down');
 
           // Running count
           ctx.fillStyle = PC_COLORS[detector.colorId];
