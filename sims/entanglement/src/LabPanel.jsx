@@ -19,7 +19,7 @@ import ovenOffImage from './assets/sg/ovenOff.png';
 // a small coordinate transform (see withSide, below) that places and mirrors
 // each copy without needing two separately-derived sets of formulas.
 const OVEN_HEIGHT = 100;
-const OVEN_WIDTH = Math.round(OVEN_HEIGHT * (992 / 654));
+const OVEN_WIDTH = Math.round(OVEN_HEIGHT * (1177 / 654));
 const SG_WIDTH = 160;
 const SG_HEIGHT = 90;
 const SG_GAP = 98;   // gap between the oven's edge and the SG's near (input) edge -- matches the Stern-Gerlach sim's 300 - 50 - 152
