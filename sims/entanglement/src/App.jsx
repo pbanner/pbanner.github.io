@@ -241,6 +241,7 @@ export default function App() {
               />
             ))}
 
+            {/*
             <h3 style={{ margin: '8px 0 8px 0', fontWeight: 'bold' }}>Display Options</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '0 0 0 2px' }}>
               <label>
@@ -248,6 +249,7 @@ export default function App() {
                 Show grid
               </label>
             </div>
+            */}
           </div>
 
           {/* Data Collection Controls */}
