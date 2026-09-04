@@ -7,6 +7,17 @@
   background: #fff;
 }
 
+/* Everything above the bottom control bar: the canvas and, alongside it,
+   the Source Controls sidebar. Sharing this row (rather than the sidebar
+   living inside .app-layout's own column flow some other way) is what
+   makes it span full height down to the bottom bar's own top edge. */
+.top-row {
+  display: flex;
+  flex-direction: row;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 /* Canvas Area */
 .canvas-area {
   flex: 1;
@@ -15,6 +26,37 @@
   align-items: center;
   background: #fafafa;
   overflow: hidden;
+}
+
+/* Source Controls -- a fixed width (not sized to its own content) matters
+   here: LabPanel's canvas only re-measures its container on an actual
+   window 'resize' event (see LabPanel.jsx), not via a ResizeObserver, which
+   is fine only as long as canvas-area's own width is a pure function of the
+   window's width. A sidebar whose width instead depended on its content
+   (e.g. growing when a wider Bell-state label appears) would silently
+   leave the canvas stale between real window resizes. */
+.source-sidebar {
+  width: 260px;
+  flex: 0 0 260px;
+  background: #f5f5f5;
+  border-left: 1px solid #ddd;
+  padding: 12px 14px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
+  text-align: left;
+  font-size: 13px;
+}
+
+.source-sidebar h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.source-sidebar select {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* Bottom control bar */

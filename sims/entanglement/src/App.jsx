@@ -4,6 +4,9 @@ import LabPanel from './LabPanel';
 import Histogram from './Histogram';
 import { AxisStepper, SliderPlusTextboxControl } from './controls';
 import { SG_OPTION_LABELS, SG_OPTION_BASES } from './axisOptions';
+import { BELL_STATES } from './physics';
+import Ket from './ket';
+import ArrowIcon from './arrowIcon';
 
 // Unicode glyphs (▶ ⏸) bake their own, font-dependent vertical padding into
 // the glyph box, so flexbox centering lines up the boxes but not the visible
@@ -134,9 +137,140 @@ function AnalyzerStepper({ index, sg, setExperiment, disabled, resetDataCollecti
   );
 }
 
-// The oven always emits a pair in the singlet state; the two colors here
-// distinguish the four *detectors* (left-up, left-down, right-up,
-// right-down), one PC_COLORS entry each, not the two particles themselves.
+// A ket holding one two-particle up/down-Z basis state, e.g. |up,up> or
+// |up,down> -- the arrow pair is the actual content, sized down slightly
+// from the ket's own size so the two arrows plus the brackets read as one
+// balanced unit rather than the arrows crowding the brackets.
+function SpinKet({ arms, size = 16 }) {
+  return (
+    <Ket size={size}>
+      <ArrowIcon direction={arms[0]} size={size * 0.7} />
+      <ArrowIcon direction={arms[1]} size={size * 0.7} />
+    </Ket>
+  );
+}
+
+// One Bell state's own up/down-Z decomposition, e.g. "|up,down> - |down,up>"
+// for psiMinus -- built from that state's `terms` (physics.js's own plain
+// data, not JSX, so that file stays UI-free): each term is either an
+// [arm, arm] pair (rendered as a SpinKet) or a bare '+'/'-' operator
+// (rendered as text).
+function BellStateExpression({ bell, size = 16 }) {
+  return bell.terms.map((term, i) => (
+    Array.isArray(term)
+      ? <SpinKet key={i} arms={term} size={size} />
+      : <span key={i}>{` ${term} `}</span>
+  ));
+}
+
+// The "Source Controls" sidebar: picks what the oven emits each pair in --
+// a classical hidden-variable mixture, one of the four Bell states, or an
+// arbitrary custom quantum state -- and owns just enough state (sourceType,
+// plus one slot each for the Bell and custom sub-choices) for App to derive
+// the actual `source` object physics.js expects. sourceType alone decides
+// which of the other two is *used*; both persist across switches, so
+// flipping the dropdown back and forth doesn't lose a custom state you'd
+// already typed in.
+function SourceControls({ sourceType, setSourceType, bellKey, setBellKey, customCoeffs, setCustomCoeffs, disabled, resetDataCollection }) {
+  const selectedBell = BELL_STATES.find((b) => b.key === bellKey);
+
+  const changeType = (type) => {
+    setSourceType(type);
+    resetDataCollection(); // a different source is a setup change -- old counts no longer apply
+  };
+  const changeBell = (key) => {
+    setBellKey(key);
+    resetDataCollection();
+  };
+  const changeCoeff = (which, value) => {
+    setCustomCoeffs((prev) => ({ ...prev, [which]: value }));
+    resetDataCollection();
+  };
+
+  return (
+    <>
+      <h3 style={{ margin: '0 0 10px 0', fontWeight: 'bold' }}>Source Controls</h3>
+      <select
+        value={sourceType}
+        onChange={(e) => changeType(e.target.value)}
+        disabled={disabled}
+        style={{ width: '100%', padding: '6px', fontSize: '13px' }}
+      >
+        <option value="classical">Classical (Mixed)</option>
+        <option value="bell">Quantum Bell State</option>
+        <option value="custom">Quantum Custom State</option>
+      </select>
+
+      {sourceType === 'classical' && (
+        <p style={{ fontSize: '13px', margin: '10px 0 0 0', lineHeight: '1.6' }}>
+          A 50/50 mixture of <SpinKet arms={['up', 'up']} /> and <SpinKet arms={['down', 'down']} /> --
+          each pair definitely has one of these two states, never a superposition of them.
+        </p>
+      )}
+
+      {sourceType === 'bell' && (
+        <>
+          <div style={{ display: 'flex', gap: '6px', margin: '10px 0 10px 0' }}>
+            {BELL_STATES.map((b) => (
+              <button
+                key={b.key}
+                type="button"
+                className={`control-bar-button ${bellKey === b.key ? 'active' : ''}`}
+                style={{ flex: 1, aspectRatio: '1 / 1', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
+                onClick={() => changeBell(b.key)}
+                disabled={disabled}
+                aria-label={`Select the ${b.letter}${b.sign} Bell state`}
+              >
+                <Ket size={22}>{b.letter}{b.sign}</Ket>
+              </button>
+            ))}
+          </div>
+          <p style={{ fontSize: '13px', margin: 0, lineHeight: '1.6' }}>
+            <Ket size={16}>{selectedBell.letter}{selectedBell.sign}</Ket> = (<BellStateExpression bell={selectedBell} />)/√2
+          </p>
+        </>
+      )}
+
+      {sourceType === 'custom' && (
+        <>
+          <p style={{ fontSize: '13px', margin: '10px 0 8px 0', lineHeight: '1.6' }}>
+            <span style={{ whiteSpace: 'nowrap' }}>a<SpinKet arms={['up', 'up']} size={14} /></span>{' + '}
+            <span style={{ whiteSpace: 'nowrap' }}>b<SpinKet arms={['up', 'down']} size={14} /></span>{' + '}
+            <span style={{ whiteSpace: 'nowrap' }}>c<SpinKet arms={['down', 'up']} size={14} /></span>{' + '}
+            <span style={{ whiteSpace: 'nowrap' }}>d<SpinKet arms={['down', 'down']} size={14} /></span>
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {['a', 'b', 'c', 'd'].map((k) => (
+              <label key={k} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+                <span style={{ minWidth: '24px', whiteSpace: 'nowrap' }}>{k} =</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={customCoeffs[k]}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    if (!Number.isNaN(v)) changeCoeff(k, v);
+                  }}
+                  disabled={disabled}
+                  style={{ width: '80px', padding: '2px' }}
+                />
+              </label>
+            ))}
+          </div>
+          <p style={{ fontSize: '12px', color: '#666', margin: '8px 0 0 0', lineHeight: '1.5' }}>
+            Coefficients don't need to be normalized -- (1, 0, 0, 1) works
+            just as well as (1/√2, 0, 0, 1/√2).
+          </p>
+        </>
+      )}
+    </>
+  );
+}
+
+// The oven always emits a pair in whatever state Source Controls has
+// selected; the two colors here distinguish the four *detectors* (left-up,
+// left-down, right-up, right-down), one PC_COLORS entry each, not the two
+// particles themselves.
 const INITIAL_EXPERIMENT = [
   { basis: [0, 0], advanced: false, blocked: false, up: { type: 'pc', data: 0, colorId: 0 }, down: { type: 'pc', data: 0, colorId: 1 } }, // left
   { basis: [0, 0], advanced: false, blocked: false, up: { type: 'pc', data: 0, colorId: 2 }, down: { type: 'pc', data: 0, colorId: 3 } }, // right
@@ -172,6 +306,30 @@ export default function App() {
   // LabPanel's recordCoincidence call (via its onCoincidence prop) is the
   // only writer; Histogram's coincidence table is the only reader.
   const [coincidences, setCoincidences] = useState({ uu: 0, ud: 0, du: 0, dd: 0 });
+
+  // What the oven emits each pair in -- see physics.js's own comment on the
+  // `source` shape this ultimately builds. sourceType picks which of the
+  // other two is actually used; bellKey and customCoeffs each keep their
+  // own state regardless, so switching the dropdown back and forth doesn't
+  // lose a custom state already typed in. Defaults reproduce this sim's
+  // original, Source-Controls-less behavior exactly: sourceType 'bell' with
+  // bellKey 'psiMinus' is the singlet.
+  const [sourceType, setSourceType] = useState('bell');
+  const [bellKey, setBellKey] = useState('psiMinus');
+  const [customCoeffs, setCustomCoeffs] = useState({ a: 1, b: 0, c: 0, d: 1 });
+  const source = sourceType === 'classical'
+    ? { kind: 'classical' }
+    : sourceType === 'bell'
+      ? { kind: 'quantum', coeffs: BELL_STATES.find((b) => b.key === bellKey).coeffs }
+      : {
+          kind: 'quantum',
+          coeffs: {
+            uu: { re: customCoeffs.a, im: 0 },
+            ud: { re: customCoeffs.b, im: 0 },
+            du: { re: customCoeffs.c, im: 0 },
+            dd: { re: customCoeffs.d, im: 0 },
+          },
+        };
 
   // Pauses particle production (and, via the tabVisible prop, LabPanel's own
   // animation loop) while this tab isn't the active one -- same reasoning as
@@ -234,23 +392,42 @@ export default function App() {
 
   return (
     <div className="app-layout">
-      {/* Main Canvas Area */}
-      <div className="canvas-area">
-        <LabPanel
-          ref={labPanelRef}
-          experiment={experiment}
-          setExperiment={setExperiment}
-          expMode={expMode}
-          displayBools={displayBools}
-          setParticleCount={setParticleCount}
-          resetToken={resetToken}
-          tabVisible={tabVisible}
-          hoveredDetector={histDisplayBools.hoveredDetector}
-          onCoincidence={recordCoincidence}
-        />
+      {/* Everything above the bottom control bar: the canvas and, alongside
+          it, the Source Controls sidebar -- sharing this row is what makes
+          the sidebar span full height down to the bottom bar's own top
+          edge, rather than sitting inside or below it. */}
+      <div className="top-row">
+        <div className="canvas-area">
+          <LabPanel
+            ref={labPanelRef}
+            experiment={experiment}
+            setExperiment={setExperiment}
+            expMode={expMode}
+            displayBools={displayBools}
+            setParticleCount={setParticleCount}
+            resetToken={resetToken}
+            tabVisible={tabVisible}
+            hoveredDetector={histDisplayBools.hoveredDetector}
+            onCoincidence={recordCoincidence}
+            source={source}
+          />
+        </div>
+
+        <aside className="source-sidebar">
+          <SourceControls
+            sourceType={sourceType}
+            setSourceType={setSourceType}
+            bellKey={bellKey}
+            setBellKey={setBellKey}
+            customCoeffs={customCoeffs}
+            setCustomCoeffs={setCustomCoeffs}
+            disabled={controlsLocked}
+            resetDataCollection={resetDataCollection}
+          />
+        </aside>
       </div>
 
-      {/* Right Sidebar */}
+      {/* Bottom Sidebar */}
       <aside className="control-bar">
         <div className="control-bar-content">
           <div className="control-bar-group">
@@ -344,7 +521,7 @@ export default function App() {
             </div>
             <div className="histogram-panel">
               <div className="histogram-canvas-wrap">
-                <Histogram experiment={experiment} displayBools={histDisplayBools} setDisplayBools={setHistDisplayBools} coincidences={coincidences} />
+                <Histogram experiment={experiment} displayBools={histDisplayBools} setDisplayBools={setHistDisplayBools} coincidences={coincidences} source={source} />
               </div>
             </div>
           </div>
