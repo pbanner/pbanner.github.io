@@ -158,7 +158,7 @@ function niceTicks(minTop, targetCount) {
   return ticks;
 }
 
-export default function Histogram({ experiment, displayBools, setDisplayBools, coincidences }) {
+export default function Histogram({ experiment, displayBools, setDisplayBools, coincidences, source }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [canvasDims, setCanvasDims] = useState({ width: 300, height: 200 });
@@ -241,7 +241,7 @@ export default function Histogram({ experiment, displayBools, setDisplayBools, c
     const theoryOn = displayBools.showTheory;
     const theoryMap = theoryOn
       ? (() => {
-          const theoryList = theoreticalProbabilities(experiment);
+          const theoryList = theoreticalProbabilities(experiment, source);
           const theorySum = theoryList.reduce((s, t) => s + t.prob, 0);
           return new Map(theoryList.map((t) => [`${t.sgIndex}-${t.arm}`, theorySum > 0 ? t.prob / theorySum : 0]));
         })()
@@ -457,7 +457,7 @@ export default function Histogram({ experiment, displayBools, setDisplayBools, c
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('Single-Detector Counts' + (displayBools.showTotal ? ` (N = ${dataTotal})` : ''), (plotX0 + plotX1)/2, PADDING_TOP / 2);
-    }, [experiment, displayBools, canvasDims]);
+    }, [experiment, displayBools, canvasDims, source]);
 
   // Renders the loupe: re-runs the exact same drawHistogram routine against
   // the loupe's own canvas, but first stacks a translate/scale/translate

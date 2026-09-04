@@ -218,7 +218,7 @@ function buildBlockedLocalPath(axis) {
 }
 
 const LabPanel = forwardRef(function LabPanel(
-  { experiment, setExperiment, expMode, displayBools, setParticleCount, resetToken, tabVisible, hoveredDetector, onCoincidence },
+  { experiment, setExperiment, expMode, displayBools, setParticleCount, resetToken, tabVisible, hoveredDetector, onCoincidence, source },
   ref
 ) {
   const canvasRef = useRef(null);
@@ -532,7 +532,7 @@ const LabPanel = forwardRef(function LabPanel(
   }, [tabVisible]);
 
   // Spawns one *pair*: both particles' arms are drawn together from the
-  // joint singlet distribution (samplePairOutcome), then each gets its own
+  // oven's current source (samplePairOutcome), then each gets its own
   // independent animation path -- same length on both sides (a straight run
   // plus one fixed-angle arc), so the pair reads as leaving the oven and
   // arriving at their detectors together. A blocked side still needs a
@@ -541,7 +541,7 @@ const LabPanel = forwardRef(function LabPanel(
   // discarded -- that particle gets the short "walk into the wall" path
   // instead, and is never credited to a detector.
   const spawnParticle = () => {
-    const { armL, armR } = samplePairOutcome(experiment[0].basis, experiment[1].basis);
+    const { armL, armR } = samplePairOutcome(experiment[0].basis, experiment[1].basis, source);
     const leftBlocked = experiment[0].blocked;
     const rightBlocked = experiment[1].blocked;
     // Both particles below share this same id -- it's how the tick loop's
