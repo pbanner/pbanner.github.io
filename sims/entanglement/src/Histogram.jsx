@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { theoreticalProbabilities } from './physics';
 import { PC_COLORS } from './colors';
 import { arrowWidth, drawArrow } from './canvasArrow';
+import ArrowIcon from './arrowIcon';
 
 // Plot layout -- all tunable
 const PADDING_TOP = 25;
@@ -38,46 +39,6 @@ const HOVER_BORDER_WIDTH = 2.5;
 // generic "SG1"/"SG2" (which numbered an arbitrary, user-built chain).
 function sideLabel(sgIndex) {
   return sgIndex === 0 ? 'Left' : 'Right';
-}
-
-// Local copy of canvasArrow.js's proportions (not exported from there) --
-// the table is plain HTML, so it can't call that module's canvas-only
-// drawArrow, but reproducing the exact same triangular-arrow shape as an
-// inline SVG path keeps it reading as the same "arrow" wherever it shows
-// up: bar labels, the on-canvas PC labels, and now these table headers.
-const ARROW_WIDTH_RATIO = 0.80;
-const ARROW_HEAD_RATIO = 0.50;
-const ARROW_STEM_RATIO = 0.16;
-
-function arrowPathD(size, direction) {
-  const headWidth = size * ARROW_WIDTH_RATIO;
-  const headHeight = size * ARROW_HEAD_RATIO;
-  const stemWidth = size * ARROW_STEM_RATIO;
-  const stemHeight = size - headHeight;
-  const half = size / 2;
-  const base = direction === 'down' ? 0 : size;  // the flat (stem) end's y
-  const tip = direction === 'down' ? size : 0;    // the pointed end's y
-  const sign = direction === 'down' ? -1 : 1;
-  const y1 = base;
-  const y2 = base - sign * stemHeight;
-  return [
-    `M ${half - stemWidth / 2} ${y1}`,
-    `L ${half - stemWidth / 2} ${y2}`,
-    `L ${half - headWidth / 2} ${y2}`,
-    `L ${half} ${tip}`,
-    `L ${half + headWidth / 2} ${y2}`,
-    `L ${half + stemWidth / 2} ${y2}`,
-    `L ${half + stemWidth / 2} ${y1}`,
-    'Z',
-  ].join(' ');
-}
-
-function TableArrow({ direction, size = 12 }) {
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: 'inline-block', verticalAlign: 'middle' }} aria-hidden="true">
-      <path d={arrowPathD(size, direction)} fill="currentColor" />
-    </svg>
-  );
 }
 
 // Enough horizontal room for a 5-digit count in every numeric cell, fixed
@@ -135,18 +96,18 @@ function CoincidenceTable({ coincidences, blocked }) {
         <tbody>
           <tr>
             <td style={blankStyle} />
-            <th style={headerStyle}>R <TableArrow direction="up" /></th>
-            <th style={headerStyle}>R <TableArrow direction="down" /></th>
+            <th style={headerStyle}>R <ArrowIcon direction="up" /></th>
+            <th style={headerStyle}>R <ArrowIcon direction="down" /></th>
             <td style={blankStyle} />
           </tr>
           <tr>
-            <th style={headerStyle}>L <TableArrow direction="up" /></th>
+            <th style={headerStyle}>L <ArrowIcon direction="up" /></th>
             <td style={cellStyle}>{uu}</td>
             <td style={oppositeStyle}>{ud}</td>
             <td style={{ ...marginStyle, borderLeft: CT_BORDER }}>{leftUpMargin}</td>
           </tr>
           <tr>
-            <th style={headerStyle}>L <TableArrow direction="down" /></th>
+            <th style={headerStyle}>L <ArrowIcon direction="down" /></th>
             <td style={oppositeStyle}>{du}</td>
             <td style={cellStyle}>{dd}</td>
             <td style={{ ...marginStyle, borderLeft: CT_BORDER }}>{leftDownMargin}</td>
