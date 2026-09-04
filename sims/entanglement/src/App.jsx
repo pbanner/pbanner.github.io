@@ -5,8 +5,7 @@ import Histogram from './Histogram';
 import { AxisStepper, SliderPlusTextboxControl } from './controls';
 import { SG_OPTION_LABELS, SG_OPTION_BASES } from './axisOptions';
 import { BELL_STATES } from './physics';
-import Ket from './ket';
-import ArrowIcon from './arrowIcon';
+import TeX from './TeX';
 
 // Unicode glyphs (▶ ⏸) bake their own, font-dependent vertical padding into
 // the glyph box, so flexbox centering lines up the boxes but not the visible
@@ -138,30 +137,38 @@ function AnalyzerStepper({ index, sg, setExperiment, disabled, resetDataCollecti
 }
 
 // A ket holding one two-particle up/down-Z basis state, e.g. |up,up> or
-// |up,down> -- the arrow pair is the actual content, sized down slightly
-// from the ket's own size so the two arrows plus the brackets read as one
-// balanced unit rather than the arrows crowding the brackets.
-function SpinKet({ arms, size = 16 }) {
-  return (
-    <Ket size={size}>
-      <ArrowIcon direction={arms[0]} size={size * 0.7} />
-      <ArrowIcon direction={arms[1]} size={size * 0.7} />
-    </Ket>
-  );
+// |up,down> -- built as a LaTeX string for TeX (KaTeX) to render, rather
+// than hand-drawing the brackets: KaTeX ships its own math fonts, so it
+// renders "|", "up_arrow"/"down_arrow", and "⟩" as one properly-kerned,
+// consistently-sized unit with no per-call-site tuning needed, unlike this
+// sim's first attempt at this (a hand-drawn SVG bracket around a hand-drawn
+// SVG arrow), which never quite matched the surrounding text's own size or
+// stroke weight.
+const ARM_TEX = { up: '\\uparrow', down: '\\downarrow' };
+function spinKetTex(arms) {
+  return `\\ket{${ARM_TEX[arms[0]]}${ARM_TEX[arms[1]]}}`;
 }
 
-// One Bell state's own up/down-Z decomposition, e.g. "|up,down> - |down,up>"
-// for psiMinus -- built from that state's `terms` (physics.js's own plain
-// data, not JSX, so that file stays UI-free): each term is either an
-// [arm, arm] pair (rendered as a SpinKet) or a bare '+'/'-' operator
-// (rendered as text).
-function BellStateExpression({ bell, size = 16 }) {
-  return bell.terms.map((term, i) => (
-    Array.isArray(term)
-      ? <SpinKet key={i} arms={term} size={size} />
-      : <span key={i}>{` ${term} `}</span>
-  ));
+// physics.js's BELL_STATES stores each state's own Greek letter as a plain
+// Unicode character (so that file stays free of any UI/LaTeX dependency);
+// this is the one place that gets mapped to the matching LaTeX macro.
+const GREEK_TEX = { 'Φ': '\\Phi', 'Ψ': '\\Psi' };
+function bellLabelTex(bell) {
+  return `\\ket{${GREEK_TEX[bell.letter]}^${bell.sign}}`;
 }
+
+// One Bell state's full expression, e.g. "|Psi^-> = 1/sqrt(2) (|up,down> -
+// |down,up>)" for psiMinus -- built from that state's `terms` (physics.js's
+// own plain data, not LaTeX, so that file stays UI-free): each term is
+// either an [arm, arm] pair (rendered via spinKetTex) or a bare '+'/'-'
+// operator (passed through as-is).
+function bellExpressionTex(bell) {
+  const body = bell.terms.map((term) => (Array.isArray(term) ? spinKetTex(term) : term)).join(' ');
+  return `${bellLabelTex(bell)} = \\frac{1}{\\sqrt{2}}\\left(${body}\\right)`;
+}
+
+const CUSTOM_STATE_FORMULA_TEX =
+  `a${spinKetTex(['up', 'up'])} + b${spinKetTex(['up', 'down'])} + c${spinKetTex(['down', 'up'])} + d${spinKetTex(['down', 'down'])}`;
 
 // The "Source Controls" sidebar: picks what the oven emits each pair in --
 // a classical hidden-variable mixture, one of the four Bell states, or an
@@ -203,7 +210,7 @@ function SourceControls({ sourceType, setSourceType, bellKey, setBellKey, custom
 
       {sourceType === 'classical' && (
         <p style={{ fontSize: '13px', margin: '10px 0 0 0', lineHeight: '1.6' }}>
-          A 50/50 mixture of <SpinKet arms={['up', 'up']} /> and <SpinKet arms={['down', 'down']} /> --
+          A 50/50 mixture of <TeX math={spinKetTex(['up', 'up'])} /> and <TeX math={spinKetTex(['down', 'down'])} /> --
           each pair definitely has one of these two states, never a superposition of them.
         </p>
       )}
@@ -221,12 +228,12 @@ function SourceControls({ sourceType, setSourceType, bellKey, setBellKey, custom
                 disabled={disabled}
                 aria-label={`Select the ${b.letter}${b.sign} Bell state`}
               >
-                <Ket size={22}>{b.letter}{b.sign}</Ket>
+                <TeX math={bellLabelTex(b)} style={{ fontSize: '20px' }} />
               </button>
             ))}
           </div>
           <p style={{ fontSize: '13px', margin: 0, lineHeight: '1.6' }}>
-            <Ket size={16}>{selectedBell.letter}{selectedBell.sign}</Ket> = (<BellStateExpression bell={selectedBell} />)/√2
+            <TeX math={bellExpressionTex(selectedBell)} />
           </p>
         </>
       )}
@@ -234,10 +241,7 @@ function SourceControls({ sourceType, setSourceType, bellKey, setBellKey, custom
       {sourceType === 'custom' && (
         <>
           <p style={{ fontSize: '13px', margin: '10px 0 8px 0', lineHeight: '1.6' }}>
-            <span style={{ whiteSpace: 'nowrap' }}>a<SpinKet arms={['up', 'up']} size={14} /></span>{' + '}
-            <span style={{ whiteSpace: 'nowrap' }}>b<SpinKet arms={['up', 'down']} size={14} /></span>{' + '}
-            <span style={{ whiteSpace: 'nowrap' }}>c<SpinKet arms={['down', 'up']} size={14} /></span>{' + '}
-            <span style={{ whiteSpace: 'nowrap' }}>d<SpinKet arms={['down', 'down']} size={14} /></span>
+            <TeX math={CUSTOM_STATE_FORMULA_TEX} />
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {['a', 'b', 'c', 'd'].map((k) => (
