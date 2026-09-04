@@ -53,6 +53,25 @@ function sideLabel(sgIndex) {
 // or hide the resulting redraw.
 const CT_CELL_MIN_WIDTH = '9ch';
 const CT_BORDER = '1px solid #999';
+// An inset box-shadow, not a wider border, marks a hovered cell -- it draws
+// inside the cell's existing box rather than adding to it, so (unlike
+// bumping border-width) it can never nudge the table's own layout size and
+// re-trigger the resize/blink this table's fixed CT_CELL_MIN_WIDTH was
+// already introduced to avoid (see that constant's own comment).
+const CT_HOVER_SHADOW = `inset 0 0 0 ${HOVER_BORDER_WIDTH}px ${HOVER_BORDER_COLOR}`;
+
+// True when the two detectors currently hovered (shared with the histogram
+// bars and LabPanel via displayBools.hoveredDetectors) are exactly this
+// cell's own Left/Right pair -- a bar hover only ever supplies one detector,
+// so this is naturally false whenever the hover came from a bar rather than
+// a table cell.
+function isCellHovered(hoveredDetectors, leftArm, rightArm) {
+  return (
+    hoveredDetectors.length === 2 &&
+    hoveredDetectors.some((h) => h.sgIndex === 0 && h.arm === leftArm) &&
+    hoveredDetectors.some((h) => h.sgIndex === 1 && h.arm === rightArm)
+  );
+}
 
 // Plain HTML/CSS, not canvas -- the joint (coincidence) counts this shows
 // replaced the old canvas-drawn legend (see the Histogram component's own
@@ -67,7 +86,7 @@ const CT_BORDER = '1px solid #999';
 // the table: entanglement lives in the *joint* counts inside the box, not
 // in these marginal totals, which is why they're set apart with a rule
 // rather than folded into the grid.
-function CoincidenceTable({ coincidences, blocked }) {
+function CoincidenceTable({ coincidences, blocked, hoveredDetectors, setDisplayBools }) {
   if (blocked) {
     return (
       <div style={{ fontSize: '13px', color: '#888', textAlign: 'center', maxWidth: '150px', margin: '0 16px' }}>
@@ -89,6 +108,20 @@ function CoincidenceTable({ coincidences, blocked }) {
   const marginStyle = { minWidth: CT_CELL_MIN_WIDTH, padding: '10px 10px', textAlign: 'center', fontWeight: 500, color: '#666', fontVariantNumeric: 'tabular-nums' };
   const blankStyle = { border: 'none', padding: '10px 10px' };
 
+  // Attached straight to each <td> below (not to, say, a <span> wrapping
+  // just the number inside it) -- a table cell's mouseenter/mouseleave fire
+  // for its whole rendered box, padding included, not only the text node,
+  // so this alone is what gives "whole-cell" hover sensing with no extra
+  // markup needed.
+  const hoverHandlers = (leftArm, rightArm) => ({
+    onMouseEnter: () =>
+      setDisplayBools((prev) => ({
+        ...prev,
+        hoveredDetectors: [{ sgIndex: 0, arm: leftArm }, { sgIndex: 1, arm: rightArm }],
+      })),
+    onMouseLeave: () => setDisplayBools((prev) => ({ ...prev, hoveredDetectors: [] })),
+  });
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', margin: '0 16px' }}>
       <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#303030' }}>Coincidence Counts</h4>
@@ -102,14 +135,26 @@ function CoincidenceTable({ coincidences, blocked }) {
           </tr>
           <tr>
             <th style={headerStyle}>L <ArrowIcon direction="up" /></th>
-            <td style={cellStyle}>{uu}</td>
-            <td style={oppositeStyle}>{ud}</td>
+            <td
+              style={{ ...cellStyle, ...(isCellHovered(hoveredDetectors, 'up', 'up') ? { boxShadow: CT_HOVER_SHADOW } : null) }}
+              {...hoverHandlers('up', 'up')}
+            >{uu}</td>
+            <td
+              style={{ ...oppositeStyle, ...(isCellHovered(hoveredDetectors, 'up', 'down') ? { boxShadow: CT_HOVER_SHADOW } : null) }}
+              {...hoverHandlers('up', 'down')}
+            >{ud}</td>
             <td style={{ ...marginStyle, borderLeft: CT_BORDER }}>{leftUpMargin}</td>
           </tr>
           <tr>
             <th style={headerStyle}>L <ArrowIcon direction="down" /></th>
-            <td style={oppositeStyle}>{du}</td>
-            <td style={cellStyle}>{dd}</td>
+            <td
+              style={{ ...oppositeStyle, ...(isCellHovered(hoveredDetectors, 'down', 'up') ? { boxShadow: CT_HOVER_SHADOW } : null) }}
+              {...hoverHandlers('down', 'up')}
+            >{du}</td>
+            <td
+              style={{ ...cellStyle, ...(isCellHovered(hoveredDetectors, 'down', 'down') ? { boxShadow: CT_HOVER_SHADOW } : null) }}
+              {...hoverHandlers('down', 'down')}
+            >{dd}</td>
             <td style={{ ...marginStyle, borderLeft: CT_BORDER }}>{leftDownMargin}</td>
           </tr>
           <tr>
@@ -352,9 +397,9 @@ export default function Histogram({ experiment, displayBools, setDisplayBools, c
         if (isMainDraw) {
           barRectsRef.current.push({ sgIndex: d.sgIndex, arm: d.arm, x: barX, y: barY, width: barWidth, height: barHeight });
         }
-        const isHovered = displayBools.hoveredDetector
-          && displayBools.hoveredDetector.sgIndex === d.sgIndex
-          && displayBools.hoveredDetector.arm === d.arm;
+        const isHovered = displayBools.hoveredDetectors.some(
+          (h) => h.sgIndex === d.sgIndex && h.arm === d.arm
+        );
         if (isHovered) {
           ctx.strokeStyle = HOVER_BORDER_COLOR;
           ctx.lineWidth = HOVER_BORDER_WIDTH * inkScale;
@@ -508,7 +553,7 @@ export default function Histogram({ experiment, displayBools, setDisplayBools, c
 
   // Independent of the magnifier -- always tracks the cursor to see if it's
   // over a bar, and if so, shares that detector with LabPanel (via
-  // displayBools.hoveredDetector) so it can highlight the matching PC. Only
+  // displayBools.hoveredDetectors) so it can highlight the matching PC. Only
   // calls setDisplayBools when the hovered detector actually changes, not
   // on every mousemove, since the vast majority of moves land on the same
   // bar (or the same empty space) as the previous one.
@@ -530,13 +575,13 @@ export default function Histogram({ experiment, displayBools, setDisplayBools, c
       const nextKey = keyOf(next);
       if (nextKey === lastKey) return;
       lastKey = nextKey;
-      setDisplayBools((prev) => ({ ...prev, hoveredDetector: next }));
+      setDisplayBools((prev) => ({ ...prev, hoveredDetectors: next ? [next] : [] }));
     };
     const handleMouseLeave = () => {
       if (magnifierOn) return;
       if (lastKey === null) return;
       lastKey = null;
-      setDisplayBools((prev) => ({ ...prev, hoveredDetector: null }));
+      setDisplayBools((prev) => ({ ...prev, hoveredDetectors: [] }));
     };
 
     canvas.addEventListener('mousemove', handleMouseMove);
@@ -624,7 +669,12 @@ export default function Histogram({ experiment, displayBools, setDisplayBools, c
       </div>
       {displayBools.showCoincidenceTable && (
         <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center' }}>
-          <CoincidenceTable coincidences={coincidences} blocked={Boolean(experiment[0]?.blocked || experiment[1]?.blocked)} />
+          <CoincidenceTable
+            coincidences={coincidences}
+            blocked={Boolean(experiment[0]?.blocked || experiment[1]?.blocked)}
+            hoveredDetectors={displayBools.hoveredDetectors}
+            setDisplayBools={setDisplayBools}
+          />
         </div>
       )}
     </div>

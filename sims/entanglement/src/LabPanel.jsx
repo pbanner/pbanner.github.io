@@ -218,7 +218,7 @@ function buildBlockedLocalPath(axis) {
 }
 
 const LabPanel = forwardRef(function LabPanel(
-  { experiment, setExperiment, expMode, displayBools, setParticleCount, resetToken, tabVisible, hoveredDetector, onCoincidence, source },
+  { experiment, setExperiment, expMode, displayBools, setParticleCount, resetToken, tabVisible, hoveredDetectors, onCoincidence, source },
   ref
 ) {
   const canvasRef = useRef(null);
@@ -387,7 +387,12 @@ const LabPanel = forwardRef(function LabPanel(
           ctx.textBaseline = 'middle';
           drawUnflippedText(ctx, side, String(detector.data), PC_TEXT_CENTER_X, PC_COUNT_CENTER_Y);
 
-          if (hoveredDetector && hoveredDetector.sgIndex === sgIndex && hoveredDetector.arm === arm) {
+          // A plain array rather than a single detector -- hovering a
+          // coincidence-table cell (Histogram.jsx) highlights *two*
+          // detectors (one per side) at once, whereas hovering a histogram
+          // bar highlights just the one it represents; .some() covers both
+          // without this component needing to know which case it is.
+          if (hoveredDetectors.some((h) => h.sgIndex === sgIndex && h.arm === arm)) {
             ctx.strokeStyle = PC_COLORS[detector.colorId];
             ctx.lineWidth = PC_HIGHLIGHT_LINE_WIDTH;
             ctx.strokeRect(
@@ -402,7 +407,7 @@ const LabPanel = forwardRef(function LabPanel(
         });
       });
     });
-  }, [experiment, expMode, displayBools, axis, canvasDims, hoveredDetector, pcImageRef, bbImageRef, ovenImageRef, ovenOffImageRef, sgImageRef]);
+  }, [experiment, expMode, displayBools, axis, canvasDims, hoveredDetectors, pcImageRef, bbImageRef, ovenImageRef, ovenOffImageRef, sgImageRef]);
 
   const drawParticles = useCallback((ctx) => {
     const ovenCenterX = canvasDims.width / 2;

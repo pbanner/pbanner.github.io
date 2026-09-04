@@ -294,7 +294,7 @@ export default function App() {
     showCoincidenceTable: true,
     showTotal: true,
     showErrorBars: false,
-    hoveredDetector: null, // { sgIndex, arm } the mouse is over in the histogram, or null -- shared with LabPanel so it can highlight that detector
+    hoveredDetectors: [], // [{ sgIndex, arm }, ...] the mouse is currently over in the histogram (one entry for a hovered bar, two for a hovered coincidence-table cell) -- shared with LabPanel so it can highlight the matching detector(s)
   });
   // dc (data collection) is 'single' or 'stream'; rate is particles/sec in
   // stream mode. There's no `build` mode here -- the setup is fixed.
@@ -411,7 +411,7 @@ export default function App() {
             setParticleCount={setParticleCount}
             resetToken={resetToken}
             tabVisible={tabVisible}
-            hoveredDetector={histDisplayBools.hoveredDetector}
+            hoveredDetectors={histDisplayBools.hoveredDetectors}
             onCoincidence={recordCoincidence}
             source={source}
           />
