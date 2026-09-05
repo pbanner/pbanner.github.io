@@ -86,7 +86,7 @@ function isCellHovered(hoveredDetectors, leftArm, rightArm) {
 // the table: entanglement lives in the *joint* counts inside the box, not
 // in these marginal totals, which is why they're set apart with a rule
 // rather than folded into the grid.
-function CoincidenceTable({ coincidences, blocked, hoveredDetectors, setDisplayBools }) {
+function CoincidenceTable({ coincidences, blocked, hoveredDetectors, setDisplayBools, showProbabilities }) {
   if (blocked) {
     return (
       <div style={{ fontSize: '13px', color: '#888', textAlign: 'center', maxWidth: '150px', margin: '0 16px' }}>
@@ -101,6 +101,18 @@ function CoincidenceTable({ coincidences, blocked, hoveredDetectors, setDisplayB
   const leftDownMargin = du + dd;
   const rightUpMargin = uu + du;
   const rightDownMargin = ud + dd;
+  const total = uu + ud + du + dd;
+
+  // In probability mode every cell (joint counts and margins alike) shows
+  // its own share of `total` instead of its raw count -- the fractions this
+  // sim's histogram bars already express as percentages, just laid out as a
+  // joint distribution instead of one bar per detector. "---" (matching the
+  // histogram's own convention for "no percentage yet") stands in for 0/0
+  // rather than a nonsensical NaN% before any pairs have been recorded.
+  const fmt = (count) => {
+    if (!showProbabilities) return String(count);
+    return total > 0 ? `${(count / total * 100).toFixed(1)}%` : '---';
+  };
 
   const headerStyle = { padding: '10px 10px', textAlign: 'center', fontWeight: 600, color: '#333' };
   const cellStyle = { border: CT_BORDER, minWidth: CT_CELL_MIN_WIDTH, padding: '10px 10px', textAlign: 'center', fontWeight: 600, color: '#303030', fontVariantNumeric: 'tabular-nums' };
@@ -138,33 +150,41 @@ function CoincidenceTable({ coincidences, blocked, hoveredDetectors, setDisplayB
             <td
               style={{ ...cellStyle, ...(isCellHovered(hoveredDetectors, 'up', 'up') ? { boxShadow: CT_HOVER_SHADOW } : null) }}
               {...hoverHandlers('up', 'up')}
-            >{uu}</td>
+            >{fmt(uu)}</td>
             <td
               style={{ ...oppositeStyle, ...(isCellHovered(hoveredDetectors, 'up', 'down') ? { boxShadow: CT_HOVER_SHADOW } : null) }}
               {...hoverHandlers('up', 'down')}
-            >{ud}</td>
-            <td style={{ ...marginStyle, borderLeft: CT_BORDER }}>{leftUpMargin}</td>
+            >{fmt(ud)}</td>
+            <td style={{ ...marginStyle, borderLeft: CT_BORDER }}>{fmt(leftUpMargin)}</td>
           </tr>
           <tr>
             <th style={headerStyle}>L <ArrowIcon direction="down" /></th>
             <td
               style={{ ...oppositeStyle, ...(isCellHovered(hoveredDetectors, 'down', 'up') ? { boxShadow: CT_HOVER_SHADOW } : null) }}
               {...hoverHandlers('down', 'up')}
-            >{du}</td>
+            >{fmt(du)}</td>
             <td
               style={{ ...cellStyle, ...(isCellHovered(hoveredDetectors, 'down', 'down') ? { boxShadow: CT_HOVER_SHADOW } : null) }}
               {...hoverHandlers('down', 'down')}
-            >{dd}</td>
-            <td style={{ ...marginStyle, borderLeft: CT_BORDER }}>{leftDownMargin}</td>
+            >{fmt(dd)}</td>
+            <td style={{ ...marginStyle, borderLeft: CT_BORDER }}>{fmt(leftDownMargin)}</td>
           </tr>
           <tr>
             <td style={blankStyle} />
-            <td style={{ ...marginStyle, borderTop: CT_BORDER }}>{rightUpMargin}</td>
-            <td style={{ ...marginStyle, borderTop: CT_BORDER }}>{rightDownMargin}</td>
+            <td style={{ ...marginStyle, borderTop: CT_BORDER }}>{fmt(rightUpMargin)}</td>
+            <td style={{ ...marginStyle, borderTop: CT_BORDER }}>{fmt(rightDownMargin)}</td>
             <td style={blankStyle} />
           </tr>
         </tbody>
       </table>
+      <button
+        type="button"
+        className="control-bar-button"
+        style={{ fontSize: '12px', padding: '4px 10px' }}
+        onClick={() => setDisplayBools((prev) => ({ ...prev, showCoincidenceProbabilities: !prev.showCoincidenceProbabilities }))}
+      >
+        {showProbabilities ? 'Show coincidence counts' : 'Show probabilities'}
+      </button>
     </div>
   );
 }
@@ -674,6 +694,7 @@ export default function Histogram({ experiment, displayBools, setDisplayBools, c
             blocked={Boolean(experiment[0]?.blocked || experiment[1]?.blocked)}
             hoveredDetectors={displayBools.hoveredDetectors}
             setDisplayBools={setDisplayBools}
+            showProbabilities={displayBools.showCoincidenceProbabilities}
           />
         </div>
       )}

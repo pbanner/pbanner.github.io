@@ -292,6 +292,7 @@ export default function App() {
     showPercentages: 2,    // 0 = counts only, 1 = percentages only, 2 = both
     showTheory: false,
     showCoincidenceTable: true,
+    showCoincidenceProbabilities: false, // false = the table shows raw joint counts, true = each cell's fraction of the total instead
     showTotal: true,
     showErrorBars: false,
     hoveredDetectors: [], // [{ sgIndex, arm }, ...] the mouse is currently over in the histogram (one entry for a hovered bar, two for a hovered coincidence-table cell) -- shared with LabPanel so it can highlight the matching detector(s)
