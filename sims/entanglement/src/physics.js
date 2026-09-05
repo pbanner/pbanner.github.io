@@ -34,7 +34,14 @@ export function downEigenstate(theta, phi) {
 // App.jsx's Source Controls sidebar lets it pick from three kinds, each
 // represented here as a plain `source` object:
 //
-//   { kind: 'classical' }                       -- see jointProbabilitiesClassical
+//   { kind: 'classical', weights: {uu,ud,du,dd} } -- see jointProbabilitiesClassical.
+//                                                   weights are relative, not
+//                                                   pre-normalized (same "up
+//                                                   to normalization" contract
+//                                                   as a quantum source's
+//                                                   coeffs below) -- {1,0,0,1}
+//                                                   and {3,0,0,3} both mean
+//                                                   "50/50 up-up/down-down".
 //   { kind: 'quantum', coeffs: {uu,ud,du,dd} }   -- a 2-qubit state, as four
 //                                                   complex coefficients on
 //                                                   the Z-basis product
@@ -149,27 +156,53 @@ function singleProb(basis, outcome, hiddenIsUp) {
   return cAbs2(amp);
 }
 
+// Letter <-> arm, matching the u/d convention every joint-outcome key in
+// this file already uses (first letter is L, second is R).
+const ARM_LETTER = { up: 'u', down: 'd' };
+
 // The "obvious" classical explanation for perfect correlation, without
-// entanglement: the oven hands out a *definite* pair every time, decided by
-// an ordinary coin flip -- both particles up_Z, or both down_Z, never a
-// superposition of the two. This reproduces perfect (anti-)correlation
-// whenever both analyzers share a basis, same as the quantum states -- but
-// because it's a genuine local hidden-variable model (each particle's
-// outcome depends only on its own analyzer and the shared coin flip, never
-// on the other analyzer's setting), it disagrees with quantum mechanics once
-// the two bases differ. That gap is the whole pedagogical point of offering
-// this option: it's the "obvious" classical guess Bell's theorem rules out.
-function jointProbabilitiesClassical(basisL, basisR) {
+// entanglement: the oven hands out a *definite* pair every time -- both
+// particles' Z-spins fixed in advance, never a superposition -- decided by a
+// weighted die roll over the four possible (hiddenL, hiddenR) pairings
+// (`weights`, renormalized to sum to 1). Each particle's *measured* outcome
+// then depends only on its own hidden value and its own analyzer's setting
+// (via singleProb's ordinary single-particle Born rule), never on the other
+// particle's hidden value or analyzer -- that locality is what makes this a
+// genuine (as opposed to quantum) hidden-variable model, and is exactly what
+// Bell's theorem shows can't reproduce quantum mechanics once the two
+// analyzers' bases differ. The original, single-weight version of this
+// model (uu/dd only, 50/50) is just weights = {uu:1, ud:0, du:0, dd:1}.
+function jointProbabilitiesClassical(basisL, basisR, weights) {
+  const total = weights.uu + weights.ud + weights.du + weights.dd;
+  if (total === 0) return { uu: 0, ud: 0, du: 0, dd: 0 }; // degenerate all-zero input -- samplePairOutcome's own fallback covers this, same as normalizedCoeffs' analogous guard
+
+  // pL[hiddenArm][measuredArm] -- probability analyzer L reports
+  // `measuredArm` given the oven handed particle L the definite hidden value
+  // `hiddenArm`; pR is the same for particle R.
   const pLupIfUp = singleProb(basisL, 'up', true);
   const pLupIfDown = singleProb(basisL, 'up', false);
   const pRupIfUp = singleProb(basisR, 'up', true);
   const pRupIfDown = singleProb(basisR, 'up', false);
-  return {
-    uu: 0.5 * pLupIfUp * pRupIfUp + 0.5 * pLupIfDown * pRupIfDown,
-    ud: 0.5 * pLupIfUp * (1 - pRupIfUp) + 0.5 * pLupIfDown * (1 - pRupIfDown),
-    du: 0.5 * (1 - pLupIfUp) * pRupIfUp + 0.5 * (1 - pLupIfDown) * pRupIfDown,
-    dd: 0.5 * (1 - pLupIfUp) * (1 - pRupIfUp) + 0.5 * (1 - pLupIfDown) * (1 - pRupIfDown),
-  };
+  const pL = { up: { up: pLupIfUp, down: 1 - pLupIfUp }, down: { up: pLupIfDown, down: 1 - pLupIfDown } };
+  const pR = { up: { up: pRupIfUp, down: 1 - pRupIfUp }, down: { up: pRupIfDown, down: 1 - pRupIfDown } };
+
+  // Sum over all four (hiddenL, hiddenR) pairings, each contributing its own
+  // (renormalized) weight times each particle's own independent measurement
+  // probability -- the direct generalization of the old function's two-term
+  // sums (over just "both up" / "both down") to all four hidden pairings.
+  const result = { uu: 0, ud: 0, du: 0, dd: 0 };
+  ['up', 'down'].forEach((hiddenL) => {
+    ['up', 'down'].forEach((hiddenR) => {
+      const hiddenWeight = weights[ARM_LETTER[hiddenL] + ARM_LETTER[hiddenR]] / total;
+      ['up', 'down'].forEach((measuredL) => {
+        ['up', 'down'].forEach((measuredR) => {
+          const key = ARM_LETTER[measuredL] + ARM_LETTER[measuredR];
+          result[key] += hiddenWeight * pL[hiddenL][measuredL] * pR[hiddenR][measuredR];
+        });
+      });
+    });
+  });
+  return result;
 }
 
 // The four joint outcome probabilities for one pair, given the two
@@ -181,7 +214,7 @@ function jointProbabilitiesClassical(basisL, basisR) {
 // analyzer's own setting.
 export function jointProbabilities(basisL, basisR, source) {
   return source.kind === 'classical'
-    ? jointProbabilitiesClassical(basisL, basisR)
+    ? jointProbabilitiesClassical(basisL, basisR, source.weights)
     : jointProbabilitiesQuantum(basisL, basisR, source.coeffs);
 }
 

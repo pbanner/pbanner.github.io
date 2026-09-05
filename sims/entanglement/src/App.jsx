@@ -170,6 +170,19 @@ function bellExpressionTex(bell) {
 const CUSTOM_STATE_FORMULA_TEX =
   `a${spinKetTex(['up', 'up'])} + b${spinKetTex(['up', 'down'])} + c${spinKetTex(['down', 'up'])} + d${spinKetTex(['down', 'down'])}`;
 
+// The four definite states the classical model's hidden-variable coin can
+// hand out, in the same up-up/up-down/down-up/down-down order as every other
+// joint-outcome listing in this file -- each row's own weight input is
+// labeled with its ket directly (rather than an abstract letter like the
+// quantum custom state's a/b/c/d) since here the weight *is* that state's
+// own probability, not an amplitude a separate formula has to explain.
+const CLASSICAL_WEIGHT_ROWS = [
+  { key: 'uu', arms: ['up', 'up'] },
+  { key: 'ud', arms: ['up', 'down'] },
+  { key: 'du', arms: ['down', 'up'] },
+  { key: 'dd', arms: ['down', 'down'] },
+];
+
 // The "Source Controls" sidebar: picks what the oven emits each pair in --
 // a classical hidden-variable mixture, one of the four Bell states, or an
 // arbitrary custom quantum state -- and owns just enough state (sourceType,
@@ -178,7 +191,7 @@ const CUSTOM_STATE_FORMULA_TEX =
 // which of the other two is *used*; both persist across switches, so
 // flipping the dropdown back and forth doesn't lose a custom state you'd
 // already typed in.
-function SourceControls({ sourceType, setSourceType, bellKey, setBellKey, customCoeffs, setCustomCoeffs, disabled, resetDataCollection }) {
+function SourceControls({ sourceType, setSourceType, bellKey, setBellKey, classicalWeights, setClassicalWeights, customCoeffs, setCustomCoeffs, disabled, resetDataCollection }) {
   const selectedBell = BELL_STATES.find((b) => b.key === bellKey);
 
   const changeType = (type) => {
@@ -187,6 +200,10 @@ function SourceControls({ sourceType, setSourceType, bellKey, setBellKey, custom
   };
   const changeBell = (key) => {
     setBellKey(key);
+    resetDataCollection();
+  };
+  const changeClassicalWeight = (which, value) => {
+    setClassicalWeights((prev) => ({ ...prev, [which]: value }));
     resetDataCollection();
   };
   const changeCoeff = (which, value) => {
@@ -209,10 +226,36 @@ function SourceControls({ sourceType, setSourceType, bellKey, setBellKey, custom
       </select>
 
       {sourceType === 'classical' && (
-        <p style={{ fontSize: '13px', margin: '10px 0 0 0', lineHeight: '1.6' }}>
-          A 50/50 mixture of <TeX math={spinKetTex(['up', 'up'])} /> and <TeX math={spinKetTex(['down', 'down'])} /> --
-          each pair definitely has one of these two states, never a superposition of them.
-        </p>
+        <>
+          <p style={{ fontSize: '13px', margin: '10px 0 8px 0', lineHeight: '1.6' }}>
+            Each pair is definitely one of the four states below -- never a
+            superposition of them -- with relative weight:
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {CLASSICAL_WEIGHT_ROWS.map(({ key, arms }) => (
+              <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+                  <TeX math={spinKetTex(arms)} /> =
+                </span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={classicalWeights[key]}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    if (!Number.isNaN(v)) changeClassicalWeight(key, v);
+                  }}
+                  disabled={disabled}
+                  style={{ width: '80px', padding: '2px' }}
+                />
+              </label>
+            ))}
+          </div>
+          <p style={{ fontSize: '12px', color: '#666', margin: '8px 0 0 0', lineHeight: '1.5' }}>
+            Weights don't need to be normalized -- (1, 0, 0, 1) works just as
+            well as (0.5, 0, 0, 0.5).
+          </p>
+        </>
       )}
 
       {sourceType === 'bell' && (
@@ -321,9 +364,15 @@ export default function App() {
   // bellKey 'psiMinus' is the singlet.
   const [sourceType, setSourceType] = useState('bell');
   const [bellKey, setBellKey] = useState('psiMinus');
+  // Relative weights of the four definite Z-basis outcomes the classical
+  // model's hidden-variable coin can hand out -- up to normalization, same
+  // "don't have to normalize" contract as customCoeffs below. The default
+  // {1,0,0,1} reproduces this sim's original, controls-less classical model
+  // (a fixed 50/50 up-up/down-down mixture) exactly.
+  const [classicalWeights, setClassicalWeights] = useState({ uu: 1, ud: 0, du: 0, dd: 1 });
   const [customCoeffs, setCustomCoeffs] = useState({ a: 1, b: 0, c: 0, d: 1 });
   const source = sourceType === 'classical'
-    ? { kind: 'classical' }
+    ? { kind: 'classical', weights: classicalWeights }
     : sourceType === 'bell'
       ? { kind: 'quantum', coeffs: BELL_STATES.find((b) => b.key === bellKey).coeffs }
       : {
@@ -424,6 +473,8 @@ export default function App() {
             setSourceType={setSourceType}
             bellKey={bellKey}
             setBellKey={setBellKey}
+            classicalWeights={classicalWeights}
+            setClassicalWeights={setClassicalWeights}
             customCoeffs={customCoeffs}
             setCustomCoeffs={setCustomCoeffs}
             disabled={controlsLocked}
