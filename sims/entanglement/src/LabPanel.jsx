@@ -40,6 +40,15 @@ const PC_COUNT_CENTER_Y = 132 * (PC_HEIGHT / 200) - PC_HEIGHT / 2;
 const PC_LABEL_CENTER_Y = 50 * (PC_HEIGHT / 200) - PC_HEIGHT / 2;
 const PC_HIGHLIGHT_PADDING = 6;
 const PC_HIGHLIGHT_LINE_WIDTH = 3;
+// Flags an analyzer set to a direction the instruction-set source has no
+// column for (App.jsx's own invalidAnalyzer prop) -- same visual language
+// as the coincidence table's hover outline (Histogram.jsx), just in canvas
+// form and in an error color rather than an interactive one, plus a short
+// message above the SG since (unlike a hover) this isn't self-explanatory.
+const INVALID_ANALYZER_COLOR = '#cc3333';
+const INVALID_ANALYZER_LINE_WIDTH = 2.5;
+const INVALID_ANALYZER_PADDING = 6;
+const INVALID_ANALYZER_MESSAGE_LINES = ["Analyzer set to an axis that", "particles don't have instructions for."];
 // A blocked side's SG + two detectors are replaced by a single beam block,
 // same footprint the Stern-Gerlach sim uses for one.
 const BB_HEIGHT = 50;
@@ -218,7 +227,7 @@ function buildBlockedLocalPath(axis) {
 }
 
 const LabPanel = forwardRef(function LabPanel(
-  { experiment, setExperiment, expMode, displayBools, setParticleCount, resetToken, tabVisible, hoveredDetectors, onCoincidence, source },
+  { experiment, setExperiment, expMode, displayBools, setParticleCount, resetToken, tabVisible, hoveredDetectors, onCoincidence, source, invalidAnalyzer },
   ref
 ) {
   const canvasRef = useRef(null);
@@ -336,6 +345,30 @@ const LabPanel = forwardRef(function LabPanel(
         ctx.textBaseline = 'middle';
         drawUnflippedText(ctx, side, getSGLabel(sg.basis, sgIndex), SG_X0_LOCAL + 62, axis);
 
+        if (invalidAnalyzer?.[sgIndex]) {
+          ctx.strokeStyle = INVALID_ANALYZER_COLOR;
+          ctx.lineWidth = INVALID_ANALYZER_LINE_WIDTH;
+          ctx.strokeRect(
+            SG_X0_LOCAL - INVALID_ANALYZER_PADDING,
+            axis - SG_HEIGHT / 2 - INVALID_ANALYZER_PADDING,
+            SG_WIDTH + INVALID_ANALYZER_PADDING * 2,
+            SG_HEIGHT + INVALID_ANALYZER_PADDING * 2
+          );
+
+          ctx.fillStyle = INVALID_ANALYZER_COLOR;
+          ctx.font = '11px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          const messageCenterX = SG_X0_LOCAL + SG_WIDTH / 2;
+          const closestLineY = axis - SG_HEIGHT / 2 - INVALID_ANALYZER_PADDING - 4;
+          const lineHeight = 12;
+          // Drawn bottom-up (closest line to the box first) so each earlier
+          // line in the array ends up further above it, reading top-to-bottom.
+          [...INVALID_ANALYZER_MESSAGE_LINES].reverse().forEach((line, iFromBottom) => {
+            drawUnflippedText(ctx, side, line, messageCenterX, closestLineY - iFromBottom * lineHeight);
+          });
+        }
+
         ['up', 'down'].forEach((arm) => {
           const site = localPlacementSite(arm, axis);
           const detector = sg[arm];
@@ -407,7 +440,7 @@ const LabPanel = forwardRef(function LabPanel(
         });
       });
     });
-  }, [experiment, expMode, displayBools, axis, canvasDims, hoveredDetectors, pcImageRef, bbImageRef, ovenImageRef, ovenOffImageRef, sgImageRef]);
+  }, [experiment, expMode, displayBools, axis, canvasDims, hoveredDetectors, invalidAnalyzer, pcImageRef, bbImageRef, ovenImageRef, ovenOffImageRef, sgImageRef]);
 
   const drawParticles = useCallback((ctx) => {
     const ovenCenterX = canvasDims.width / 2;
