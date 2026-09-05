@@ -53,6 +53,16 @@ export function downEigenstate(theta, phi) {
 //                                                   UI in particular -- never
 //                                                   has to pre-normalize its
 //                                                   own input.
+//   { kind: 'instructionSets', relationship, particle1, particle2 } -- Bell's
+//                                                   own local-hidden-variable
+//                                                   model: each particle
+//                                                   carries a predetermined
+//                                                   answer for every one of a
+//                                                   handful of user-chosen
+//                                                   analyzer directions. See
+//                                                   the "Hidden instruction
+//                                                   sets" section below for
+//                                                   the full shape.
 //
 // The four Bell states and the user-specified custom state are both
 // 'quantum', just with different coeffs; BELL_STATES below is every
@@ -205,6 +215,129 @@ function jointProbabilitiesClassical(basisL, basisR, weights) {
   return result;
 }
 
+// --- Hidden instruction sets -----------------------------------------------
+// Bell's own original formulation of a local hidden variable: rather than a
+// single fixed hidden Z-value (jointProbabilitiesClassical above), each
+// particle secretly carries a full, predetermined answer for *every one* of
+// a handful of analyzer directions the user has chosen -- an "instruction
+// set" -- decided once per pair (or, if the two particles' sheets are
+// independent, once per particle) by a weighted die roll over the user's own
+// listed instruction sets. This is expressive enough to construct -- and
+// then empirically watch fail -- the specific local-realist model Bell's
+// theorem rules out, once three or four well-chosen directions are in play;
+// the fixed single-hidden-value model above can't even attempt that, since
+// it only ever has an opinion about the Z axis.
+//
+// A "column" is one user-chosen direction: { id, thetaDeg, phiDeg }, always
+// whole degrees -- both this sim's own display precision for these, and what
+// lets an analyzer's current [theta, phi] radians be matched back to "which
+// column is this" exactly (findInstructionColumnIndex below) rather than
+// comparing floats. A "row" is one full instruction set:
+// { id, signs: { [columnId]: 'up'|'down' }, weight }, with `weight` relative
+// (not pre-normalized) same as every other "up to normalization" source
+// here. Both a column and a row carry their own opaque id rather than being
+// addressed by array position, so deleting one column can't silently shift
+// which entry of an existing row's `signs` every other column now refers to.
+//
+// `source.particle1` is always Left's own sheet. Right reads `particle1`'s
+// same columns/rows too when `relationship` is 'identical' or 'opposite'
+// (one shared sheet, read at whichever column each side is set to -- see
+// jointProbabilitiesSharedSheet); only 'independent' gives Right its own
+// separate sheet, `particle2`, with its own columns as well as its own rows
+// -- the two sides can then be set to genuinely different menus of
+// directions entirely, the asymmetric-settings structure a CHSH-style test
+// needs.
+
+// Rounds to the nearest whole degree and folds phi into [0, 360) -- matches
+// how a column's own thetaDeg/phiDeg are always stored, so this comparison
+// is exact for any analyzer setting a user could actually have dialed in
+// (whether via this mode's own column-locked stepper, or the ordinary
+// X/Y/Z/angle controls), not just floating-point-close.
+function basisMatchesColumn(basis, column) {
+  const thetaDeg = Math.round(basis[0] * (180 / Math.PI));
+  const phiDeg = ((Math.round(basis[1] * (180 / Math.PI)) % 360) + 360) % 360;
+  return thetaDeg === column.thetaDeg && phiDeg === ((column.phiDeg % 360) + 360) % 360;
+}
+
+// Which of `columns` (if any) an analyzer's current [theta, phi] basis
+// matches -- -1 if it's set to a direction with no instructions. Exported
+// so App.jsx's UI can reuse this exact same check, both to drive the
+// column-locked stepper's own "which of 1..N am I on" display and to decide
+// when to show the "no instructions for this direction" warning -- one
+// implementation, so the two can never quietly disagree about what counts
+// as valid.
+export function findInstructionColumnIndex(basis, columns) {
+  return columns.findIndex((column) => basisMatchesColumn(basis, column));
+}
+
+function flipSign(sign) { return sign === 'up' ? 'down' : 'up'; }
+
+// One sheet's own weighted rows, reduced to the probability it reports each
+// outcome when read at `columnId` -- used directly for the 'independent'
+// relationship below, where the two sides' outcomes really are statistically
+// independent of each other once each sheet is drawn, so reducing each sheet
+// down to its own marginal first (rather than working with pairs of rows
+// directly, as jointProbabilitiesSharedSheet has to) is both correct and
+// simpler.
+function sheetMarginal(rows, columnId) {
+  const total = rows.reduce((sum, row) => sum + row.weight, 0);
+  if (total === 0) return { up: 0, down: 0 };
+  const upWeight = rows.reduce((sum, row) => sum + (row.signs[columnId] === 'up' ? row.weight : 0), 0);
+  return { up: upWeight / total, down: (total - upWeight) / total };
+}
+
+// The 'identical'/'opposite' relationship: a single shared sheet (`rows`),
+// one row of which is drawn (weighted) per pair and read at *both* sides'
+// own chosen column -- Left always reads its own outcome straight;
+// Opposite means Right reads the flip of what that same row says at its own
+// column, Identical means Right reads it straight too. Keeping both sides'
+// outcomes tied to one shared row draw (rather than reducing to marginals
+// like sheetMarginal) is exactly what preserves the correlation between
+// them -- the entire point of "identical" or "opposite" sheets.
+function jointProbabilitiesSharedSheet(rows, colIdL, colIdR, flipRight) {
+  const total = rows.reduce((sum, row) => sum + row.weight, 0);
+  const result = { uu: 0, ud: 0, du: 0, dd: 0 };
+  if (total === 0) return result;
+  rows.forEach((row) => {
+    const outcomeL = row.signs[colIdL];
+    const outcomeR = flipRight ? flipSign(row.signs[colIdR]) : row.signs[colIdR];
+    const key = (outcomeL === 'up' ? 'u' : 'd') + (outcomeR === 'up' ? 'u' : 'd');
+    result[key] += row.weight / total;
+  });
+  return result;
+}
+
+// The 'independent' relationship: two separately-drawn sheets, so the joint
+// distribution is just the product of each side's own marginal -- no
+// correlation between the two particles at all beyond whatever each sheet's
+// own weights happen to encode on their own.
+function jointProbabilitiesIndependentSheets(rowsL, colIdL, rowsR, colIdR) {
+  const pL = sheetMarginal(rowsL, colIdL);
+  const pR = sheetMarginal(rowsR, colIdR);
+  return { uu: pL.up * pR.up, ud: pL.up * pR.down, du: pL.down * pR.up, dd: pL.down * pR.down };
+}
+
+function jointProbabilitiesInstructionSets(basisL, basisR, source) {
+  const { relationship, particle1, particle2 } = source;
+  const rightSheet = relationship === 'independent' ? particle2 : particle1;
+  const colIndexL = findInstructionColumnIndex(basisL, particle1.columns);
+  const colIndexR = findInstructionColumnIndex(basisR, rightSheet.columns);
+  if (colIndexL === -1 || colIndexR === -1) {
+    // Either analyzer is set to a direction with no instructions -- App.jsx
+    // itself is what actually keeps a pair from ever being run in this
+    // state (see findInstructionColumnIndex's own comment); this all-zero
+    // fallback just keeps the theoretical-probability overlay, which
+    // recomputes on every render regardless of whether Run is enabled, from
+    // operating on a nonexistent column instead of throwing.
+    return { uu: 0, ud: 0, du: 0, dd: 0 };
+  }
+  const colIdL = particle1.columns[colIndexL].id;
+  const colIdR = rightSheet.columns[colIndexR].id;
+  return relationship === 'independent'
+    ? jointProbabilitiesIndependentSheets(particle1.rows, colIdL, rightSheet.rows, colIdR)
+    : jointProbabilitiesSharedSheet(particle1.rows, colIdL, colIdR, relationship === 'opposite');
+}
+
 // The four joint outcome probabilities for one pair, given the two
 // analyzers' current [theta, phi] bases and the oven's current source --
 // sums to 1 (up to floating-point noise). This is the one place
@@ -213,9 +346,9 @@ function jointProbabilitiesClassical(basisL, basisR, weights) {
 // numbers depend on the *angle between* basisL and basisR, not just on each
 // analyzer's own setting.
 export function jointProbabilities(basisL, basisR, source) {
-  return source.kind === 'classical'
-    ? jointProbabilitiesClassical(basisL, basisR, source.weights)
-    : jointProbabilitiesQuantum(basisL, basisR, source.coeffs);
+  if (source.kind === 'classical') return jointProbabilitiesClassical(basisL, basisR, source.weights);
+  if (source.kind === 'instructionSets') return jointProbabilitiesInstructionSets(basisL, basisR, source);
+  return jointProbabilitiesQuantum(basisL, basisR, source.coeffs);
 }
 
 // Monte-Carlo draw of one pair's joint outcome, weighted by
