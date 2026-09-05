@@ -1,11 +1,13 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import './App.css';
 import LabPanel from './LabPanel';
 import Histogram from './Histogram';
 import { AxisStepper, SliderPlusTextboxControl } from './controls';
-import { SG_OPTION_LABELS, SG_OPTION_BASES } from './axisOptions';
-import { BELL_STATES } from './physics';
+import { SG_OPTION_LABELS, SG_OPTION_BASES, DEG_TO_RAD } from './axisOptions';
+import { BELL_STATES, findInstructionColumnIndex } from './physics';
 import TeX from './TeX';
+import InstructionSetControls, { InstructionColumnStepper } from './instructionSets';
+import { createInitialInstructionSheet } from './instructionSetsData';
 
 // Unicode glyphs (▶ ⏸) bake their own, font-dependent vertical padding into
 // the glyph box, so flexbox centering lines up the boxes but not the visible
@@ -44,7 +46,7 @@ const DETECTOR_COLOR_IDS = {
 // itself. There's no chain-position bookkeeping to worry about, unlike the
 // Stern-Gerlach sim's version -- this sim always has exactly two analyzers:
 // index 0 measures the left-going particle, index 1 the right-going one.
-function AnalyzerStepper({ index, sg, setExperiment, disabled, resetDataCollection }) {
+function AnalyzerStepper({ index, sg, setExperiment, disabled, resetDataCollection, instructionMode }) {
   const currentIndex = SG_OPTION_BASES.findIndex(
     ([theta, phi]) => theta === sg.basis[0] && phi === sg.basis[1]
   );
@@ -101,6 +103,32 @@ function AnalyzerStepper({ index, sg, setExperiment, disabled, resetDataCollecti
     });
     resetDataCollection();
   };
+
+  // "Fix directions to instruction table" locks this analyzer to whichever
+  // of the instruction-set source's own columns is currently relevant to it
+  // (App.jsx decides that) -- a completely different stepper (1..N over
+  // just those columns, no free angle entry at all) rather than a variant
+  // of the ordinary X/Y/Z one, since "Set by angles" doesn't make sense
+  // when every legal setting is already listed in the sidebar's table.
+  if (instructionMode) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        <InstructionColumnStepper
+          label={label}
+          columns={instructionMode.columns}
+          selectedColumnId={instructionMode.selectedColumnId}
+          onSelectColumn={instructionMode.onSelectColumn}
+          disabled={disabled || sg.blocked}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 6px 6px 6px' }}>
+          <label style={{ fontSize: '13px' }}>
+            <input type="checkbox" checked={sg.blocked} onChange={(e) => setBlocked(e.target.checked)} disabled={disabled} />
+            Block this particle
+          </label>
+        </div>
+      </div>
+    );
+  }
 
   return (
     // Label + stepper (or, once "Set by angles" is on, the theta/phi
@@ -191,7 +219,12 @@ const CLASSICAL_WEIGHT_ROWS = [
 // which of the other two is *used*; both persist across switches, so
 // flipping the dropdown back and forth doesn't lose a custom state you'd
 // already typed in.
-function SourceControls({ sourceType, setSourceType, bellKey, setBellKey, classicalWeights, setClassicalWeights, customCoeffs, setCustomCoeffs, disabled, resetDataCollection }) {
+function SourceControls({
+  sourceType, setSourceType, bellKey, setBellKey, classicalWeights, setClassicalWeights, customCoeffs, setCustomCoeffs,
+  instructionRelationship, setInstructionRelationship, instructionShowing, setInstructionShowing,
+  instructionParticle1, setInstructionParticle1, instructionParticle2, setInstructionParticle2,
+  disabled, resetDataCollection,
+}) {
   const selectedBell = BELL_STATES.find((b) => b.key === bellKey);
 
   const changeType = (type) => {
@@ -221,6 +254,7 @@ function SourceControls({ sourceType, setSourceType, bellKey, setBellKey, classi
         style={{ width: '100%', padding: '6px', fontSize: '13px' }}
       >
         <option value="classical">Classical (Mixed)</option>
+        <option value="instructionSets">Classical: Hidden Instruction Sets</option>
         <option value="bell">Quantum Bell State</option>
         <option value="custom">Quantum Custom State</option>
       </select>
@@ -256,6 +290,21 @@ function SourceControls({ sourceType, setSourceType, bellKey, setBellKey, classi
             well as (0.5, 0, 0, 0.5).
           </p>
         </>
+      )}
+
+      {sourceType === 'instructionSets' && (
+        <InstructionSetControls
+          relationship={instructionRelationship}
+          setRelationship={setInstructionRelationship}
+          showing={instructionShowing}
+          setShowing={setInstructionShowing}
+          particle1={instructionParticle1}
+          setParticle1={setInstructionParticle1}
+          particle2={instructionParticle2}
+          setParticle2={setInstructionParticle2}
+          disabled={disabled}
+          resetDataCollection={resetDataCollection}
+        />
       )}
 
       {sourceType === 'bell' && (
@@ -371,19 +420,104 @@ export default function App() {
   // (a fixed 50/50 up-up/down-down mixture) exactly.
   const [classicalWeights, setClassicalWeights] = useState({ uu: 1, ud: 0, du: 0, dd: 1 });
   const [customCoeffs, setCustomCoeffs] = useState({ a: 1, b: 0, c: 0, d: 1 });
+
+  // Bell's own local-hidden-variable model (see physics.js's "Hidden
+  // instruction sets" section): `instructionRelationship` picks whether
+  // Particle 2 reads Particle 1's own sheet straight, flipped, or has a
+  // fully independent sheet of its own; `instructionShowing` is a pure
+  // display choice (which sheet the sidebar currently renders) with no
+  // physical effect, so changing it never calls resetDataCollection.
+  // instructionParticle1/2 are computed once up front (not two separate
+  // createInitialInstructionSheet() calls) so instructionSelectedColumnId's
+  // own initial value can reference particle1's actual starting column id.
+  const [instructionInit] = useState(() => {
+    const particle1 = createInitialInstructionSheet();
+    const particle2 = createInitialInstructionSheet();
+    return { particle1, particle2, selectedColumnId: { 0: particle1.columns[0].id, 1: particle1.columns[0].id } };
+  });
+  const [instructionRelationship, setInstructionRelationship] = useState('opposite');
+  const [instructionShowing, setInstructionShowing] = useState('particle1');
+  const [instructionFixDirections, setInstructionFixDirections] = useState(true);
+  const [instructionParticle1, setInstructionParticle1] = useState(instructionInit.particle1);
+  const [instructionParticle2, setInstructionParticle2] = useState(instructionInit.particle2);
+  // Which column id each side's *locked* stepper currently points at --
+  // separate from experiment[i].basis (always the resolved [theta, phi]
+  // radians every other part of the app expects) so that basis can simply
+  // be *derived* from this id plus the currently-relevant column list (see
+  // the syncing effect below) rather than needing its own propagation logic
+  // scattered across every column edit/delete/relationship-change site.
+  const [instructionSelectedColumnId, setInstructionSelectedColumnId] = useState(instructionInit.selectedColumnId);
+
+  // Right reads Particle 1's own shared columns except in 'independent'
+  // mode, where it gets Particle 2's own separate ones -- the one place
+  // this rule is decided, reused by the source, the sync effect below, and
+  // the stepper wiring in the render.
+  const instructionColumnsForSide = (index) =>
+    (index === 0 || instructionRelationship !== 'independent' ? instructionParticle1 : instructionParticle2).columns;
+
   const source = sourceType === 'classical'
     ? { kind: 'classical', weights: classicalWeights }
-    : sourceType === 'bell'
-      ? { kind: 'quantum', coeffs: BELL_STATES.find((b) => b.key === bellKey).coeffs }
-      : {
-          kind: 'quantum',
-          coeffs: {
-            uu: { re: customCoeffs.a, im: 0 },
-            ud: { re: customCoeffs.b, im: 0 },
-            du: { re: customCoeffs.c, im: 0 },
-            dd: { re: customCoeffs.d, im: 0 },
-          },
-        };
+    : sourceType === 'instructionSets'
+      ? { kind: 'instructionSets', relationship: instructionRelationship, particle1: instructionParticle1, particle2: instructionParticle2 }
+      : sourceType === 'bell'
+        ? { kind: 'quantum', coeffs: BELL_STATES.find((b) => b.key === bellKey).coeffs }
+        : {
+            kind: 'quantum',
+            coeffs: {
+              uu: { re: customCoeffs.a, im: 0 },
+              ud: { re: customCoeffs.b, im: 0 },
+              du: { re: customCoeffs.c, im: 0 },
+              dd: { re: customCoeffs.d, im: 0 },
+            },
+          };
+
+  // Every other part of the app (LabPanel's canvas geometry and particle
+  // sampling, Histogram's theory overlay) reads an analyzer's setting as
+  // experiment[i].basis -- so rather than an effect that writes a resolved
+  // angle back into `experiment` (and risks cascading renders doing it),
+  // the resolved angle is simply derived at render time: whenever "Fix
+  // directions" is on, each side's basis is whatever its selected column's
+  // *current* direction is, computed fresh from instructionSelectedColumnId
+  // plus the presently-relevant column list every render. That alone gives
+  // "live" column edits for free (a column's own angle changing produces a
+  // new columns array, which this recomputes against immediately), and a
+  // selected id that no longer exists in the relevant list (the column was
+  // deleted, or -- in 'independent' mode -- simply isn't part of this
+  // side's list at all) falls back to that list's first column rather than
+  // resolving to nothing.
+  // Memoized (not just a plain computed const) because this becomes the
+  // `experiment` prop LabPanel and Histogram both key their own
+  // useCallback/useEffect dependency arrays on -- a fresh array/object
+  // reference every render (which a plain const here would be, even on
+  // renders this source type had no part in) would defeat that memoization
+  // and redraw both canvases far more than needed, especially during a fast
+  // particle stream, which re-renders App on every single spawn.
+  const resolvedExperiment = useMemo(() => {
+    if (sourceType !== 'instructionSets' || !instructionFixDirections) return experiment;
+    return experiment.map((sg, i) => {
+      const columns = i === 0 || instructionRelationship !== 'independent' ? instructionParticle1.columns : instructionParticle2.columns;
+      const column = columns.find((c) => c.id === instructionSelectedColumnId[i]) ?? columns[0];
+      return { ...sg, basis: [column.thetaDeg * DEG_TO_RAD, column.phiDeg * DEG_TO_RAD] };
+    });
+  }, [experiment, sourceType, instructionFixDirections, instructionRelationship, instructionParticle1.columns, instructionParticle2.columns, instructionSelectedColumnId]);
+
+  // Whether each analyzer's *current* basis has no matching column in its
+  // relevant instruction-set sheet -- checked against resolvedExperiment so
+  // this is trivially false whenever "Fix directions" is on (a locked
+  // analyzer can only ever land on a real column) and reduces to the
+  // ordinary free-form check when it's off (resolvedExperiment then just
+  // *is* the raw experiment). Drives both the "no instructions for this
+  // direction" warning on the lab panel and the Start/Make-One-Pair guard
+  // below; memoized for the same reason as resolvedExperiment (it's the
+  // `invalidAnalyzer` prop LabPanel's own draw callback depends on).
+  const instructionInvalid = useMemo(() => {
+    if (sourceType !== 'instructionSets') return [false, false];
+    return [0, 1].map((i) => {
+      const columns = i === 0 || instructionRelationship !== 'independent' ? instructionParticle1.columns : instructionParticle2.columns;
+      return findInstructionColumnIndex(resolvedExperiment[i].basis, columns) === -1;
+    });
+  }, [sourceType, resolvedExperiment, instructionRelationship, instructionParticle1.columns, instructionParticle2.columns]);
+  const anyInstructionInvalid = instructionInvalid[0] || instructionInvalid[1];
 
   // Pauses particle production (and, via the tabVisible prop, LabPanel's own
   // animation loop) while this tab isn't the active one -- same reasoning as
@@ -428,6 +562,11 @@ export default function App() {
   };
 
   const handleStartPause = () => {
+    // An analyzer with no instructions for its current direction has
+    // nothing for the instruction-set source to sample -- LabPanel already
+    // shows why (the red outline + message), so this is a silent no-op
+    // rather than a second error surface.
+    if (anyInstructionInvalid) return;
     if (expMode.dc === 'single') {
       labPanelRef.current?.spawnParticle();
       return;
@@ -436,13 +575,13 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (expMode.dc === 'stream' && expMode.running && tabVisible) {
+    if (expMode.dc === 'stream' && expMode.running && tabVisible && !anyInstructionInvalid) {
       streamTimerRef.current = setInterval(() => {
         labPanelRef.current?.spawnParticle();
       }, 1 / expMode.rate * 1000);
       return () => clearInterval(streamTimerRef.current);
     }
-  }, [expMode.dc, expMode.running, expMode.rate, tabVisible]);
+  }, [expMode.dc, expMode.running, expMode.rate, tabVisible, anyInstructionInvalid]);
 
   return (
     <div className="app-layout">
@@ -454,7 +593,7 @@ export default function App() {
         <div className="canvas-area">
           <LabPanel
             ref={labPanelRef}
-            experiment={experiment}
+            experiment={resolvedExperiment}
             setExperiment={setExperiment}
             expMode={expMode}
             displayBools={displayBools}
@@ -464,6 +603,7 @@ export default function App() {
             hoveredDetectors={histDisplayBools.hoveredDetectors}
             onCoincidence={recordCoincidence}
             source={source}
+            invalidAnalyzer={instructionInvalid}
           />
         </div>
 
@@ -477,6 +617,14 @@ export default function App() {
             setClassicalWeights={setClassicalWeights}
             customCoeffs={customCoeffs}
             setCustomCoeffs={setCustomCoeffs}
+            instructionRelationship={instructionRelationship}
+            setInstructionRelationship={setInstructionRelationship}
+            instructionShowing={instructionShowing}
+            setInstructionShowing={setInstructionShowing}
+            instructionParticle1={instructionParticle1}
+            setInstructionParticle1={setInstructionParticle1}
+            instructionParticle2={instructionParticle2}
+            setInstructionParticle2={setInstructionParticle2}
             disabled={controlsLocked}
             resetDataCollection={resetDataCollection}
           />
@@ -488,6 +636,17 @@ export default function App() {
         <div className="control-bar-content">
           <div className="control-bar-group">
             <h3 style={{ margin: '0 0 10px 0', fontWeight: 'bold' }}>Set Analyzer Orientations</h3>
+            {sourceType === 'instructionSets' && (
+              <label style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 6px 2px' }}>
+                <input
+                  type="checkbox"
+                  checked={instructionFixDirections}
+                  onChange={(e) => { setInstructionFixDirections(e.target.checked); resetDataCollection(); }}
+                  disabled={controlsLocked}
+                />
+                Fix directions to instruction table
+              </label>
+            )}
             {experiment.map((sg, i) => (
               <AnalyzerStepper
                 key={i}
@@ -496,6 +655,18 @@ export default function App() {
                 setExperiment={setExperiment}
                 disabled={controlsLocked}
                 resetDataCollection={resetDataCollection}
+                instructionMode={
+                  sourceType === 'instructionSets' && instructionFixDirections
+                    ? {
+                        columns: instructionColumnsForSide(i),
+                        selectedColumnId: instructionSelectedColumnId[i],
+                        onSelectColumn: (columnId) => {
+                          setInstructionSelectedColumnId((prev) => ({ ...prev, [i]: columnId }));
+                          resetDataCollection();
+                        },
+                      }
+                    : null
+                }
               />
             ))}
 
@@ -577,7 +748,7 @@ export default function App() {
             </div>
             <div className="histogram-panel">
               <div className="histogram-canvas-wrap">
-                <Histogram experiment={experiment} displayBools={histDisplayBools} setDisplayBools={setHistDisplayBools} coincidences={coincidences} source={source} />
+                <Histogram experiment={resolvedExperiment} displayBools={histDisplayBools} setDisplayBools={setHistDisplayBools} coincidences={coincidences} source={source} />
               </div>
             </div>
           </div>
