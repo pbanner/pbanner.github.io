@@ -36,8 +36,8 @@
    (e.g. growing when a wider Bell-state label appears) would silently
    leave the canvas stale between real window resizes. */
 .source-sidebar {
-  width: 260px;
-  flex: 0 0 260px;
+  width: 300px;
+  flex: 0 0 300px;
   /* Without this, a tall sourceType's content (e.g. the Hidden Instruction
      Sets controls with several directions/rows) doesn't just scroll inside
      this box -- being a flex item, its default min-height:auto lets its own

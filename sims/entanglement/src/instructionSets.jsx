@@ -34,7 +34,7 @@ import {
 // container's own onBlur below take it from there) reverts to plain text.
 function DirectionLabel({ index, column, onEdit, disabled }) {
   const [editing, setEditing] = useState(false);
-  const prefix = `Direction ${index + 1}: `;
+  const prefix = `• Direction ${index + 1}: `;
 
   if (!editing) {
     return (
@@ -43,7 +43,7 @@ function DirectionLabel({ index, column, onEdit, disabled }) {
         title={disabled ? undefined : 'Click to edit'}
         style={{ cursor: disabled ? 'default' : 'pointer', fontSize: '13px', whiteSpace: 'nowrap' }}
       >
-        {prefix}{column.thetaDeg}°, {column.phiDeg}°
+        <strong>{prefix}</strong>{column.thetaDeg}°, {column.phiDeg}°
       </span>
     );
   }
@@ -53,7 +53,7 @@ function DirectionLabel({ index, column, onEdit, disabled }) {
       style={{ display: 'inline-flex', gap: '3px', alignItems: 'center', fontSize: '13px', whiteSpace: 'nowrap' }}
       onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setEditing(false); }}
     >
-      {prefix}
+      <strong>{prefix}</strong>
       <input
         type="number"
         min={0}
@@ -95,17 +95,17 @@ function DirectionList({ columns, generateAll, onEditColumn, onDeleteColumn, onA
   const canAdd = !generateAll && columns.length < MAX_INSTRUCTION_COLUMNS;
   return (
     <>
-      <p style={{ fontSize: '12px', color: '#666', margin: '0 0 6px 0', lineHeight: '1.4' }}>
-        Specify the directions that particles have instructions for:
+      <p style={{ fontSize: '12px', color: '#666', margin: '6px 0 0 0', lineHeight: '1.3' }}>
+        <strong>Specify the directions</strong> that particles have instructions for (click to edit):
       </p>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <tbody>
           {columns.map((col, i) => (
             <tr key={col.id}>
-              <td style={{ width: '100%', padding: '2px 0' }}>
+              <td style={{ width: '100%', padding: '0px 0' }}>
                 <DirectionLabel index={i} column={col} disabled={disabled} onEdit={(t, p) => onEditColumn(col.id, t, p)} />
               </td>
-              <td style={{ padding: '2px 0 2px 6px', textAlign: 'right' }}>
+              <td style={{ padding: '0px 0 0px 6px', textAlign: 'right' }}>
                 <button
                   type="button"
                   onClick={() => onDeleteColumn(col.id)}
@@ -122,9 +122,11 @@ function DirectionList({ columns, generateAll, onEditColumn, onDeleteColumn, onA
         </tbody>
       </table>
       {canAdd && (
-        <button type="button" className="control-bar-button" onClick={onAddColumn} disabled={disabled} style={{ fontSize: '12px', margin: '6px 0 10px 0' }}>
-          + Add Direction
-        </button>
+        <div style={{ textAlign: 'right' }}>
+          <button type="button" className="control-bar-button" onClick={onAddColumn} disabled={disabled} style={{ fontSize: '11px', margin: '6px 0 10px 0' }}>
+            + Add Direction
+          </button>
+        </div>
       )}
     </>
   );
@@ -198,7 +200,7 @@ function SheetPanel({ sheet, setSheet, readOnly, noteText, disabled, resetDataCo
 
   return (
     <>
-      <p style={{ fontSize: '12px', color: '#666', margin: '0 0 8px 0', lineHeight: '1.5' }}>{noteText}</p>
+      <p style={{ fontSize: '12px', color: '#666', margin: '0 0 8px 0', lineHeight: '1.3' }}>{noteText}</p>
       {!readOnly && (
         <DirectionList
           columns={columns}
@@ -215,6 +217,20 @@ function SheetPanel({ sheet, setSheet, readOnly, noteText, disabled, resetDataCo
           column's own <col> needs a width; every other <col> is left
           unspecified so the browser divides the *remaining* width equally
           among however many directions there currently are. */}
+      <p style={{ fontSize: '12px', color: '#666', margin: '12px 0 4px 0', lineHeight: '1.3' }}>
+        <strong>Instructions:</strong>
+      </p>
+      {!readOnly &&
+        <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <input
+            type="checkbox"
+            checked={generateAll}
+            onChange={(e) => mutate(e.target.checked ? generateAllInstructionSets : restoreManualInstructionSets)}
+            disabled={disabled}
+          />
+          Show all possible instruction sets
+        </label>
+      }
       <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: '12px' }}>
         <colgroup>
           {columns.map((col) => <col key={col.id} />)}
@@ -223,7 +239,7 @@ function SheetPanel({ sheet, setSheet, readOnly, noteText, disabled, resetDataCo
         <thead>
           <tr>
             {columns.map((col, i) => (
-              <th key={col.id} style={{ padding: '2px 3px', fontWeight: 600 }}>D{i + 1}</th>
+              <th key={col.id} style={{ padding: '2px 3px', fontWeight: 600, textAlign: 'center' }}>D{i + 1}</th>
             ))}
             <th style={{ padding: '2px 4px', fontWeight: 600, borderLeft: '2px solid #999' }}>Weight</th>
           </tr>
@@ -251,15 +267,6 @@ function SheetPanel({ sheet, setSheet, readOnly, noteText, disabled, resetDataCo
               + Add row
             </button>
           )}
-          <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <input
-              type="checkbox"
-              checked={generateAll}
-              onChange={(e) => mutate(e.target.checked ? generateAllInstructionSets : restoreManualInstructionSets)}
-              disabled={disabled}
-            />
-            Generate all possible sets
-          </label>
           {hasZeroWeightRow && (
             <button type="button" className="control-bar-button" onClick={() => mutate(removeZeroWeightInstructionRows)} disabled={disabled} style={{ fontSize: '12px' }}>
               Remove rows with weight 0
@@ -321,43 +328,44 @@ export default function InstructionSetControls({
   if (showingParticle2 && isIndependent) {
     panelProps = {
       sheet: particle2, setSheet: setParticle2, readOnly: false,
-      noteText: "Particle 2's own, independently-drawn sheet -- its directions and instruction sets don't have to match Particle 1's at all.",
+      noteText: '',
     };
   } else if (showingParticle2) {
     panelProps = {
       sheet: deriveTiedSheet(particle1, relationship), setSheet: null, readOnly: true,
       noteText: relationship === 'identical'
-        ? "Particle 2 carries an identical copy of Particle 1's sheet."
-        : "Particle 2 carries Particle 1's sheet with every + and − flipped.",
+        ? "Particle 2's instructions are exactly the same as Particle 1's."
+        : "Particle 2's instructions are exact opposites of Particle 1's.",
     };
   } else {
     panelProps = {
       sheet: particle1, setSheet: setParticle1, readOnly: false,
-      noteText: 'Each row is one full set of instructions -- what this particle reports at every direction below -- weighted by how likely a pair is to carry it.',
+      noteText: ''
     };
   }
 
   return (
     <>
-      <p style={{ fontSize: '13px', margin: '10px 0 8px 0', lineHeight: '1.6' }}>
-        Each particle secretly carries a predetermined answer for every
-        direction below -- Bell's own "local hidden variable" model.
+      <p style={{ fontSize: '13px', margin: '10px 0 8px 0', lineHeight: '1.3' }}>
+        <strong>This model:</strong> Each particle secretly carries a pre-determined answer for what they will do when they reach an analyzer at one of the directions you specify below.
       </p>
+      <p style={{ fontSize: '12px', whiteSpace: 'nowrap' }}><strong>Choose:</strong> The left-going particle acts</p>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 6px 0' }}>
-        <label style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>Particle 2's sheet:</label>
         <select
           value={relationship}
           onChange={(e) => changeRelationship(e.target.value)}
           disabled={disabled}
           style={{ flex: 1, fontSize: '12px', padding: '3px' }}
         >
-          <option value="identical">Identical to Particle 1</option>
-          <option value="opposite">Opposite of Particle 1</option>
-          <option value="independent">Independent</option>
+          <option value="identical">the same as</option>
+          <option value="opposite">opposite to</option>
+          <option value="independent">independent of</option>
         </select>
+        <label>the right-going particle.</label>
       </div>
+      <hr style={{ margin: '6px 0px' }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 10px 0' }}>
-        <label style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>Showing:</label>
+        <label style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>Showing instructions for:</label>
         <select value={showing} onChange={(e) => setShowing(e.target.value)} style={{ flex: 1, fontSize: '12px', padding: '3px' }}>
           <option value="particle1">Particle 1</option>
           <option value="particle2">Particle 2</option>
