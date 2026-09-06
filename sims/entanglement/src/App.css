@@ -38,6 +38,15 @@
 .source-sidebar {
   width: 260px;
   flex: 0 0 260px;
+  /* Without this, a tall sourceType's content (e.g. the Hidden Instruction
+     Sets controls with several directions/rows) doesn't just scroll inside
+     this box -- being a flex item, its default min-height:auto lets its own
+     content's height win over the height .top-row's flexbox would otherwise
+     stretch it to, so it grows past .top-row (and so .app-layout's own
+     fixed 100dvh), pushing the whole page taller and forcing a *page*-level
+     scrollbar instead of this box's own overflow-y. min-height:0 is what
+     lets overflow-y:auto below actually be the one that activates. */
+  min-height: 0;
   background: #f5f5f5;
   border-left: 1px solid #ddd;
   padding: 12px 14px;
@@ -62,6 +71,16 @@
 /* Bottom control bar */
 .control-bar {
   height: 250px;
+  /* Without this, a tall .top-row (e.g. the Hidden Instruction Sets
+     sidebar's content, whose own natural size feeds into .top-row's
+     content-based flex-basis before .source-sidebar's min-height:0/
+     overflow-y:auto ever get a say) can force a flexbox size conflict that
+     this bar -- not .top-row -- absorbs most of, shrinking well below its
+     own 250px instead of staying put while .top-row (and so the sidebar)
+     is what gives. flex-shrink:0 takes this bar out of that negotiation
+     entirely: its height is always exactly 250px, full stop, and .top-row
+     always gets exactly whatever's left. */
+  flex-shrink: 0;
   background: #f5f5f5;
   border-left: none;
   border-top: 1px solid #ddd;

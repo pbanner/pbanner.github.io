@@ -209,33 +209,41 @@ function SheetPanel({ sheet, setSheet, readOnly, noteText, disabled, resetDataCo
           onAddColumn={() => mutate(addInstructionColumn)}
         />
       )}
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ borderCollapse: 'collapse', fontSize: '12px' }}>
-          <thead>
-            <tr>
-              {columns.map((col, i) => (
-                <th key={col.id} style={{ padding: '2px 3px', fontWeight: 600 }}>D{i + 1}</th>
-              ))}
-              <th style={{ padding: '2px 4px', fontWeight: 600, borderLeft: '2px solid #999' }}>Weight</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <InstructionRow
-                key={row.id}
-                row={row}
-                columns={columns}
-                readOnly={readOnly}
-                disabled={disabled}
-                isDuplicate={duplicateIds.has(row.id)}
-                soleRow={rows.length === 1}
-                onToggleSign={(colId) => mutate((prev) => toggleInstructionSign(prev, row.id, colId))}
-                onChangeWeight={(w) => mutate((prev) => changeInstructionWeight(prev, row.id, w))}
-              />
+      {/* width:100% + tableLayout:'fixed' spreads the table across the
+          sidebar's full width rather than shrinking to its content's own
+          (small) natural size -- fixed layout also means only the Weight
+          column's own <col> needs a width; every other <col> is left
+          unspecified so the browser divides the *remaining* width equally
+          among however many directions there currently are. */}
+      <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: '12px' }}>
+        <colgroup>
+          {columns.map((col) => <col key={col.id} />)}
+          <col style={{ width: '60px' }} />
+        </colgroup>
+        <thead>
+          <tr>
+            {columns.map((col, i) => (
+              <th key={col.id} style={{ padding: '2px 3px', fontWeight: 600 }}>D{i + 1}</th>
             ))}
-          </tbody>
-        </table>
-      </div>
+            <th style={{ padding: '2px 4px', fontWeight: 600, borderLeft: '2px solid #999' }}>Weight</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <InstructionRow
+              key={row.id}
+              row={row}
+              columns={columns}
+              readOnly={readOnly}
+              disabled={disabled}
+              isDuplicate={duplicateIds.has(row.id)}
+              soleRow={rows.length === 1}
+              onToggleSign={(colId) => mutate((prev) => toggleInstructionSign(prev, row.id, colId))}
+              onChangeWeight={(w) => mutate((prev) => changeInstructionWeight(prev, row.id, w))}
+            />
+          ))}
+        </tbody>
+      </table>
       {!readOnly && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '6px', marginTop: '8px' }}>
           {!generateAll && (
