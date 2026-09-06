@@ -26,33 +26,34 @@ import {
   restoreManualInstructionSets,
 } from './instructionSetsData';
 
-// One column header's direction, shown as plain "[theta]°, [phi]°" text
-// until clicked, at which point it becomes two small whole-degree number
-// inputs in place of the text -- editing commits immediately (each input's
-// own onChange), and clicking anywhere outside both inputs (Tab, click
+// One direction, shown as plain "Direction N: [theta]°, [phi]°" text until
+// clicked, at which point the numbers become two small whole-degree inputs
+// in place of themselves -- editing commits immediately (each input's own
+// onChange), and clicking anywhere outside both inputs (Tab, click
 // elsewhere, or Enter -- which just blurs the focused input, letting the
 // container's own onBlur below take it from there) reverts to plain text.
-function ColumnHeaderLabel({ column, onEdit, readOnly, disabled }) {
+function DirectionLabel({ index, column, onEdit, disabled }) {
   const [editing, setEditing] = useState(false);
+  const prefix = `Direction ${index + 1}: `;
 
-  if (readOnly || !editing) {
-    const clickable = !readOnly && !disabled;
+  if (!editing) {
     return (
       <span
-        onClick={clickable ? () => setEditing(true) : undefined}
-        title={clickable ? 'Click to edit' : undefined}
-        style={{ cursor: clickable ? 'pointer' : 'default', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap' }}
+        onClick={disabled ? undefined : () => setEditing(true)}
+        title={disabled ? undefined : 'Click to edit'}
+        style={{ cursor: disabled ? 'default' : 'pointer', fontSize: '13px', whiteSpace: 'nowrap' }}
       >
-        {column.thetaDeg}°, {column.phiDeg}°
+        {prefix}{column.thetaDeg}°, {column.phiDeg}°
       </span>
     );
   }
 
   return (
-    <div
-      style={{ display: 'inline-flex', gap: '3px', alignItems: 'center', fontSize: '12px' }}
+    <span
+      style={{ display: 'inline-flex', gap: '3px', alignItems: 'center', fontSize: '13px', whiteSpace: 'nowrap' }}
       onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setEditing(false); }}
     >
+      {prefix}
       <input
         type="number"
         min={0}
@@ -76,7 +77,56 @@ function ColumnHeaderLabel({ column, onEdit, readOnly, disabled }) {
         style={{ width: '36px', padding: '2px', fontSize: '12px' }}
       />
       °
-    </div>
+    </span>
+  );
+}
+
+// The direction picker, separated out from the instruction-set table itself
+// (which now just labels its columns D1..D4) since the table's own width is
+// the tight resource in this sidebar: a click-to-edit "Direction N: t°, p°"
+// per direction reads however wide it needs to, entirely independent of how
+// many narrow sign-toggle columns the table below ends up with. Coded as a
+// <table> (not visually styled as one) purely so each row's delete button
+// can be pinned to the far right of the sidebar's own width via a first
+// cell set to width:'100%' -- the standard trick for "everything else at
+// its natural width, one cell stretched to fill (and so push right) the
+// rest."
+function DirectionList({ columns, generateAll, onEditColumn, onDeleteColumn, onAddColumn, disabled }) {
+  const canAdd = !generateAll && columns.length < MAX_INSTRUCTION_COLUMNS;
+  return (
+    <>
+      <p style={{ fontSize: '12px', color: '#666', margin: '0 0 6px 0', lineHeight: '1.4' }}>
+        Specify the directions that particles have instructions for:
+      </p>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <tbody>
+          {columns.map((col, i) => (
+            <tr key={col.id}>
+              <td style={{ width: '100%', padding: '2px 0' }}>
+                <DirectionLabel index={i} column={col} disabled={disabled} onEdit={(t, p) => onEditColumn(col.id, t, p)} />
+              </td>
+              <td style={{ padding: '2px 0 2px 6px', textAlign: 'right' }}>
+                <button
+                  type="button"
+                  onClick={() => onDeleteColumn(col.id)}
+                  disabled={disabled || generateAll || columns.length <= 1}
+                  title="Delete this direction"
+                  aria-label={`Delete Direction ${i + 1}`}
+                  style={{ width: '16px', height: '16px', padding: 0, lineHeight: '13px', fontSize: '11px', border: '1px solid #999', borderRadius: '2px', background: '#eee', cursor: 'pointer' }}
+                >
+                  ×
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {canAdd && (
+        <button type="button" className="control-bar-button" onClick={onAddColumn} disabled={disabled} style={{ fontSize: '12px', margin: '6px 0 10px 0' }}>
+          + Add Direction
+        </button>
+      )}
+    </>
   );
 }
 
@@ -84,7 +134,7 @@ function ColumnHeaderLabel({ column, onEdit, readOnly, disabled }) {
 // (only when it duplicates another row) a message row directly beneath it
 // -- rather than squeezed inline, which this sidebar's width can't spare.
 function InstructionRow({ row, columns, readOnly, disabled, isDuplicate, soleRow, onToggleSign, onChangeWeight }) {
-  const cellStyle = { border: '1px solid #ccc', padding: '3px 5px', textAlign: 'center' };
+  const cellStyle = { border: '1px solid #ccc', padding: '2px 3px', textAlign: 'center' };
   return (
     <>
       <tr style={isDuplicate ? { outline: '2px solid #cc3333', outlineOffset: '-1px' } : undefined}>
@@ -98,7 +148,7 @@ function InstructionRow({ row, columns, readOnly, disabled, isDuplicate, soleRow
                 disabled={readOnly || disabled}
                 aria-label={isUp ? 'Instructed +; click to flip to -' : 'Instructed -; click to flip to +'}
                 style={{
-                  width: '22px', height: '20px', padding: 0, fontSize: '12px', fontWeight: 700,
+                  width: '19px', height: '18px', padding: 0, fontSize: '12px', fontWeight: 700,
                   border: '1px solid #999', borderRadius: '3px',
                   background: isUp ? '#eaf3ea' : '#f6eaea', color: '#333',
                   cursor: readOnly || disabled ? 'default' : 'pointer',
@@ -109,14 +159,14 @@ function InstructionRow({ row, columns, readOnly, disabled, isDuplicate, soleRow
             </td>
           );
         })}
-        <td style={{ ...cellStyle, borderLeft: '2px solid #999' }}>
+        <td style={{ ...cellStyle, padding: '2px 4px', borderLeft: '2px solid #999' }}>
           <input
             type="number"
             step="0.01"
             value={soleRow ? 1 : row.weight}
             onChange={(e) => { const v = parseFloat(e.target.value); if (!Number.isNaN(v)) onChangeWeight(v); }}
             disabled={readOnly || disabled || soleRow}
-            style={{ width: '52px', padding: '2px', fontSize: '12px' }}
+            style={{ width: '46px', padding: '2px', fontSize: '12px' }}
           />
         </td>
       </tr>
@@ -143,53 +193,30 @@ function SheetPanel({ sheet, setSheet, readOnly, noteText, disabled, resetDataCo
     resetDataCollection();
   };
 
-  const canAddColumn = !readOnly && !generateAll && columns.length < MAX_INSTRUCTION_COLUMNS;
   const duplicateIds = readOnly ? new Set() : findDuplicateRowIds(rows, columns);
   const hasZeroWeightRow = !readOnly && rows.length > 1 && rows.some((r) => r.weight === 0);
 
   return (
     <>
       <p style={{ fontSize: '12px', color: '#666', margin: '0 0 8px 0', lineHeight: '1.5' }}>{noteText}</p>
+      {!readOnly && (
+        <DirectionList
+          columns={columns}
+          generateAll={generateAll}
+          disabled={disabled}
+          onEditColumn={(colId, t, p) => mutate((prev) => editInstructionColumn(prev, colId, t, p))}
+          onDeleteColumn={(colId) => mutate((prev) => deleteInstructionColumn(prev, colId))}
+          onAddColumn={() => mutate(addInstructionColumn)}
+        />
+      )}
       <div style={{ overflowX: 'auto' }}>
         <table style={{ borderCollapse: 'collapse', fontSize: '12px' }}>
           <thead>
             <tr>
-              {columns.map((col) => (
-                <th key={col.id} style={{ padding: '2px 5px' }}>
-                  {!readOnly && (
-                    <button
-                      type="button"
-                      onClick={() => mutate((prev) => deleteInstructionColumn(prev, col.id))}
-                      disabled={disabled || generateAll || columns.length <= 1}
-                      title="Delete this direction"
-                      aria-label="Delete this direction"
-                      style={{ width: '16px', height: '16px', padding: 0, lineHeight: '13px', fontSize: '11px', border: '1px solid #999', borderRadius: '2px', background: '#eee', cursor: 'pointer' }}
-                    >
-                      ×
-                    </button>
-                  )}
-                </th>
+              {columns.map((col, i) => (
+                <th key={col.id} style={{ padding: '2px 3px', fontWeight: 600 }}>D{i + 1}</th>
               ))}
-              {canAddColumn && (
-                <th rowSpan={2} style={{ verticalAlign: 'middle', padding: '2px 5px' }}>
-                  <button type="button" className="control-bar-button" onClick={() => mutate(addInstructionColumn)} disabled={disabled} style={{ fontSize: '11px', padding: '3px 8px' }}>
-                    + Add
-                  </button>
-                </th>
-              )}
-              <th rowSpan={2} style={{ verticalAlign: 'middle', padding: '2px 8px', fontWeight: 600, borderLeft: '2px solid #999' }}>Weight</th>
-            </tr>
-            <tr>
-              {columns.map((col) => (
-                <th key={col.id} style={{ padding: '2px 5px' }}>
-                  <ColumnHeaderLabel
-                    column={col}
-                    readOnly={readOnly}
-                    disabled={disabled}
-                    onEdit={(t, p) => mutate((prev) => editInstructionColumn(prev, col.id, t, p))}
-                  />
-                </th>
-              ))}
+              <th style={{ padding: '2px 4px', fontWeight: 600, borderLeft: '2px solid #999' }}>Weight</th>
             </tr>
           </thead>
           <tbody>
