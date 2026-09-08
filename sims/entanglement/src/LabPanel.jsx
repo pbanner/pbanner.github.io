@@ -218,12 +218,16 @@ function buildLocalPath(axis, arm) {
 
 // A blocked side has no SG to measure through -- its particle just travels
 // a short straight run from the oven edge to wherever the beam block sits
-// (the SG's old position) and is absorbed there. No transverse jitter here
-// (unlike buildLocalPath): there's no detector to aim at on this side, so a
-// clean straight line into the block reads better than a wandering one.
+// (the SG's old position) and is absorbed there. Same transverse jitter and
+// entry height as buildLocalPath's own approach to the SG's input slot --
+// the beam looks the same coming out of the oven whether or not this side
+// happens to be blocked, and blocking it shouldn't collapse the spread into
+// a single line arriving dead-center; it should just be where it stops.
 function buildBlockedLocalPath(axis) {
+  const sgInputLocalY = axis - SG_HEIGHT / 2 + SG_INPUT_Y;
+  const offset = (Math.random() - 0.5) * BEAM_TRANSVERSE_WIDTH;
   const blockX = SG_X0_LOCAL + SG_WIDTH / 2;
-  return [{ type: 'line', x0: 0, y0: axis, x1: blockX, y1: axis }];
+  return [{ type: 'line', x0: 0, y0: sgInputLocalY + offset, x1: blockX, y1: sgInputLocalY + offset }];
 }
 
 const LabPanel = forwardRef(function LabPanel(
