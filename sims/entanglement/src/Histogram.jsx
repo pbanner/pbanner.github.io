@@ -114,7 +114,7 @@ function CoincidenceTable({ coincidences, blocked, hoveredDetectors, setDisplayB
     return total > 0 ? `${(count / total * 100).toFixed(1)}%` : '---';
   };
 
-  const headerStyle = { padding: '10px 10px', textAlign: 'center', fontWeight: 600, color: '#333' };
+  const headerStyle = { minWidth: CT_CELL_MIN_WIDTH, padding: '10px 10px', textAlign: 'center', fontWeight: 600, color: '#333' };
   const cellStyle = { border: CT_BORDER, minWidth: CT_CELL_MIN_WIDTH, padding: '10px 10px', textAlign: 'center', fontWeight: 600, color: '#303030', fontVariantNumeric: 'tabular-nums' };
   const oppositeStyle = { ...cellStyle, background: '#e8ecfb', borderColor: '#8fa0d8' };
   const marginStyle = { minWidth: CT_CELL_MIN_WIDTH, padding: '10px 10px', textAlign: 'center', fontWeight: 500, color: '#666', fontVariantNumeric: 'tabular-nums' };
@@ -142,7 +142,7 @@ function CoincidenceTable({ coincidences, blocked, hoveredDetectors, setDisplayB
           <tr>
             <td style={blankStyle} />
             <th style={headerStyle}>R <ArrowIcon direction="up" /></th>
-            <th style={headerStyle}>R <ArrowIcon direction="down" /></th>
+            <th style={{ ...headerStyle, borderLeft: CT_BORDER }}>R <ArrowIcon direction="down" /></th>
             <td style={blankStyle} />
           </tr>
           <tr>
@@ -158,7 +158,7 @@ function CoincidenceTable({ coincidences, blocked, hoveredDetectors, setDisplayB
             <td style={{ ...marginStyle, borderLeft: CT_BORDER }}>{fmt(leftUpMargin)}</td>
           </tr>
           <tr>
-            <th style={headerStyle}>L <ArrowIcon direction="down" /></th>
+            <th style={{ ...headerStyle, borderTop: CT_BORDER }}>L <ArrowIcon direction="down" /></th>
             <td
               style={{ ...oppositeStyle, ...(isCellHovered(hoveredDetectors, 'down', 'up') ? { boxShadow: CT_HOVER_SHADOW } : null) }}
               {...hoverHandlers('down', 'up')}
@@ -167,12 +167,12 @@ function CoincidenceTable({ coincidences, blocked, hoveredDetectors, setDisplayB
               style={{ ...cellStyle, ...(isCellHovered(hoveredDetectors, 'down', 'down') ? { boxShadow: CT_HOVER_SHADOW } : null) }}
               {...hoverHandlers('down', 'down')}
             >{fmt(dd)}</td>
-            <td style={{ ...marginStyle, borderLeft: CT_BORDER }}>{fmt(leftDownMargin)}</td>
+            <td style={{ ...marginStyle, borderLeft: CT_BORDER, borderTop: CT_BORDER }}>{fmt(leftDownMargin)}</td>
           </tr>
           <tr>
             <td style={blankStyle} />
             <td style={{ ...marginStyle, borderTop: CT_BORDER }}>{fmt(rightUpMargin)}</td>
-            <td style={{ ...marginStyle, borderTop: CT_BORDER }}>{fmt(rightDownMargin)}</td>
+            <td style={{ ...marginStyle, borderTop: CT_BORDER, borderLeft: CT_BORDER }}>{fmt(rightDownMargin)}</td>
             <td style={blankStyle} />
           </tr>
         </tbody>
