@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import './App.css';
 import LabPanel from './LabPanel';
 import Histogram from './Histogram';
-import { AxisStepper, SliderPlusTextboxControl } from './controls';
+import { AxisStepper, SliderPlusTextboxControl, NumberField } from './controls';
 import { SG_OPTION_LABELS, SG_OPTION_BASES, DEG_TO_RAD } from './axisOptions';
 import { BELL_STATES, findInstructionColumnIndex } from './physics';
 import TeX from './TeX';
@@ -297,14 +297,10 @@ function SourceControls({
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
                   <TeX math={spinKetTex(arms)} /> =
                 </span>
-                <input
-                  type="number"
+                <NumberField
                   step="0.01"
                   value={classicalWeights[key]}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value);
-                    if (!Number.isNaN(v)) changeClassicalWeight(key, v);
-                  }}
+                  onCommit={(v) => changeClassicalWeight(key, v)}
                   disabled={disabled}
                   style={{ width: '80px', padding: '2px' }}
                 />
@@ -367,14 +363,10 @@ function SourceControls({
             {['a', 'b', 'c', 'd'].map((k) => (
               <label key={k} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
                 <span style={{ minWidth: '24px', whiteSpace: 'nowrap' }}>{k} =</span>
-                <input
-                  type="number"
+                <NumberField
                   step="0.01"
                   value={customCoeffs[k]}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value);
-                    if (!Number.isNaN(v)) changeCoeff(k, v);
-                  }}
+                  onCommit={(v) => changeCoeff(k, v)}
                   disabled={disabled}
                   style={{ width: '80px', padding: '2px' }}
                 />

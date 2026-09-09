@@ -23,6 +23,7 @@ import {
   generateAllInstructionSets,
   restoreManualInstructionSets,
 } from './instructionSetsData';
+import { NumberField } from './controls';
 
 // One instruction row: a clickable +/- toggle per (displayed) direction, a
 // weight box, and (only when it duplicates another row) a message row
@@ -55,11 +56,10 @@ function InstructionRow({ row, directions, readOnly, disabled, isDuplicate, sole
           );
         })}
         <td style={{ ...cellStyle, padding: '2px 4px', borderLeft: '2px solid #999' }}>
-          <input
-            type="number"
+          <NumberField
             step="0.01"
             value={soleRow ? 1 : row.weight}
-            onChange={(e) => { const v = parseFloat(e.target.value); if (!Number.isNaN(v)) onChangeWeight(v); }}
+            onCommit={onChangeWeight}
             disabled={readOnly || disabled || soleRow}
             style={{ width: '46px', padding: '2px', fontSize: '12px' }}
           />

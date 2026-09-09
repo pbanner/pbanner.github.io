@@ -8,6 +8,43 @@
 import { useState } from 'react';
 import { SG_OPTION_LABELS, SG_OPTION_BASES, RAD_TO_DEG, DEG_TO_RAD, roundDeg } from './axisOptions';
 
+// A plain <input type="number"> whose displayed text, while focused, is a
+// local buffer rather than always mirroring the committed numeric value --
+// binding `value` straight to that committed number (as every number input
+// in this app used to) means the *browser* renders whatever the number
+// coerces to on every keystroke: backspacing "30" down to "" hits a value
+// nothing can parse, so the parsed-number guard everywhere skips committing
+// anything, and React duly redraws the input with its last-good value --
+// "30" pops right back before a replacement digit can ever land. Deferring
+// the commit to blur (or Enter, which just blurs) instead means the field
+// shows exactly whatever's been typed so far, valid or not, until the user
+// actually finishes -- the same fix already used for the slider's own
+// textbox below, generalized so every other plain number input in this app
+// (Source Controls' weights, the direction list's angles, an instruction
+// row's weight, an axis stepper's "Set by angles" boxes) can share it
+// instead of re-implementing the same editing/textValue pair each time.
+export function NumberField({ value, onCommit, parse = parseFloat, ...inputProps }) {
+  const [editing, setEditing] = useState(false);
+  const [textValue, setTextValue] = useState('');
+  const displayValue = editing ? textValue : value;
+
+  return (
+    <input
+      type="number"
+      {...inputProps}
+      value={displayValue}
+      onFocus={() => { setTextValue(String(value)); setEditing(true); }}
+      onChange={(e) => setTextValue(e.target.value)}
+      onBlur={() => {
+        setEditing(false);
+        const v = parse(textValue);
+        if (!Number.isNaN(v)) onCommit(v);
+      }}
+      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+    />
+  );
+}
+
 // A stepper through X/Y/Z (or, in `advanced` mode, raw theta/phi textboxes)
 // for any [theta, phi] axis value. Deliberately knows nothing about *what*
 // the axis belongs to (an analyzer's measurement basis, or one arm's field)
@@ -29,34 +66,26 @@ export function AxisStepper({ label, value, advanced, onStep, onSetAdvanced, onS
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <label style={{ width: '12px' }}>θ</label>
-            <input
-              type="number"
+            <NumberField
               min={0}
               max={180}
               step={1}
               value={roundDeg(value[0] * RAD_TO_DEG)}
               disabled={disabled}
-              onChange={(e) => {
-                const v = parseFloat(e.target.value);
-                if (!Number.isNaN(v)) onSetAngle('theta', v * DEG_TO_RAD);
-              }}
+              onCommit={(v) => onSetAngle('theta', v * DEG_TO_RAD)}
               style={{ width: '70px', padding: '2px' }}
             />
             <span>°</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <label style={{ width: '12px' }}>ϕ</label>
-            <input
-              type="number"
+            <NumberField
               min={0}
               max={360}
               step={1}
               value={roundDeg(value[1] * RAD_TO_DEG)}
               disabled={disabled}
-              onChange={(e) => {
-                const v = parseFloat(e.target.value);
-                if (!Number.isNaN(v)) onSetAngle('phi', v * DEG_TO_RAD);
-              }}
+              onCommit={(v) => onSetAngle('phi', v * DEG_TO_RAD)}
               style={{ width: '70px', padding: '2px' }}
             />
             <span>°</span>
@@ -93,15 +122,6 @@ export function AxisStepper({ label, value, advanced, onStep, onSetAdvanced, onS
 }
 
 export function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step, disabled = false }) {
-  const [editing, setEditing] = useState(false);
-  const [textValue, setTextValue] = useState('');
-  const displayValue = editing ? textValue : valueNum;
-
-  const commitText = (raw) => {
-    const v = parseFloat(raw);
-    if (!Number.isNaN(v)) onChangeNum(v);
-  };
-
   return (
     <div className="control-group">
       <label style={{ margin: '-0.25em 0em' }}>{label}</label>
@@ -116,16 +136,12 @@ export function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, ma
           style={{ flex: 1 }}
           disabled={disabled}
         />
-        <input
-          type="number"
+        <NumberField
           min={min}
           max={max}
           step={step}
-          value={displayValue}
-          onFocus={() => { setTextValue(valueNum); setEditing(true); }}
-          onChange={(e) => setTextValue(e.target.value)}
-          onBlur={() => { setEditing(false); commitText(textValue); }}
-          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+          value={valueNum}
+          onCommit={onChangeNum}
           style={{ width: '70px', padding: '2px' }}
           disabled={disabled}
         />

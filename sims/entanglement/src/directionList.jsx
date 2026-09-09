@@ -10,13 +10,14 @@
 
 import { useState } from 'react';
 import { MAX_DIRECTIONS } from './directionListData';
+import { NumberField } from './controls';
 
 // One direction, shown as plain "Direction N: [theta]°, [phi]°" text until
 // clicked, at which point the numbers become two small whole-degree inputs
-// in place of themselves -- editing commits immediately (each input's own
-// onChange), and clicking anywhere outside both inputs (Tab, click
-// elsewhere, or Enter -- which just blurs the focused input, letting the
-// container's own onBlur below take it from there) reverts to plain text.
+// in place of themselves -- each NumberField commits on blur (or Enter,
+// which just blurs), and clicking anywhere outside both inputs (Tab, click
+// elsewhere, or Enter itself) reverts to plain text via the container's own
+// onBlur below.
 function DirectionLabel({ index, direction, onEdit, disabled }) {
   const [editing, setEditing] = useState(false);
   const prefix = `• Direction ${index + 1}: `;
@@ -39,26 +40,24 @@ function DirectionLabel({ index, direction, onEdit, disabled }) {
       onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setEditing(false); }}
     >
       <strong>{prefix}</strong>
-      <input
-        type="number"
+      <NumberField
         min={0}
         max={180}
         step={1}
+        parse={(raw) => parseInt(raw, 10)}
         value={direction.thetaDeg}
         autoFocus
-        onChange={(e) => { const v = parseInt(e.target.value, 10); if (!Number.isNaN(v)) onEdit(v, direction.phiDeg); }}
-        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+        onCommit={(v) => onEdit(v, direction.phiDeg)}
         style={{ width: '36px', padding: '2px', fontSize: '12px' }}
       />
       °,
-      <input
-        type="number"
+      <NumberField
         min={0}
         max={360}
         step={1}
+        parse={(raw) => parseInt(raw, 10)}
         value={direction.phiDeg}
-        onChange={(e) => { const v = parseInt(e.target.value, 10); if (!Number.isNaN(v)) onEdit(direction.thetaDeg, v); }}
-        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+        onCommit={(v) => onEdit(direction.thetaDeg, v)}
         style={{ width: '36px', padding: '2px', fontSize: '12px' }}
       />
       °
