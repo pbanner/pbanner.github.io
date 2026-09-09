@@ -53,16 +53,20 @@ export function downEigenstate(theta, phi) {
 //                                                   UI in particular -- never
 //                                                   has to pre-normalize its
 //                                                   own input.
-//   { kind: 'instructionSets', relationship, particle1, particle2 } -- Bell's
-//                                                   own local-hidden-variable
-//                                                   model: each particle
-//                                                   carries a predetermined
-//                                                   answer for every one of a
-//                                                   handful of user-chosen
-//                                                   analyzer directions. See
-//                                                   the "Hidden instruction
-//                                                   sets" section below for
-//                                                   the full shape.
+//   { kind: 'instructionSets', relationship, directionList, particle1,
+//     particle2 }                                -- Bell's own local-hidden-
+//                                                   variable model: each
+//                                                   particle carries a
+//                                                   predetermined answer for
+//                                                   every one of a handful of
+//                                                   user-chosen analyzer
+//                                                   directions (directionList,
+//                                                   shared with the rest of
+//                                                   the app -- see
+//                                                   directionListData.js).
+//                                                   See the "Hidden
+//                                                   instruction sets" section
+//                                                   below for the full shape.
 //
 // The four Bell states and the user-specified custom state are both
 // 'quantum', just with different coeffs; BELL_STATES below is every
@@ -228,25 +232,28 @@ function jointProbabilitiesClassical(basisL, basisR, weights) {
 // the fixed single-hidden-value model above can't even attempt that, since
 // it only ever has an opinion about the Z axis.
 //
-// A "column" is one user-chosen direction: { id, thetaDeg, phiDeg }, always
-// whole degrees -- both this sim's own display precision for these, and what
-// lets an analyzer's current [theta, phi] radians be matched back to "which
-// column is this" exactly (findInstructionColumnIndex below) rather than
-// comparing floats. A "row" is one full instruction set:
-// { id, signs: { [columnId]: 'up'|'down' }, weight }, with `weight` relative
-// (not pre-normalized) same as every other "up to normalization" source
-// here. Both a column and a row carry their own opaque id rather than being
-// addressed by array position, so deleting one column can't silently shift
-// which entry of an existing row's `signs` every other column now refers to.
+// A "direction" (a "column", in this section's own older terminology still
+// used for local variable names below) is one user-chosen analyzer setting:
+// { id, thetaDeg, phiDeg }, always whole degrees -- both this sim's own
+// display precision for these, and what lets an analyzer's current
+// [theta, phi] radians be matched back to "which direction is this" exactly
+// (findInstructionColumnIndex below) rather than comparing floats. This
+// source's `directionList` is the single list shared across the whole app
+// (App.jsx owns it, via directionListData.js) -- both particles' sheets read
+// their signs from the very same set of directions, rather than each
+// keeping a separate list of its own. A "row" is one full instruction set:
+// { id, signs: { [directionId]: 'up'|'down' }, weight }, with `weight`
+// relative (not pre-normalized) same as every other "up to normalization"
+// source here. A row carries its own opaque id rather than being addressed
+// by array position, so deleting a row can never be confused with another.
 //
-// `source.particle1` is always Left's own sheet. Right reads `particle1`'s
-// same columns/rows too when `relationship` is 'identical' or 'opposite'
-// (one shared sheet, read at whichever column each side is set to -- see
-// jointProbabilitiesSharedSheet); only 'independent' gives Right its own
-// separate sheet, `particle2`, with its own columns as well as its own rows
-// -- the two sides can then be set to genuinely different menus of
-// directions entirely, the asymmetric-settings structure a CHSH-style test
-// needs.
+// `source.particle1` is always Left's own sheet (just `{ rows }`). Right
+// reads `particle1`'s same rows too when `relationship` is 'identical' or
+// 'opposite' (one shared sheet, read at whichever direction each side is set
+// to -- see jointProbabilitiesSharedSheet); only 'independent' gives Right
+// its own separate sheet, `particle2`, with its own rows -- the two sides'
+// outcomes are then drawn independently of one another, though both still
+// read from the same shared directionList.
 
 // Rounds to the nearest whole degree and folds phi into [0, 360) -- matches
 // how a column's own thetaDeg/phiDeg are always stored, so this comparison
@@ -318,24 +325,24 @@ function jointProbabilitiesIndependentSheets(rowsL, colIdL, rowsR, colIdR) {
 }
 
 function jointProbabilitiesInstructionSets(basisL, basisR, source) {
-  const { relationship, particle1, particle2 } = source;
+  const { relationship, directionList, particle1, particle2 } = source;
   const rightSheet = relationship === 'independent' ? particle2 : particle1;
-  const colIndexL = findInstructionColumnIndex(basisL, particle1.columns);
-  const colIndexR = findInstructionColumnIndex(basisR, rightSheet.columns);
-  if (colIndexL === -1 || colIndexR === -1) {
+  const dirIndexL = findInstructionColumnIndex(basisL, directionList);
+  const dirIndexR = findInstructionColumnIndex(basisR, directionList);
+  if (dirIndexL === -1 || dirIndexR === -1) {
     // Either analyzer is set to a direction with no instructions -- App.jsx
     // itself is what actually keeps a pair from ever being run in this
     // state (see findInstructionColumnIndex's own comment); this all-zero
     // fallback just keeps the theoretical-probability overlay, which
     // recomputes on every render regardless of whether Run is enabled, from
-    // operating on a nonexistent column instead of throwing.
+    // operating on a nonexistent direction instead of throwing.
     return { uu: 0, ud: 0, du: 0, dd: 0 };
   }
-  const colIdL = particle1.columns[colIndexL].id;
-  const colIdR = rightSheet.columns[colIndexR].id;
+  const dirIdL = directionList[dirIndexL].id;
+  const dirIdR = directionList[dirIndexR].id;
   return relationship === 'independent'
-    ? jointProbabilitiesIndependentSheets(particle1.rows, colIdL, rightSheet.rows, colIdR)
-    : jointProbabilitiesSharedSheet(particle1.rows, colIdL, colIdR, relationship === 'opposite');
+    ? jointProbabilitiesIndependentSheets(particle1.rows, dirIdL, rightSheet.rows, dirIdR)
+    : jointProbabilitiesSharedSheet(particle1.rows, dirIdL, dirIdR, relationship === 'opposite');
 }
 
 // The four joint outcome probabilities for one pair, given the two

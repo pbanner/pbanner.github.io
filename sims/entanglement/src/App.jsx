@@ -6,8 +6,10 @@ import { AxisStepper, SliderPlusTextboxControl } from './controls';
 import { SG_OPTION_LABELS, SG_OPTION_BASES, DEG_TO_RAD } from './axisOptions';
 import { BELL_STATES, findInstructionColumnIndex } from './physics';
 import TeX from './TeX';
-import InstructionSetControls, { InstructionColumnStepper } from './instructionSets';
-import { createInitialInstructionSheet } from './instructionSetsData';
+import InstructionSetControls from './instructionSets';
+import { createInitialInstructionSheet, addSignToRows, removeSignFromRows } from './instructionSetsData';
+import { DirectionList, DirectionListStepper, DirectionSamplingRow } from './directionList';
+import { createInitialDirectionList, addDirection, deleteDirection, editDirection } from './directionListData';
 
 // Unicode glyphs (▶ ⏸) bake their own, font-dependent vertical padding into
 // the glyph box, so flexbox centering lines up the boxes but not the visible
@@ -46,7 +48,7 @@ const DETECTOR_COLOR_IDS = {
 // itself. There's no chain-position bookkeeping to worry about, unlike the
 // Stern-Gerlach sim's version -- this sim always has exactly two analyzers:
 // index 0 measures the left-going particle, index 1 the right-going one.
-function AnalyzerStepper({ index, sg, setExperiment, disabled, resetDataCollection, instructionMode }) {
+function AnalyzerStepper({ index, sg, setExperiment, disabled, resetDataCollection, directionListMode, samplingMode }) {
   const currentIndex = SG_OPTION_BASES.findIndex(
     ([theta, phi]) => theta === sg.basis[0] && phi === sg.basis[1]
   );
@@ -104,20 +106,43 @@ function AnalyzerStepper({ index, sg, setExperiment, disabled, resetDataCollecti
     resetDataCollection();
   };
 
-  // "Fix directions to instruction table" locks this analyzer to whichever
-  // of the instruction-set source's own columns is currently relevant to it
-  // (App.jsx decides that) -- a completely different stepper (1..N over
-  // just those columns, no free angle entry at all) rather than a variant
-  // of the ordinary X/Y/Z one, since "Set by angles" doesn't make sense
-  // when every legal setting is already listed in the sidebar's table.
-  if (instructionMode) {
+  // Random choice: this analyzer doesn't have a single "current" direction
+  // at all -- it draws a fresh one, per pair, from whichever of the shared
+  // list's directions the user has checked below (LabPanel does the actual
+  // sampling; this is just the row of checkboxes choosing the pool).
+  if (samplingMode) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-        <InstructionColumnStepper
+        <DirectionSamplingRow
           label={label}
-          columns={instructionMode.columns}
-          selectedColumnId={instructionMode.selectedColumnId}
-          onSelectColumn={instructionMode.onSelectColumn}
+          directions={samplingMode.directions}
+          selectedIds={samplingMode.selectedIds}
+          onToggle={samplingMode.onToggle}
+          disabled={disabled || sg.blocked}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 6px 6px 6px' }}>
+          <label style={{ fontSize: '13px' }}>
+            <input type="checkbox" checked={sg.blocked} onChange={(e) => setBlocked(e.target.checked)} disabled={disabled} />
+            Block this particle
+          </label>
+        </div>
+      </div>
+    );
+  }
+
+  // "Follow a list of directions" locks this analyzer to the shared
+  // direction list (App.jsx owns it, independent of source) -- a completely
+  // different stepper (1..N over that list, no free angle entry at all)
+  // rather than a variant of the ordinary X/Y/Z one, since "Set by angles"
+  // doesn't make sense when every legal setting is already listed.
+  if (directionListMode) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        <DirectionListStepper
+          label={label}
+          directions={directionListMode.directions}
+          selectedId={directionListMode.selectedId}
+          onSelectDirection={directionListMode.onSelectDirection}
           disabled={disabled || sg.blocked}
         />
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 6px 6px 6px' }}>
@@ -223,6 +248,7 @@ function SourceControls({
   sourceType, setSourceType, bellKey, setBellKey, classicalWeights, setClassicalWeights, customCoeffs, setCustomCoeffs,
   instructionRelationship, setInstructionRelationship, instructionShowing, setInstructionShowing,
   instructionParticle1, setInstructionParticle1, instructionParticle2, setInstructionParticle2,
+  directionList, displayedDirectionIds,
   disabled, resetDataCollection,
 }) {
   const selectedBell = BELL_STATES.find((b) => b.key === bellKey);
@@ -302,6 +328,8 @@ function SourceControls({
           setParticle1={setInstructionParticle1}
           particle2={instructionParticle2}
           setParticle2={setInstructionParticle2}
+          allDirections={directionList}
+          displayedDirectionIds={displayedDirectionIds}
           disabled={disabled}
           resetDataCollection={resetDataCollection}
         />
@@ -421,44 +449,94 @@ export default function App() {
   const [classicalWeights, setClassicalWeights] = useState({ uu: 1, ud: 0, du: 0, dd: 1 });
   const [customCoeffs, setCustomCoeffs] = useState({ a: 1, b: 0, c: 0, d: 1 });
 
+  // The shared analyzer direction list -- see directionListData.js. Lives
+  // here (not scoped to any one source) since Fixed mode's "Follow a list of
+  // directions" stepper and Random choice's per-side sampling both need it
+  // regardless of which source is selected; Hidden Instruction Sets just
+  // happens to be the one source that also reads its own instructions from
+  // this same list, rather than keeping a second copy.
+  const [directionList, setDirectionList] = useState(() => createInitialDirectionList());
+
   // Bell's own local-hidden-variable model (see physics.js's "Hidden
   // instruction sets" section): `instructionRelationship` picks whether
   // Particle 2 reads Particle 1's own sheet straight, flipped, or has a
   // fully independent sheet of its own; `instructionShowing` is a pure
   // display choice (which sheet the sidebar currently renders) with no
   // physical effect, so changing it never calls resetDataCollection.
-  // instructionParticle1/2 are computed once up front (not two separate
-  // createInitialInstructionSheet() calls) so instructionSelectedColumnId's
-  // own initial value can reference particle1's actual starting column id.
+  // instructionParticle1/2 are seeded from directionList's own initial ids
+  // so every row starts fully specified across the shared list.
   const [instructionInit] = useState(() => {
-    const particle1 = createInitialInstructionSheet();
-    const particle2 = createInitialInstructionSheet();
-    return { particle1, particle2, selectedColumnId: { 0: particle1.columns[0].id, 1: particle1.columns[0].id } };
+    const ids = directionList.map((d) => d.id);
+    return { particle1: createInitialInstructionSheet(ids), particle2: createInitialInstructionSheet(ids) };
   });
   const [instructionRelationship, setInstructionRelationship] = useState('opposite');
   const [instructionShowing, setInstructionShowing] = useState('particle1');
-  const [instructionFixDirections, setInstructionFixDirections] = useState(true);
   const [instructionParticle1, setInstructionParticle1] = useState(instructionInit.particle1);
   const [instructionParticle2, setInstructionParticle2] = useState(instructionInit.particle2);
-  // Which column id each side's *locked* stepper currently points at --
+
+  // "Follow a list of directions" -- decoupled from any one source: any
+  // analyzer's stepper can be locked to cycling through the shared
+  // direction list above instead of the ordinary X/Y/Z one. Defaults to off
+  // so a fresh load (source 'bell') behaves exactly as it always has.
+  const [followDirectionList, setFollowDirectionList] = useState(false);
+  // Which direction id each side's *locked* stepper currently points at --
   // separate from experiment[i].basis (always the resolved [theta, phi]
   // radians every other part of the app expects) so that basis can simply
-  // be *derived* from this id plus the currently-relevant column list (see
-  // the syncing effect below) rather than needing its own propagation logic
-  // scattered across every column edit/delete/relationship-change site.
-  const [instructionSelectedColumnId, setInstructionSelectedColumnId] = useState(instructionInit.selectedColumnId);
+  // be *derived* from this id plus the direction list's *current* angles
+  // (see resolvedExperiment below) rather than needing its own propagation
+  // logic scattered across every direction edit/delete site.
+  const [directionSelectedId, setDirectionSelectedId] = useState({ 0: directionList[0].id, 1: directionList[0].id });
 
-  // Right reads Particle 1's own shared columns except in 'independent'
-  // mode, where it gets Particle 2's own separate ones -- the one place
-  // this rule is decided, reused by the source, the sync effect below, and
-  // the stepper wiring in the render.
-  const instructionColumnsForSide = (index) =>
-    (index === 0 || instructionRelationship !== 'independent' ? instructionParticle1 : instructionParticle2).columns;
+  // Data Collection's Analyzer Direction mode: 'fixed' (today's behavior --
+  // both analyzers stay at whatever the controls above set) or 'random'
+  // (each pair independently draws a fresh direction per side, uniformly
+  // from whichever of the shared list's directions that side has checked
+  // below). See randomSampledDirectionIds just below.
+  const [analyzerMode, setAnalyzerMode] = useState('fixed');
+  // Which shared directions each side samples from in Random-choice mode --
+  // defaults to "every current direction" for both sides, and is kept in
+  // sync (a newly-added direction defaults to included; a deleted one is
+  // dropped from both) by the direction-list handlers below.
+  const [randomSampledDirectionIds, setRandomSampledDirectionIds] = useState({
+    0: directionList.map((d) => d.id),
+    1: directionList.map((d) => d.id),
+  });
+
+  // The three direction-list mutation handlers -- the one place that keeps
+  // directionList, both instruction sheets' rows, and each side's Random-
+  // choice sampling set all in sync with each other, since App.jsx is the
+  // only thing that owns all of them at once.
+  const handleAddDirection = () => {
+    const next = addDirection(directionList);
+    if (next === directionList) return; // already at MAX_DIRECTIONS
+    const newId = next[next.length - 1].id;
+    setDirectionList(next);
+    setInstructionParticle1((prev) => ({ ...prev, rows: addSignToRows(prev.rows, newId) }));
+    setInstructionParticle2((prev) => ({ ...prev, rows: addSignToRows(prev.rows, newId) }));
+    setRandomSampledDirectionIds((prev) => ({ 0: [...prev[0], newId], 1: [...prev[1], newId] }));
+    resetDataCollection();
+  };
+  const handleDeleteDirection = (directionId) => {
+    const next = deleteDirection(directionList, directionId);
+    if (next === directionList) return; // the list must never go empty
+    setDirectionList(next);
+    setInstructionParticle1((prev) => ({ ...prev, rows: removeSignFromRows(prev.rows, directionId) }));
+    setInstructionParticle2((prev) => ({ ...prev, rows: removeSignFromRows(prev.rows, directionId) }));
+    setRandomSampledDirectionIds((prev) => ({
+      0: prev[0].filter((id) => id !== directionId),
+      1: prev[1].filter((id) => id !== directionId),
+    }));
+    resetDataCollection();
+  };
+  const handleEditDirection = (directionId, thetaDeg, phiDeg) => {
+    setDirectionList((prev) => editDirection(prev, directionId, thetaDeg, phiDeg));
+    resetDataCollection();
+  };
 
   const source = sourceType === 'classical'
     ? { kind: 'classical', weights: classicalWeights }
     : sourceType === 'instructionSets'
-      ? { kind: 'instructionSets', relationship: instructionRelationship, particle1: instructionParticle1, particle2: instructionParticle2 }
+      ? { kind: 'instructionSets', relationship: instructionRelationship, directionList, particle1: instructionParticle1, particle2: instructionParticle2 }
       : sourceType === 'bell'
         ? { kind: 'quantum', coeffs: BELL_STATES.find((b) => b.key === bellKey).coeffs }
         : {
@@ -471,19 +549,20 @@ export default function App() {
             },
           };
 
-  // Every other part of the app (LabPanel's canvas geometry and particle
-  // sampling, Histogram's theory overlay) reads an analyzer's setting as
-  // experiment[i].basis -- so rather than an effect that writes a resolved
-  // angle back into `experiment` (and risks cascading renders doing it),
-  // the resolved angle is simply derived at render time: whenever "Fix
-  // directions" is on, each side's basis is whatever its selected column's
-  // *current* direction is, computed fresh from instructionSelectedColumnId
-  // plus the presently-relevant column list every render. That alone gives
-  // "live" column edits for free (a column's own angle changing produces a
-  // new columns array, which this recomputes against immediately), and a
-  // selected id that no longer exists in the relevant list (the column was
-  // deleted, or -- in 'independent' mode -- simply isn't part of this
-  // side's list at all) falls back to that list's first column rather than
+  // Every other part of the app (LabPanel's canvas geometry, Histogram's
+  // theory overlay) reads an analyzer's setting as experiment[i].basis -- so
+  // rather than an effect that writes a resolved angle back into
+  // `experiment` (and risks cascading renders doing it), the resolved angle
+  // is simply derived at render time: whenever "Follow a list of
+  // directions" is on (and Random choice isn't -- there, each *pair* draws
+  // its own basis independently in LabPanel, so there's no single "current"
+  // basis to resolve here at all), each side's basis is whatever its
+  // selected direction's *current* angle is, computed fresh from
+  // directionSelectedId plus directionList every render. That alone gives
+  // "live" direction edits for free (a direction's own angle changing
+  // produces a new directionList array, which this recomputes against
+  // immediately), and a selected id that no longer exists (its direction
+  // was deleted) falls back to the list's first direction rather than
   // resolving to nothing.
   // Memoized (not just a plain computed const) because this becomes the
   // `experiment` prop LabPanel and Histogram both key their own
@@ -493,31 +572,49 @@ export default function App() {
   // and redraw both canvases far more than needed, especially during a fast
   // particle stream, which re-renders App on every single spawn.
   const resolvedExperiment = useMemo(() => {
-    if (sourceType !== 'instructionSets' || !instructionFixDirections) return experiment;
+    if (analyzerMode === 'random' || !followDirectionList) return experiment;
     return experiment.map((sg, i) => {
-      const columns = i === 0 || instructionRelationship !== 'independent' ? instructionParticle1.columns : instructionParticle2.columns;
-      const column = columns.find((c) => c.id === instructionSelectedColumnId[i]) ?? columns[0];
-      return { ...sg, basis: [column.thetaDeg * DEG_TO_RAD, column.phiDeg * DEG_TO_RAD] };
+      const direction = directionList.find((d) => d.id === directionSelectedId[i]) ?? directionList[0];
+      return { ...sg, basis: [direction.thetaDeg * DEG_TO_RAD, direction.phiDeg * DEG_TO_RAD] };
     });
-  }, [experiment, sourceType, instructionFixDirections, instructionRelationship, instructionParticle1.columns, instructionParticle2.columns, instructionSelectedColumnId]);
+  }, [experiment, analyzerMode, followDirectionList, directionList, directionSelectedId]);
 
-  // Whether each analyzer's *current* basis has no matching column in its
-  // relevant instruction-set sheet -- checked against resolvedExperiment so
-  // this is trivially false whenever "Fix directions" is on (a locked
-  // analyzer can only ever land on a real column) and reduces to the
-  // ordinary free-form check when it's off (resolvedExperiment then just
-  // *is* the raw experiment). Drives both the "no instructions for this
-  // direction" warning on the lab panel and the Start/Make-One-Pair guard
-  // below; memoized for the same reason as resolvedExperiment (it's the
-  // `invalidAnalyzer` prop LabPanel's own draw callback depends on).
+  // Whether each analyzer's *current* basis has no matching direction in the
+  // Hidden Instruction Sets source's own (shared) list -- checked against
+  // resolvedExperiment so this is trivially false whenever "Follow a list of
+  // directions" is on (a locked analyzer can only ever land on a real
+  // direction) and reduces to the ordinary free-form check when it's off
+  // (resolvedExperiment then just *is* the raw experiment). Always false in
+  // Random choice mode too: every direction that mode can possibly sample is,
+  // by construction, a member of this same shared list, so there's nothing
+  // for it to be invalid *against*. Drives both the "no instructions for
+  // this direction" warning on the lab panel and the Start/Make-One-Pair
+  // guard below; memoized for the same reason as resolvedExperiment (it's
+  // the `invalidAnalyzer` prop LabPanel's own draw callback depends on).
   const instructionInvalid = useMemo(() => {
-    if (sourceType !== 'instructionSets') return [false, false];
-    return [0, 1].map((i) => {
-      const columns = i === 0 || instructionRelationship !== 'independent' ? instructionParticle1.columns : instructionParticle2.columns;
-      return findInstructionColumnIndex(resolvedExperiment[i].basis, columns) === -1;
-    });
-  }, [sourceType, resolvedExperiment, instructionRelationship, instructionParticle1.columns, instructionParticle2.columns]);
+    if (sourceType !== 'instructionSets' || analyzerMode === 'random') return [false, false];
+    return [0, 1].map((i) => findInstructionColumnIndex(resolvedExperiment[i].basis, directionList) === -1);
+  }, [sourceType, analyzerMode, resolvedExperiment, directionList]);
   const anyInstructionInvalid = instructionInvalid[0] || instructionInvalid[1];
+  // Random choice needs at least one checked direction per side to have
+  // anything to sample -- DirectionSamplingRow shows the red outline and
+  // message for whichever side this is true of; this is what additionally
+  // disables Start/Make One Pair outright (see handleStartPause) rather than
+  // just silently no-opping, since -- unlike the instruction-invalid case
+  // above -- there's no "current" setting to show a warning arrow at on the
+  // canvas.
+  const anyRandomSamplingEmpty = analyzerMode === 'random' && (randomSampledDirectionIds[0].length === 0 || randomSampledDirectionIds[1].length === 0);
+
+  const changeAnalyzerMode = (mode) => {
+    setAnalyzerMode(mode);
+    // Random choice always needs the shared direction list to sample from,
+    // so switching to it locks "Follow a list of directions" on (and, in
+    // App's render, disables the checkbox so the user can see why) --
+    // switching back to Fixed leaves it as the user had it, rather than
+    // silently reverting to free-form angle entry.
+    if (mode === 'random') setFollowDirectionList(true);
+    resetDataCollection();
+  };
 
   // Pauses particle production (and, via the tabVisible prop, LabPanel's own
   // animation loop) while this tab isn't the active one -- same reasoning as
@@ -565,8 +662,11 @@ export default function App() {
     // An analyzer with no instructions for its current direction has
     // nothing for the instruction-set source to sample -- LabPanel already
     // shows why (the red outline + message), so this is a silent no-op
-    // rather than a second error surface.
-    if (anyInstructionInvalid) return;
+    // rather than a second error surface. anyRandomSamplingEmpty instead
+    // disables the button itself (see the render below), but this guard
+    // stays too as a belt-and-braces check against the button somehow being
+    // clicked anyway.
+    if (anyInstructionInvalid || anyRandomSamplingEmpty) return;
     if (expMode.dc === 'single') {
       labPanelRef.current?.spawnParticle();
       return;
@@ -575,13 +675,13 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (expMode.dc === 'stream' && expMode.running && tabVisible && !anyInstructionInvalid) {
+    if (expMode.dc === 'stream' && expMode.running && tabVisible && !anyInstructionInvalid && !anyRandomSamplingEmpty) {
       streamTimerRef.current = setInterval(() => {
         labPanelRef.current?.spawnParticle();
       }, 1 / expMode.rate * 1000);
       return () => clearInterval(streamTimerRef.current);
     }
-  }, [expMode.dc, expMode.running, expMode.rate, tabVisible, anyInstructionInvalid]);
+  }, [expMode.dc, expMode.running, expMode.rate, tabVisible, anyInstructionInvalid, anyRandomSamplingEmpty]);
 
   return (
     <div className="app-layout">
@@ -604,6 +704,9 @@ export default function App() {
             onCoincidence={recordCoincidence}
             source={source}
             invalidAnalyzer={instructionInvalid}
+            analyzerMode={analyzerMode}
+            directionList={directionList}
+            randomSampledDirectionIds={randomSampledDirectionIds}
           />
         </div>
 
@@ -625,6 +728,11 @@ export default function App() {
             setInstructionParticle1={setInstructionParticle1}
             instructionParticle2={instructionParticle2}
             setInstructionParticle2={setInstructionParticle2}
+            directionList={directionList}
+            displayedDirectionIds={{
+              0: instructionRelationship === 'independent' && analyzerMode === 'random' ? randomSampledDirectionIds[0] : directionList.map((d) => d.id),
+              1: instructionRelationship === 'independent' && analyzerMode === 'random' ? randomSampledDirectionIds[1] : directionList.map((d) => d.id),
+            }}
             disabled={controlsLocked}
             resetDataCollection={resetDataCollection}
           />
@@ -635,17 +743,24 @@ export default function App() {
       <aside className="control-bar">
         <div className="control-bar-content">
           <div className="control-bar-group">
-            <h3 style={{ margin: '0 0 10px 0', fontWeight: 'bold' }}>Set Analyzer Orientations</h3>
-            {sourceType === 'instructionSets' && (
-              <label style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 6px 2px' }}>
-                <input
-                  type="checkbox"
-                  checked={instructionFixDirections}
-                  onChange={(e) => { setInstructionFixDirections(e.target.checked); resetDataCollection(); }}
-                  disabled={controlsLocked}
-                />
-                Fix directions to instruction table
-              </label>
+            <h3 style={{ margin: '0 0 10px 0', fontWeight: 'bold' }}>Set Analyzer Direction</h3>
+            <label style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 6px 2px' }}>
+              <input
+                type="checkbox"
+                checked={followDirectionList}
+                onChange={(e) => { setFollowDirectionList(e.target.checked); resetDataCollection(); }}
+                disabled={controlsLocked || analyzerMode === 'random'}
+              />
+              Follow a list of directions
+            </label>
+            {followDirectionList && (
+              <DirectionList
+                directions={directionList}
+                onEditDirection={handleEditDirection}
+                onDeleteDirection={handleDeleteDirection}
+                onAddDirection={handleAddDirection}
+                disabled={controlsLocked}
+              />
             )}
             {experiment.map((sg, i) => (
               <AnalyzerStepper
@@ -655,13 +770,28 @@ export default function App() {
                 setExperiment={setExperiment}
                 disabled={controlsLocked}
                 resetDataCollection={resetDataCollection}
-                instructionMode={
-                  sourceType === 'instructionSets' && instructionFixDirections
+                samplingMode={
+                  analyzerMode === 'random'
                     ? {
-                        columns: instructionColumnsForSide(i),
-                        selectedColumnId: instructionSelectedColumnId[i],
-                        onSelectColumn: (columnId) => {
-                          setInstructionSelectedColumnId((prev) => ({ ...prev, [i]: columnId }));
+                        directions: directionList,
+                        selectedIds: randomSampledDirectionIds[i],
+                        onToggle: (directionId, checked) => {
+                          setRandomSampledDirectionIds((prev) => ({
+                            ...prev,
+                            [i]: checked ? [...prev[i], directionId] : prev[i].filter((id) => id !== directionId),
+                          }));
+                          resetDataCollection();
+                        },
+                      }
+                    : null
+                }
+                directionListMode={
+                  analyzerMode !== 'random' && followDirectionList
+                    ? {
+                        directions: directionList,
+                        selectedId: directionSelectedId[i],
+                        onSelectDirection: (directionId) => {
+                          setDirectionSelectedId((prev) => ({ ...prev, [i]: directionId }));
                           resetDataCollection();
                         },
                       }
@@ -684,6 +814,18 @@ export default function App() {
           {/* Data Collection Controls */}
           <div className="control-bar-group">
             <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Data Collection Controls</h3>
+            <div style={{ display: 'flex', flexDirection: 'row', gap: '10px', alignItems: 'center', margin: '0 0 8px 0' }}>
+              <p style={{ fontSize: '14px', fontWeight: '500' }}>Analyzer Directions:</p>
+              <select
+                value={analyzerMode}
+                onChange={(e) => changeAnalyzerMode(e.target.value)}
+                disabled={controlsLocked}
+                style={{ fontSize: '13px', padding: '3px' }}
+              >
+                <option value="fixed">Fixed for all pairs</option>
+                <option value="random">Random choice per pair</option>
+              </select>
+            </div>
             <div style={{ display: 'flex', flexDirection: 'row', gap: '10px', alignItems: 'center' }}>
               <p style={{ fontSize: '14px', fontWeight: '500' }}>Mode:</p>
               <div style={{ padding: '2px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
@@ -704,7 +846,7 @@ export default function App() {
                 />
               </div>
             }
-            <button className="control-bar-button" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={handleStartPause}>
+            <button className="control-bar-button" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={handleStartPause} disabled={anyRandomSamplingEmpty}>
               {expMode.dc === 'single'
                 ? (<><PlayIcon /> Make One Pair</>)
                 : expMode.running
