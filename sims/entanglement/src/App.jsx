@@ -853,8 +853,8 @@ export default function App() {
           {/* Data Collection Controls */}
           <div className="control-bar-group">
             <h3 style={{ margin: '0 0 6px 0', fontWeight: 'bold' }}>Data Collection Controls</h3>
-            <div style={{ display: 'flex', flexDirection: 'row', gap: '10px', alignItems: 'center', margin: '0 0 8px 0' }}>
-              <p style={{ fontSize: '14px', fontWeight: '500' }}>Analyzer Directions:</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', margin: '0 0 8px 0' }}>
+              <p style={{ fontSize: '14px', fontWeight: '500', marginBottom: '-5px' }}>Analyzer Directions:</p>
               <select
                 value={analyzerMode}
                 onChange={(e) => changeAnalyzerMode(e.target.value)}
@@ -867,10 +867,14 @@ export default function App() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'row', gap: '10px', alignItems: 'center' }}>
               <p style={{ fontSize: '14px', fontWeight: '500' }}>Mode:</p>
-              <div style={{ padding: '2px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                <label><input type="radio" name="DCmode" value="single" checked={expMode.dc === 'single'} onChange={(event) => { setExpMode({ ...expMode, dc: event.target.value }); }} />One at a time</label>
-                <label><input type="radio" name="DCmode" value="stream" checked={expMode.dc === 'stream'} onChange={(event) => { setExpMode({ ...expMode, dc: event.target.value }); }} />Continuous</label>
-              </div>
+              <select
+                value={expMode.dc}
+                onChange={(event) => { setExpMode({ ...expMode, dc: event.target.value }); }}
+                style={{ fontSize: '13px', padding: '3px' }}
+              >
+                <option value="single">One at a time</option>
+                <option value="stream">Continuous</option>
+              </select>
             </div>
             {expMode.dc === 'stream' &&
               <div className="control-group" style={{ marginTop: '0.5em' }}>
@@ -885,16 +889,18 @@ export default function App() {
                 />
               </div>
             }
-            <button className="control-bar-button" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={handleStartPause} disabled={anyRandomSamplingEmpty}>
-              {expMode.dc === 'single'
-                ? (<><PlayIcon /> Make One Pair</>)
-                : expMode.running
-                  ? (<><StopIcon /> Stop</>)
-                  : (<><PlayIcon /> Start</>)}
-            </button>
-            <button className="control-bar-button" onClick={resetDataCollection}>
-              Reset Data Collection
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'row', gap: '10px', alignItems: 'center' }}>
+              <button className="control-bar-button" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={handleStartPause} disabled={anyRandomSamplingEmpty}>
+                {expMode.dc === 'single'
+                  ? (<><PlayIcon /> Make One Pair</>)
+                  : expMode.running
+                    ? (<><StopIcon /> Stop</>)
+                    : (<><PlayIcon /> Start</>)}
+              </button>
+              <button className="control-bar-button" onClick={resetDataCollection}>
+                Reset Data
+              </button>
+            </div>
           </div>
 
           {/* Histogram canvas area */}
