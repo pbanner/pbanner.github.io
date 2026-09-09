@@ -504,7 +504,7 @@ export default function App() {
   // fully independent sheet of its own; `instructionShowing` is a pure
   // display choice (which sheet the sidebar currently renders) with no
   // physical effect, so changing it never calls resetDataCollection.
-  const [instructionRelationship, setInstructionRelationship] = useState('opposite');
+  const [instructionRelationship, setInstructionRelationship] = useState('identical');
   const [instructionShowing, setInstructionShowing] = useState('particle1');
   const [instructionParticle1, setInstructionParticle1] = useState(init.instructionParticle1);
   const [instructionParticle2, setInstructionParticle2] = useState(init.instructionParticle2);

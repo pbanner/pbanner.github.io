@@ -214,19 +214,18 @@ export default function InstructionSetControls({
       <p style={{ fontSize: '13px', margin: '10px 0 8px 0', lineHeight: '1.3' }}>
         <strong>This model:</strong> Each particle secretly carries a pre-determined answer for what they will do when they reach an analyzer at one of the directions you specify in the Set Analyzer Direction panel below.
       </p>
-      <p style={{ fontSize: '12px', whiteSpace: 'nowrap' }}><strong>Choose:</strong> The left-going particle acts</p>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 6px 0' }}>
+      <p style={{ fontSize: '12px', lineHeight: '1.4' }}><strong>Choose:</strong> How are the left-going and right-going particles' instruction sets related?</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '6px 0 6px 0' }}>
         <select
           value={relationship}
           onChange={(e) => changeRelationship(e.target.value)}
           disabled={disabled}
           style={{ flex: 1, fontSize: '12px', padding: '3px' }}
         >
-          <option value="identical">the same as</option>
-          <option value="opposite">opposite to</option>
-          <option value="independent">independent of</option>
+          <option value="identical">They are the same</option>
+          <option value="opposite">They are exact opposites</option>
+          <option value="independent">They are independent</option>
         </select>
-        <label>the right-going particle.</label>
       </div>
       <hr style={{ margin: '6px 0px' }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 10px 0' }}>
