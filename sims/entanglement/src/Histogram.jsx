@@ -417,6 +417,8 @@ export default function Histogram({ experiment, displayBools, setDisplayBools, c
   // flex layout (e.g. the "Set Measurement Bases" group growing as SGs are
   // added) without the window itself ever resizing, which a 'resize'
   // listener wouldn't catch.
+  // Depends on analyzerMode even though it doesn't read it, so when the
+  // user switches between the modes, the canvas correctly resizes.
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -440,7 +442,7 @@ export default function Histogram({ experiment, displayBools, setDisplayBools, c
     const observer = new ResizeObserver(resizeCanvas);
     observer.observe(container);
     return () => observer.disconnect();
-  }, []);
+  }, [analyzerMode]);
 
   // inkScale lets this same drawing routine be reused, unmodified, to render
   // into the magnifier loupe: the loupe applies a zoom transform to its own
