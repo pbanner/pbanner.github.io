@@ -602,6 +602,20 @@ const LabPanel = forwardRef(function LabPanel(
   // basis samplePairOutcome needs and the direction's own id, so that id can
   // travel with the particle and, once it reaches a detector, be reported
   // back to App.jsx's per-direction statistics (see onCoincidence below).
+  //
+  // The random index MUST be drawn exactly once, before the lookup -- not
+  // inline inside .find()'s own predicate. .find() calls its predicate once
+  // per element until one returns true, so an earlier, mistaken
+  // `directionList.find((d) => d.id === ids[Math.floor(Math.random() *
+  // ids.length)])` was drawing a *fresh* random index on every element it
+  // checked: the first (and so lowest-index) direction only had to survive
+  // one draw to match, the second needed its own first draw to miss and its
+  // second to hit, and so on -- a geometric bias that favored whichever
+  // direction happened to sit earliest in the shared list, and, whenever
+  // every draw missed, fell through to returning undefined entirely (the
+  // `?? directionList[0]` below then papering over that specific case by
+  // resolving to the first direction again, compounding the same bias
+  // rather than fixing it).
   const pickRandomDirection = (sgIndex) => {
     // validIds guards against a checked id that doesn't (or no longer)
     // match any direction in the shared list -- normally impossible (every
@@ -613,16 +627,8 @@ const LabPanel = forwardRef(function LabPanel(
     // in this app, rather than letting a momentarily-stale id crash a spawn.
     const validIds = randomSampledDirectionIds[sgIndex].filter((id) => directionList.some((d) => d.id === id));
     const ids = validIds.length > 0 ? validIds : directionList.map((d) => d.id);
-    // ?? directionList[0]: belt-and-braces against a checked id this render's
-    // directionList doesn't (yet, or any longer) recognize -- the same
-    // "fall back to the first entry rather than resolve to nothing" contract
-    // every other lookup against this list already uses (see
-    // App.jsx's resolvedExperiment). A continuous stream calls this many
-    // times a second straight off a ref, independent of React's own render
-    // cycle, so this fallback is what keeps a single momentarily-stale id
-    // from crashing a spawn instead of just quietly sampling that pair from
-    // whatever this render's first available direction is.
-    const chosen = directionList.find((d) => d.id === ids[Math.floor(Math.random() * ids.length)]) ?? directionList[0];
+    const chosenId = ids[Math.floor(Math.random() * ids.length)];
+    const chosen = directionList.find((d) => d.id === chosenId) ?? directionList[0];
     return { basis: [chosen.thetaDeg * DEG_TO_RAD, chosen.phiDeg * DEG_TO_RAD], directionId: chosen.id };
   };
 
