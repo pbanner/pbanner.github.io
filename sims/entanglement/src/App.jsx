@@ -7,7 +7,7 @@ import { SG_OPTION_LABELS, SG_OPTION_BASES, DEG_TO_RAD } from './axisOptions';
 import { BELL_STATES, findInstructionColumnIndex } from './physics';
 import TeX from './TeX';
 import InstructionSetControls from './instructionSets';
-import { createInitialInstructionSheet, addSignToRows, removeSignFromRows } from './instructionSetsData';
+import { createInitialInstructionSheet, addSignToRows, removeSignFromRows, generateAllInstructionSets } from './instructionSetsData';
 import { DirectionList, DirectionListStepper, DirectionSamplingRow } from './directionList';
 import { createInitialDirectionList, addDirection, deleteDirection, editDirection } from './directionListData';
 
@@ -526,30 +526,57 @@ export default function App() {
   // dropped from both) by the direction-list handlers below.
   const [randomSampledDirectionIds, setRandomSampledDirectionIds] = useState(init.randomSampledDirectionIds);
 
+  // Which direction ids a given side's instruction sheet should actually be
+  // built over -- everything, except in Independent + Random-choice mode,
+  // where each side is trimmed down to only the directions it currently
+  // samples (see the Independent-mode column trimming elsewhere in this
+  // file). The one place this rule is decided, shared by the displayed-ids
+  // computation below and the direction-list handlers' own "Generate all
+  // possible sets" regeneration.
+  const relevantDirectionIdsForSide = (side, allIds, sampledIds) =>
+    (instructionRelationship === 'independent' && analyzerMode === 'random' ? sampledIds[side] : allIds);
+
   // The three direction-list mutation handlers -- the one place that keeps
   // directionList, both instruction sheets' rows, and each side's Random-
   // choice sampling set all in sync with each other, since App.jsx is the
-  // only thing that owns all of them at once.
+  // only thing that owns all of them at once. When a sheet has "Generate all
+  // possible sets" checked, adding or removing a direction regenerates its
+  // rows from scratch (fresh weight-1 rows over the new direction count)
+  // rather than patching individual sign entries -- the whole point of that
+  // checkbox is "always show every combination for however many directions
+  // there currently are," so a stale combination count would defeat it.
   const handleAddDirection = () => {
     const next = addDirection(directionList);
     if (next === directionList) return; // already at MAX_DIRECTIONS
     const newId = next[next.length - 1].id;
+    const nextIds = next.map((d) => d.id);
+    const nextSampledIds = { 0: [...randomSampledDirectionIds[0], newId], 1: [...randomSampledDirectionIds[1], newId] };
     setDirectionList(next);
-    setInstructionParticle1((prev) => ({ ...prev, rows: addSignToRows(prev.rows, newId) }));
-    setInstructionParticle2((prev) => ({ ...prev, rows: addSignToRows(prev.rows, newId) }));
-    setRandomSampledDirectionIds((prev) => ({ 0: [...prev[0], newId], 1: [...prev[1], newId] }));
+    setInstructionParticle1((prev) => (prev.generateAll
+      ? generateAllInstructionSets(prev, relevantDirectionIdsForSide(0, nextIds, nextSampledIds), nextIds)
+      : { ...prev, rows: addSignToRows(prev.rows, newId) }));
+    setInstructionParticle2((prev) => (prev.generateAll
+      ? generateAllInstructionSets(prev, relevantDirectionIdsForSide(1, nextIds, nextSampledIds), nextIds)
+      : { ...prev, rows: addSignToRows(prev.rows, newId) }));
+    setRandomSampledDirectionIds(nextSampledIds);
     resetDataCollection();
   };
   const handleDeleteDirection = (directionId) => {
     const next = deleteDirection(directionList, directionId);
     if (next === directionList) return; // the list must never go empty
+    const nextIds = next.map((d) => d.id);
+    const nextSampledIds = {
+      0: randomSampledDirectionIds[0].filter((id) => id !== directionId),
+      1: randomSampledDirectionIds[1].filter((id) => id !== directionId),
+    };
     setDirectionList(next);
-    setInstructionParticle1((prev) => ({ ...prev, rows: removeSignFromRows(prev.rows, directionId) }));
-    setInstructionParticle2((prev) => ({ ...prev, rows: removeSignFromRows(prev.rows, directionId) }));
-    setRandomSampledDirectionIds((prev) => ({
-      0: prev[0].filter((id) => id !== directionId),
-      1: prev[1].filter((id) => id !== directionId),
-    }));
+    setInstructionParticle1((prev) => (prev.generateAll
+      ? generateAllInstructionSets(prev, relevantDirectionIdsForSide(0, nextIds, nextSampledIds), nextIds)
+      : { ...prev, rows: removeSignFromRows(prev.rows, directionId) }));
+    setInstructionParticle2((prev) => (prev.generateAll
+      ? generateAllInstructionSets(prev, relevantDirectionIdsForSide(1, nextIds, nextSampledIds), nextIds)
+      : { ...prev, rows: removeSignFromRows(prev.rows, directionId) }));
+    setRandomSampledDirectionIds(nextSampledIds);
     resetDataCollection();
   };
   const handleEditDirection = (directionId, thetaDeg, phiDeg) => {
@@ -761,8 +788,8 @@ export default function App() {
             setInstructionParticle2={setInstructionParticle2}
             directionList={directionList}
             displayedDirectionIds={{
-              0: instructionRelationship === 'independent' && analyzerMode === 'random' ? randomSampledDirectionIds[0] : directionList.map((d) => d.id),
-              1: instructionRelationship === 'independent' && analyzerMode === 'random' ? randomSampledDirectionIds[1] : directionList.map((d) => d.id),
+              0: relevantDirectionIdsForSide(0, directionList.map((d) => d.id), randomSampledDirectionIds),
+              1: relevantDirectionIdsForSide(1, directionList.map((d) => d.id), randomSampledDirectionIds),
             }}
             disabled={controlsLocked}
             resetDataCollection={resetDataCollection}
