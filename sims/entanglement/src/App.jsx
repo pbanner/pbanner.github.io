@@ -431,6 +431,12 @@ export default function App() {
   // LabPanel's recordCoincidence call (via its onCoincidence prop) is the
   // only writer; Histogram's coincidence table is the only reader.
   const [coincidences, setCoincidences] = useState({ uu: 0, ud: 0, du: 0, dd: 0 });
+  // Random choice's own per-setting-pair statistics -- a flat dictionary
+  // keyed by "leftDirectionId|rightDirectionId|leftArm|rightArm" -> count,
+  // rather than a nested structure, since that's all Histogram.jsx's N×N
+  // same-outcome table and raw-data table (both keyed the same way) ever
+  // need to look up. Empty (and meaningless) outside Random choice mode.
+  const [randomCoincidences, setRandomCoincidences] = useState({});
 
   // What the oven emits each pair in -- see physics.js's own comment on the
   // `source` shape this ultimately builds. sourceType picks which of the
@@ -449,13 +455,38 @@ export default function App() {
   const [classicalWeights, setClassicalWeights] = useState({ uu: 1, ud: 0, du: 0, dd: 1 });
   const [customCoeffs, setCustomCoeffs] = useState({ a: 1, b: 0, c: 0, d: 1 });
 
+  // Every piece of initial state below that's derived from a freshly-built
+  // direction list is computed together, in this one lazy initializer,
+  // rather than as several separate useState(() => ...) calls each reading
+  // an earlier one's committed value. createInitialDirectionList and
+  // createInitialInstructionSheet both mint their ids from a module-level
+  // counter -- an impure side effect React Strict Mode's dev-only
+  // double-invocation of lazy initializers can call more than once per
+  // actual mount, which is harmless on its own (ids are opaque; skipping a
+  // few is invisible) but would corrupt state if two *separately* computed
+  // pieces (say, this directionList and a randomSampledDirectionIds built
+  // from a different call's directionList) ended up seeded from different
+  // invocations. Bundling them into one object built from one local
+  // `directionList` guarantees whichever invocation's output React keeps,
+  // every piece of it agrees with every other.
+  const [init] = useState(() => {
+    const directionList = createInitialDirectionList();
+    const ids = directionList.map((d) => d.id);
+    return {
+      directionList,
+      instructionParticle1: createInitialInstructionSheet(ids),
+      instructionParticle2: createInitialInstructionSheet(ids),
+      directionSelectedId: { 0: directionList[0].id, 1: directionList[0].id },
+      randomSampledDirectionIds: { 0: [...ids], 1: [...ids] },
+    };
+  });
   // The shared analyzer direction list -- see directionListData.js. Lives
   // here (not scoped to any one source) since Fixed mode's "Follow a list of
   // directions" stepper and Random choice's per-side sampling both need it
   // regardless of which source is selected; Hidden Instruction Sets just
   // happens to be the one source that also reads its own instructions from
   // this same list, rather than keeping a second copy.
-  const [directionList, setDirectionList] = useState(() => createInitialDirectionList());
+  const [directionList, setDirectionList] = useState(init.directionList);
 
   // Bell's own local-hidden-variable model (see physics.js's "Hidden
   // instruction sets" section): `instructionRelationship` picks whether
@@ -463,16 +494,10 @@ export default function App() {
   // fully independent sheet of its own; `instructionShowing` is a pure
   // display choice (which sheet the sidebar currently renders) with no
   // physical effect, so changing it never calls resetDataCollection.
-  // instructionParticle1/2 are seeded from directionList's own initial ids
-  // so every row starts fully specified across the shared list.
-  const [instructionInit] = useState(() => {
-    const ids = directionList.map((d) => d.id);
-    return { particle1: createInitialInstructionSheet(ids), particle2: createInitialInstructionSheet(ids) };
-  });
   const [instructionRelationship, setInstructionRelationship] = useState('opposite');
   const [instructionShowing, setInstructionShowing] = useState('particle1');
-  const [instructionParticle1, setInstructionParticle1] = useState(instructionInit.particle1);
-  const [instructionParticle2, setInstructionParticle2] = useState(instructionInit.particle2);
+  const [instructionParticle1, setInstructionParticle1] = useState(init.instructionParticle1);
+  const [instructionParticle2, setInstructionParticle2] = useState(init.instructionParticle2);
 
   // "Follow a list of directions" -- decoupled from any one source: any
   // analyzer's stepper can be locked to cycling through the shared
@@ -485,7 +510,7 @@ export default function App() {
   // be *derived* from this id plus the direction list's *current* angles
   // (see resolvedExperiment below) rather than needing its own propagation
   // logic scattered across every direction edit/delete site.
-  const [directionSelectedId, setDirectionSelectedId] = useState({ 0: directionList[0].id, 1: directionList[0].id });
+  const [directionSelectedId, setDirectionSelectedId] = useState(init.directionSelectedId);
 
   // Data Collection's Analyzer Direction mode: 'fixed' (today's behavior --
   // both analyzers stay at whatever the controls above set) or 'random'
@@ -497,10 +522,7 @@ export default function App() {
   // defaults to "every current direction" for both sides, and is kept in
   // sync (a newly-added direction defaults to included; a deleted one is
   // dropped from both) by the direction-list handlers below.
-  const [randomSampledDirectionIds, setRandomSampledDirectionIds] = useState({
-    0: directionList.map((d) => d.id),
-    1: directionList.map((d) => d.id),
-  });
+  const [randomSampledDirectionIds, setRandomSampledDirectionIds] = useState(init.randomSampledDirectionIds);
 
   // The three direction-list mutation handlers -- the one place that keeps
   // directionList, both instruction sheets' rows, and each side's Random-
@@ -647,15 +669,22 @@ export default function App() {
       down: sg.down ? { ...sg.down, data: 0 } : sg.down,
     })));
     setCoincidences({ uu: 0, ud: 0, du: 0, dd: 0 });
+    setRandomCoincidences({});
   };
 
   // LabPanel calls this once per pair, but only when *both* particles
   // actually reached a detector (see its own tick loop) -- a blocked side
   // never has a real arm to report, so a pair with either side blocked
-  // never gets here at all, and the table simply has nothing to show.
-  const recordCoincidence = (armL, armR) => {
-    const key = (armL === 'up' ? 'u' : 'd') + (armR === 'up' ? 'u' : 'd');
+  // never gets here at all, and the table simply has nothing to show. Each
+  // side is { arm, directionId } -- directionId is only non-null in Random
+  // choice mode, which is what additionally feeds randomCoincidences.
+  const recordCoincidence = (left, right) => {
+    const key = (left.arm === 'up' ? 'u' : 'd') + (right.arm === 'up' ? 'u' : 'd');
     setCoincidences((prev) => ({ ...prev, [key]: prev[key] + 1 }));
+    if (left.directionId && right.directionId) {
+      const statsKey = `${left.directionId}|${right.directionId}|${left.arm}|${right.arm}`;
+      setRandomCoincidences((prev) => ({ ...prev, [statsKey]: (prev[statsKey] ?? 0) + 1 }));
+    }
   };
 
   const handleStartPause = () => {
@@ -890,7 +919,16 @@ export default function App() {
             </div>
             <div className="histogram-panel">
               <div className="histogram-canvas-wrap">
-                <Histogram experiment={resolvedExperiment} displayBools={histDisplayBools} setDisplayBools={setHistDisplayBools} coincidences={coincidences} source={source} />
+                <Histogram
+                  experiment={resolvedExperiment}
+                  displayBools={histDisplayBools}
+                  setDisplayBools={setHistDisplayBools}
+                  coincidences={coincidences}
+                  source={source}
+                  analyzerMode={analyzerMode}
+                  directionList={directionList}
+                  randomCoincidences={randomCoincidences}
+                />
               </div>
             </div>
           </div>

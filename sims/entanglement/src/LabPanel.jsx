@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { samplePairOutcome } from './physics';
+import { DEG_TO_RAD } from './axisOptions';
 import { PC_COLORS } from './colors';
 import { drawArrow, arrowWidth } from './canvasArrow';
 import sgImage from './assets/sg/SG.png';
@@ -79,6 +80,21 @@ function getSGLabel(angles, id) {
     }
   }
   return 'n̂' + SUB_LABELS[id];
+}
+
+// In Random choice mode there's no single "current" direction to label this
+// analyzer with -- a fresh one is drawn per *pair*, faster than any label
+// could meaningfully track once a stream is running -- so it just reads "?",
+// unless exactly one direction is checked for this side, in which case
+// there's really only one possible setting and it can be labeled normally.
+function analyzerLabel(sg, sgIndex, analyzerMode, directionList, randomSampledDirectionIds) {
+  if (analyzerMode !== 'random') return getSGLabel(sg.basis, sgIndex);
+  const ids = randomSampledDirectionIds[sgIndex];
+  if (ids.length === 1) {
+    const direction = directionList.find((d) => d.id === ids[0]);
+    if (direction) return getSGLabel([direction.thetaDeg * DEG_TO_RAD, direction.phiDeg * DEG_TO_RAD], sgIndex);
+  }
+  return '?';
 }
 
 function useImage(src) {
@@ -231,7 +247,10 @@ function buildBlockedLocalPath(axis) {
 }
 
 const LabPanel = forwardRef(function LabPanel(
-  { experiment, setExperiment, expMode, displayBools, setParticleCount, resetToken, tabVisible, hoveredDetectors, onCoincidence, source, invalidAnalyzer },
+  {
+    experiment, setExperiment, expMode, displayBools, setParticleCount, resetToken, tabVisible, hoveredDetectors,
+    onCoincidence, source, invalidAnalyzer, analyzerMode, directionList, randomSampledDirectionIds,
+  },
   ref
 ) {
   const canvasRef = useRef(null);
@@ -347,7 +366,7 @@ const LabPanel = forwardRef(function LabPanel(
         ctx.font = '32px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        drawUnflippedText(ctx, side, getSGLabel(sg.basis, sgIndex), SG_X0_LOCAL + 62, axis);
+        drawUnflippedText(ctx, side, analyzerLabel(sg, sgIndex, analyzerMode, directionList, randomSampledDirectionIds), SG_X0_LOCAL + 62, axis);
 
         if (invalidAnalyzer?.[sgIndex]) {
           ctx.strokeStyle = INVALID_ANALYZER_COLOR;
@@ -444,7 +463,7 @@ const LabPanel = forwardRef(function LabPanel(
         });
       });
     });
-  }, [experiment, expMode, displayBools, axis, canvasDims, hoveredDetectors, invalidAnalyzer, pcImageRef, bbImageRef, ovenImageRef, ovenOffImageRef, sgImageRef]);
+  }, [experiment, expMode, displayBools, axis, canvasDims, hoveredDetectors, invalidAnalyzer, analyzerMode, directionList, randomSampledDirectionIds, pcImageRef, bbImageRef, ovenImageRef, ovenOffImageRef, sgImageRef]);
 
   const drawParticles = useCallback((ctx) => {
     const ovenCenterX = canvasDims.width / 2;
@@ -521,7 +540,10 @@ const LabPanel = forwardRef(function LabPanel(
           if (onCoincidence) {
             detectorHits.forEach((p) => {
               const entry = pendingCoincidencesRef.current.get(p.pairId) ?? {};
-              entry[p.side] = p.arm;
+              // directionId is null outside Random choice mode -- App.jsx's
+              // recordCoincidence only feeds its per-direction statistics
+              // when both sides carry a real one.
+              entry[p.side] = { arm: p.arm, directionId: p.directionId };
               if (entry.L && entry.R) {
                 onCoincidence(entry.L, entry.R);
                 pendingCoincidencesRef.current.delete(p.pairId);
@@ -573,6 +595,19 @@ const LabPanel = forwardRef(function LabPanel(
     }
   }, [tabVisible]);
 
+  // In Random choice mode, each side's basis is redrawn fresh for *this*
+  // pair alone -- uniformly from whichever of the shared direction list
+  // this side currently has checked -- rather than read from the fixed
+  // experiment[i].basis every other mode uses. Returns both the [theta,phi]
+  // basis samplePairOutcome needs and the direction's own id, so that id can
+  // travel with the particle and, once it reaches a detector, be reported
+  // back to App.jsx's per-direction statistics (see onCoincidence below).
+  const pickRandomDirection = (sgIndex) => {
+    const ids = randomSampledDirectionIds[sgIndex];
+    const chosen = directionList.find((d) => d.id === ids[Math.floor(Math.random() * ids.length)]);
+    return { basis: [chosen.thetaDeg * DEG_TO_RAD, chosen.phiDeg * DEG_TO_RAD], directionId: chosen.id };
+  };
+
   // Spawns one *pair*: both particles' arms are drawn together from the
   // oven's current source (samplePairOutcome), then each gets its own
   // independent animation path -- same length on both sides (a straight run
@@ -583,7 +618,11 @@ const LabPanel = forwardRef(function LabPanel(
   // discarded -- that particle gets the short "walk into the wall" path
   // instead, and is never credited to a detector.
   const spawnParticle = () => {
-    const { armL, armR } = samplePairOutcome(experiment[0].basis, experiment[1].basis, source);
+    const randomL = analyzerMode === 'random' ? pickRandomDirection(0) : null;
+    const randomR = analyzerMode === 'random' ? pickRandomDirection(1) : null;
+    const basisL = randomL ? randomL.basis : experiment[0].basis;
+    const basisR = randomR ? randomR.basis : experiment[1].basis;
+    const { armL, armR } = samplePairOutcome(basisL, basisR, source);
     const leftBlocked = experiment[0].blocked;
     const rightBlocked = experiment[1].blocked;
     // Both particles below share this same id -- it's how the tick loop's
@@ -593,11 +632,11 @@ const LabPanel = forwardRef(function LabPanel(
     particlesRef.current = [
       ...particlesRef.current,
       leftBlocked
-        ? { side: 'L', arm: null, blocked: true, pairId, segments: buildBlockedLocalPath(axis), segmentIndex: 0, segmentElapsed: 0 }
-        : { side: 'L', arm: armL, blocked: false, pairId, segments: buildLocalPath(axis, armL), segmentIndex: 0, segmentElapsed: 0 },
+        ? { side: 'L', arm: null, blocked: true, pairId, directionId: null, segments: buildBlockedLocalPath(axis), segmentIndex: 0, segmentElapsed: 0 }
+        : { side: 'L', arm: armL, blocked: false, pairId, directionId: randomL?.directionId ?? null, segments: buildLocalPath(axis, armL), segmentIndex: 0, segmentElapsed: 0 },
       rightBlocked
-        ? { side: 'R', arm: null, blocked: true, pairId, segments: buildBlockedLocalPath(axis), segmentIndex: 0, segmentElapsed: 0 }
-        : { side: 'R', arm: armR, blocked: false, pairId, segments: buildLocalPath(axis, armR), segmentIndex: 0, segmentElapsed: 0 },
+        ? { side: 'R', arm: null, blocked: true, pairId, directionId: null, segments: buildBlockedLocalPath(axis), segmentIndex: 0, segmentElapsed: 0 }
+        : { side: 'R', arm: armR, blocked: false, pairId, directionId: randomR?.directionId ?? null, segments: buildLocalPath(axis, armR), segmentIndex: 0, segmentElapsed: 0 },
     ];
     setParticleCount(particlesRef.current.length);
     if (rafRef.current === null) {
