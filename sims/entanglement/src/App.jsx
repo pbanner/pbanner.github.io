@@ -416,6 +416,16 @@ export default function App() {
     showTotal: true,
     showErrorBars: false,
     hoveredDetectors: [], // [{ sgIndex, arm }, ...] the mouse is currently over in the histogram (one entry for a hovered bar, two for a hovered coincidence-table cell) -- shared with LabPanel so it can highlight the matching detector(s)
+    // Random choice mode's own Chart Options -- unrelated to the Fixed-mode
+    // fields above (no "both" option here, and no error bars/theory/running
+    // total, none of which mean anything once every pair used its own
+    // setting): randomShowPercentages picks counts vs percentages for the
+    // same-outcome table, randomShowUncertainty adds a binomial +/- to
+    // either, and randomShowRawData swaps the aggregate Nsame/Psame textbox
+    // for the full per-setting raw-count table.
+    randomShowPercentages: false,
+    randomShowUncertainty: false,
+    randomShowRawData: false,
   });
   // dc (data collection) is 'single' or 'stream'; rate is particles/sec in
   // stream mode. There's no `build` mode here -- the setup is fixed.
@@ -891,31 +901,53 @@ export default function App() {
           <div className="control-bar-group" style={{ flexDirection: 'row', flex: '1 1 auto', gap: '10px', minWidth: histDisplayBools.showCoincidenceTable ? '650px' : '450px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <h3 style={{ padding: '0px 0px 4px 0px' }}>Chart Options</h3>
-              <div style={{ padding: '0px', display: 'flex', flexDirection: 'row', gap: '3px', alignItems: 'center' }}>
-                <p style={{ padding: '0px 4px 0 0', fontSize: '14px', fontWeight: '500' }}>Show:</p>
-                <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <label><input type="radio" name="barLabelMode" value={0} checked={histDisplayBools.showPercentages === 0} onChange={(event) => { setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) }); }} />Counts</label>
-                  <label><input type="radio" name="barLabelMode" value={1} checked={histDisplayBools.showPercentages === 1} onChange={(event) => { setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) }); }} />Percentages</label>
-                  <label><input type="radio" name="barLabelMode" value={2} checked={histDisplayBools.showPercentages === 2} onChange={(event) => { setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) }); }} />Both</label>
-                </div>
-              </div>
-              <label style={{ padding: '0px 0 0 0' }}>
-                <input type="checkbox" checked={histDisplayBools.showErrorBars} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showErrorBars: e.target.checked })} />
-                Show error bars
-              </label>
-              <label style={{ padding: '0px 0 0 0' }}>
-                <input type="checkbox" checked={histDisplayBools.showCoincidenceTable} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showCoincidenceTable: e.target.checked })} />
-                Show coincidence table
-              </label>
-              <label style={{ padding: '0px 0 0 0' }}>
-                <input type="checkbox" checked={histDisplayBools.showTotal} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showTotal: e.target.checked })} />
-                Show running total
-              </label>
-              <label style={{ padding: '0px 0 0 0' }}>
-                <input type="checkbox" checked={histDisplayBools.showTheory} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showTheory: e.target.checked })} />
-                Theoretical probabilities
-              </label>
-              <label style={{ padding: '4px 0 0 0', fontWeight: '500', width: '220px' }}>Right-click the plot to copy/save!</label>
+              {analyzerMode === 'random' ? (
+                <>
+                  <div style={{ padding: '0px', display: 'flex', flexDirection: 'row', gap: '3px', alignItems: 'center' }}>
+                    <p style={{ padding: '0px 4px 0 0', fontSize: '14px', fontWeight: '500' }}>Show:</p>
+                    <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <label><input type="radio" name="randomLabelMode" checked={!histDisplayBools.randomShowPercentages} onChange={() => setHistDisplayBools({ ...histDisplayBools, randomShowPercentages: false })} />Counts</label>
+                      <label><input type="radio" name="randomLabelMode" checked={histDisplayBools.randomShowPercentages} onChange={() => setHistDisplayBools({ ...histDisplayBools, randomShowPercentages: true })} />Percentages</label>
+                    </div>
+                  </div>
+                  <label style={{ padding: '0px 0 0 0' }}>
+                    <input type="checkbox" checked={histDisplayBools.randomShowUncertainty} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, randomShowUncertainty: e.target.checked })} />
+                    Show uncertainties
+                  </label>
+                  <label style={{ padding: '0px 0 0 0' }}>
+                    <input type="checkbox" checked={histDisplayBools.randomShowRawData} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, randomShowRawData: e.target.checked })} />
+                    Show raw data
+                  </label>
+                </>
+              ) : (
+                <>
+                  <div style={{ padding: '0px', display: 'flex', flexDirection: 'row', gap: '3px', alignItems: 'center' }}>
+                    <p style={{ padding: '0px 4px 0 0', fontSize: '14px', fontWeight: '500' }}>Show:</p>
+                    <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <label><input type="radio" name="barLabelMode" value={0} checked={histDisplayBools.showPercentages === 0} onChange={(event) => { setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) }); }} />Counts</label>
+                      <label><input type="radio" name="barLabelMode" value={1} checked={histDisplayBools.showPercentages === 1} onChange={(event) => { setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) }); }} />Percentages</label>
+                      <label><input type="radio" name="barLabelMode" value={2} checked={histDisplayBools.showPercentages === 2} onChange={(event) => { setHistDisplayBools({ ...histDisplayBools, showPercentages: Number(event.target.value) }); }} />Both</label>
+                    </div>
+                  </div>
+                  <label style={{ padding: '0px 0 0 0' }}>
+                    <input type="checkbox" checked={histDisplayBools.showErrorBars} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showErrorBars: e.target.checked })} />
+                    Show error bars
+                  </label>
+                  <label style={{ padding: '0px 0 0 0' }}>
+                    <input type="checkbox" checked={histDisplayBools.showCoincidenceTable} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showCoincidenceTable: e.target.checked })} />
+                    Show coincidence table
+                  </label>
+                  <label style={{ padding: '0px 0 0 0' }}>
+                    <input type="checkbox" checked={histDisplayBools.showTotal} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showTotal: e.target.checked })} />
+                    Show running total
+                  </label>
+                  <label style={{ padding: '0px 0 0 0' }}>
+                    <input type="checkbox" checked={histDisplayBools.showTheory} onChange={(e) => setHistDisplayBools({ ...histDisplayBools, showTheory: e.target.checked })} />
+                    Theoretical probabilities
+                  </label>
+                  <label style={{ padding: '4px 0 0 0', fontWeight: '500', width: '220px' }}>Right-click the plot to copy/save!</label>
+                </>
+              )}
             </div>
             <div className="histogram-panel">
               <div className="histogram-canvas-wrap">

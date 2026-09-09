@@ -223,7 +223,176 @@ function niceTicks(minTop, targetCount) {
   return ticks;
 }
 
-export default function Histogram({ experiment, displayBools, setDisplayBools, coincidences, source }) {
+// --- Random choice mode's statistics displays --------------------------
+// App.jsx's randomCoincidences is a flat dictionary keyed by
+// "leftDirectionId|rightDirectionId|leftArm|rightArm" -> count (see its own
+// comment); everything below just reads out of that one structure.
+function cellCounts(randomCoincidences, leftId, rightId) {
+  const uu = randomCoincidences[`${leftId}|${rightId}|up|up`] ?? 0;
+  const ud = randomCoincidences[`${leftId}|${rightId}|up|down`] ?? 0;
+  const du = randomCoincidences[`${leftId}|${rightId}|down|up`] ?? 0;
+  const dd = randomCoincidences[`${leftId}|${rightId}|down|down`] ?? 0;
+  return { n: uu + ud + du + dd, same: uu + dd }; // same-outcome = both up or both down
+}
+
+// Binomial standard error, conditional on n (the number of pairs actually
+// measured at a given setting) -- of the *count* itself for the raw-count
+// display, and of the *proportion* same/n for the percentage display. Both
+// are the usual normal-approximation SE (sqrt(n*p*(1-p)) and
+// sqrt(p*(1-p)/n) respectively); a small-n or p near 0/1 case where that
+// approximation gets rough is still the standard, reasonable choice here,
+// not a place this sim tries to do anything fancier (e.g. Wilson intervals).
+function binomialCountSE(n, same) {
+  if (n === 0) return 0;
+  const p = same / n;
+  return Math.sqrt(n * p * (1 - p));
+}
+function binomialProportionSE(n, same) {
+  if (n === 0) return 0;
+  const p = same / n;
+  return Math.sqrt(p * (1 - p) / n);
+}
+
+// "12 ± 3.5" or "40.0% ± 11.2%" (or, with showUncertainty off, just the bare
+// number) -- shared by every cell of the same-outcome table and the
+// aggregate textbox, so the two always agree on formatting. "—" stands in
+// for a setting combination that's never actually been measured (n = 0),
+// same convention as CoincidenceTable's own "---" for an empty percentage.
+function formatSameOutcome(n, same, showPercentages, showUncertainty) {
+  if (n === 0) return '—';
+  if (showPercentages) {
+    const pct = (same / n) * 100;
+    if (!showUncertainty) return `${pct.toFixed(1)}%`;
+    return `${pct.toFixed(1)}% ± ${(binomialProportionSE(n, same) * 100).toFixed(1)}%`;
+  }
+  if (!showUncertainty) return String(same);
+  return `${same} ± ${binomialCountSE(n, same).toFixed(1)}`;
+}
+
+// The N x N grid: row i / column j is the count (or percentage) of pairs
+// measured at (left = direction i, right = direction j) whose two outcomes
+// agreed. No marginals -- a row or column sum here would just be "how many
+// pairs happened to land on this direction," not a meaningful physical
+// quantity the way the ordinary Fixed-mode coincidence table's marginals
+// are.
+function SameOutcomeTable({ directionList, randomCoincidences, showPercentages, showUncertainty }) {
+  const headerStyle = { minWidth: CT_CELL_MIN_WIDTH, padding: '6px 8px', textAlign: 'center', fontWeight: 600, color: '#333' };
+  const cellStyle = { border: CT_BORDER, minWidth: CT_CELL_MIN_WIDTH, padding: '6px 8px', textAlign: 'center', fontWeight: 600, color: '#303030', fontVariantNumeric: 'tabular-nums' };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#303030' }}>Same-Outcome Coincidences</h4>
+      <table style={{ borderCollapse: 'collapse', fontSize: '13px' }}>
+        <thead>
+          <tr>
+            <th style={{ border: 'none' }} />
+            {directionList.map((rightDir, j) => (
+              <th key={rightDir.id} style={headerStyle}>R D{j + 1}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {directionList.map((leftDir, i) => (
+            <tr key={leftDir.id}>
+              <th style={headerStyle}>L D{i + 1}</th>
+              {directionList.map((rightDir) => {
+                const { n, same } = cellCounts(randomCoincidences, leftDir.id, rightDir.id);
+                return (
+                  <td key={rightDir.id} style={cellStyle}>
+                    {formatSameOutcome(n, same, showPercentages, showUncertainty)}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Every possible (left direction, right direction, left outcome, right
+// outcome) combination, including the ones never actually measured (shown
+// as 0) -- its own scrolling container so a long list (up to 4x4x2x2 = 64
+// rows) never grows the rest of this panel.
+function RawDataTable({ directionList, randomCoincidences }) {
+  const cellStyle = { border: '1px solid #ddd', padding: '3px 8px', textAlign: 'center', fontVariantNumeric: 'tabular-nums' };
+  const rows = [];
+  directionList.forEach((leftDir, i) => {
+    directionList.forEach((rightDir, j) => {
+      ['up', 'down'].forEach((armL) => {
+        ['up', 'down'].forEach((armR) => {
+          const count = randomCoincidences[`${leftDir.id}|${rightDir.id}|${armL}|${armR}`] ?? 0;
+          rows.push({ key: `${leftDir.id}|${rightDir.id}|${armL}|${armR}`, i, j, armL, armR, count });
+        });
+      });
+    });
+  });
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#303030' }}>Raw Counts</h4>
+      <div style={{ maxHeight: '260px', overflowY: 'auto', border: '1px solid #ccc', borderRadius: '4px' }}>
+        <table style={{ borderCollapse: 'collapse', fontSize: '12px' }}>
+          <thead>
+            <tr style={{ position: 'sticky', top: 0, background: '#f0f0f0' }}>
+              <th style={cellStyle}>Left dir.</th>
+              <th style={cellStyle}>Right dir.</th>
+              <th style={cellStyle}>Left outcome</th>
+              <th style={cellStyle}>Right outcome</th>
+              <th style={cellStyle}>Counts</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.key}>
+                <td style={cellStyle}>D{r.i + 1}</td>
+                <td style={cellStyle}>D{r.j + 1}</td>
+                <td style={cellStyle}>{r.armL === 'up' ? <ArrowIcon direction="up" /> : <ArrowIcon direction="down" />}</td>
+                <td style={cellStyle}>{r.armR === 'up' ? <ArrowIcon direction="up" /> : <ArrowIcon direction="down" />}</td>
+                <td style={cellStyle}>{r.count}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// The "raw data" checkbox's off-state: one pooled Nsame/Psame across every
+// setting combination at once, rather than the per-setting breakdown the
+// main table already shows.
+function AggregateSameOutcome({ directionList, randomCoincidences, showPercentages, showUncertainty }) {
+  let n = 0;
+  let same = 0;
+  directionList.forEach((leftDir) => {
+    directionList.forEach((rightDir) => {
+      const c = cellCounts(randomCoincidences, leftDir.id, rightDir.id);
+      n += c.n;
+      same += c.same;
+    });
+  });
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#303030' }}>Overall</h4>
+      <div style={{ border: '1px solid #ccc', borderRadius: '4px', padding: '10px 18px', fontSize: '15px', fontWeight: 600, color: '#303030', whiteSpace: 'nowrap' }}>
+        {showPercentages ? 'Psame' : 'Nsame'} = {formatSameOutcome(n, same, showPercentages, showUncertainty)}
+      </div>
+    </div>
+  );
+}
+
+function RandomChoiceStats({ directionList, randomCoincidences, showPercentages, showUncertainty, showRawData }) {
+  return (
+    <div style={{ width: '100%', display: 'flex', flexDirection: 'row', gap: '28px', alignItems: 'flex-start', justifyContent: 'center', padding: '6px 0' }}>
+      <SameOutcomeTable directionList={directionList} randomCoincidences={randomCoincidences} showPercentages={showPercentages} showUncertainty={showUncertainty} />
+      {showRawData
+        ? <RawDataTable directionList={directionList} randomCoincidences={randomCoincidences} />
+        : <AggregateSameOutcome directionList={directionList} randomCoincidences={randomCoincidences} showPercentages={showPercentages} showUncertainty={showUncertainty} />}
+    </div>
+  );
+}
+
+export default function Histogram({ experiment, displayBools, setDisplayBools, coincidences, source, analyzerMode, directionList, randomCoincidences }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [canvasDims, setCanvasDims] = useState({ width: 300, height: 200 });
@@ -642,6 +811,25 @@ export default function Histogram({ experiment, displayBools, setDisplayBools, c
       canvas.removeEventListener('mouseleave', handleMouseLeave);
     };
   }, [magnifierOn, drawLoupe]);
+
+  // Random choice mode replaces the whole bar chart + coincidence table with
+  // a completely different display -- there's no single "current" basis for
+  // the theory overlay or bar labels to describe once every pair used its
+  // own setting, so rather than thread that mode through every drawing
+  // routine above, this just swaps in RandomChoiceStats wholesale. All the
+  // canvas/loupe hooks above still ran (hooks can't be conditional), but
+  // harmlessly no-op against a container that was never rendered.
+  if (analyzerMode === 'random') {
+    return (
+      <RandomChoiceStats
+        directionList={directionList}
+        randomCoincidences={randomCoincidences}
+        showPercentages={displayBools.randomShowPercentages}
+        showUncertainty={displayBools.randomShowUncertainty}
+        showRawData={displayBools.randomShowRawData}
+      />
+    );
+  }
 
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'row', gap: '10px' }}>

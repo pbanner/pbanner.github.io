@@ -603,8 +603,26 @@ const LabPanel = forwardRef(function LabPanel(
   // travel with the particle and, once it reaches a detector, be reported
   // back to App.jsx's per-direction statistics (see onCoincidence below).
   const pickRandomDirection = (sgIndex) => {
-    const ids = randomSampledDirectionIds[sgIndex];
-    const chosen = directionList.find((d) => d.id === ids[Math.floor(Math.random() * ids.length)]);
+    // validIds guards against a checked id that doesn't (or no longer)
+    // match any direction in the shared list -- normally impossible (every
+    // direction-list edit updates both together, see App.jsx's handlers),
+    // but a continuous stream calls this many times a second straight off a
+    // ref, outside any render's own consistent props snapshot, so falling
+    // back to sampling the full list is the same defensive move as
+    // resolvedExperiment's own `columns.find(...) ?? columns[0]` elsewhere
+    // in this app, rather than letting a momentarily-stale id crash a spawn.
+    const validIds = randomSampledDirectionIds[sgIndex].filter((id) => directionList.some((d) => d.id === id));
+    const ids = validIds.length > 0 ? validIds : directionList.map((d) => d.id);
+    // ?? directionList[0]: belt-and-braces against a checked id this render's
+    // directionList doesn't (yet, or any longer) recognize -- the same
+    // "fall back to the first entry rather than resolve to nothing" contract
+    // every other lookup against this list already uses (see
+    // App.jsx's resolvedExperiment). A continuous stream calls this many
+    // times a second straight off a ref, independent of React's own render
+    // cycle, so this fallback is what keeps a single momentarily-stale id
+    // from crashing a spawn instead of just quietly sampling that pair from
+    // whatever this render's first available direction is.
+    const chosen = directionList.find((d) => d.id === ids[Math.floor(Math.random() * ids.length)]) ?? directionList[0];
     return { basis: [chosen.thetaDeg * DEG_TO_RAD, chosen.phiDeg * DEG_TO_RAD], directionId: chosen.id };
   };
 
