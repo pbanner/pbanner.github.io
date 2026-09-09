@@ -176,6 +176,12 @@
   border-color: #3498db;
 }
 
+.control-bar-button.red-special:hover {
+  background: #972323;
+  color: white;
+  border-color: #972323;
+}
+
 .control-bar-button:disabled {
   background: #d0d0d0;
   border-color: #bbb;

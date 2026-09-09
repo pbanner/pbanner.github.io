@@ -782,8 +782,8 @@ export default function App() {
       <aside className="control-bar">
         <div className="control-bar-content">
           <div className="control-bar-group">
-            <h3 style={{ margin: '0 0 10px 0', fontWeight: 'bold' }}>Set Analyzer Direction</h3>
-            <label style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 6px 2px' }}>
+            <h3 style={{ margin: '0 0 10px 0', fontWeight: 'bold', minWidth: '250px' }}>Set Analyzer Direction</h3>
+            <label style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', margin: '-4px 0 4px 2px' }}>
               <input
                 type="checkbox"
                 checked={followDirectionList}
@@ -793,13 +793,16 @@ export default function App() {
               Follow a list of directions
             </label>
             {followDirectionList && (
-              <DirectionList
-                directions={directionList}
-                onEditDirection={handleEditDirection}
-                onDeleteDirection={handleDeleteDirection}
-                onAddDirection={handleAddDirection}
-                disabled={controlsLocked}
-              />
+              <>
+                <p style={{ fontSize: '14px', margin: '0 0 -4px 0' }}><strong>Direction list</strong> (click to edit):</p>
+                <DirectionList
+                  directions={directionList}
+                  onEditDirection={handleEditDirection}
+                  onDeleteDirection={handleDeleteDirection}
+                  onAddDirection={handleAddDirection}
+                  disabled={controlsLocked}
+                />
+              </>
             )}
             {experiment.map((sg, i) => (
               <AnalyzerStepper

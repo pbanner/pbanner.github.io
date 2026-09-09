@@ -75,7 +75,7 @@ function DirectionLabel({ index, direction, onEdit, disabled }) {
 export function DirectionList({ directions, onEditDirection, onDeleteDirection, onAddDirection, disabled }) {
   const canAdd = directions.length < MAX_DIRECTIONS;
   return (
-    <>
+    <div style={{ 'margin': '0 0 12px 0' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <tbody>
           {directions.map((dir, i) => (
@@ -90,9 +90,10 @@ export function DirectionList({ directions, onEditDirection, onDeleteDirection, 
                   disabled={disabled || directions.length <= 1}
                   title="Delete this direction"
                   aria-label={`Delete Direction ${i + 1}`}
-                  style={{ width: '16px', height: '16px', padding: 0, lineHeight: '13px', fontSize: '11px', border: '1px solid #999', borderRadius: '2px', background: '#eee', cursor: 'pointer' }}
+                  className={`control-bar-button red-special`}
+                  style={{ width: '50px', height: '16px', padding: '2px', lineHeight: '13px', fontSize: '11px', border: '1px solid #999', borderRadius: '2px', cursor: 'pointer' }}
                 >
-                  ×
+                  Delete
                 </button>
               </td>
             </tr>
@@ -100,13 +101,13 @@ export function DirectionList({ directions, onEditDirection, onDeleteDirection, 
         </tbody>
       </table>
       {canAdd && (
-        <div style={{ textAlign: 'right' }}>
-          <button type="button" className="control-bar-button" onClick={onAddDirection} disabled={disabled} style={{ fontSize: '11px', margin: '6px 0 0 0' }}>
+        <div style={{ textAlign: 'left' }}>
+          <button type="button" className="control-bar-button" onClick={onAddDirection} disabled={disabled} style={{ fontSize: '11px', margin: '6px 0 0px 0' }}>
             + Add Direction
           </button>
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -160,7 +161,7 @@ export function DirectionSamplingRow({ label, directions, selectedIds, onToggle,
           ...(invalid ? { outline: '2px solid #cc3333', outlineOffset: '2px', borderRadius: '3px' } : {}),
         }}
       >
-        <label style={{ fontSize: '14px', fontWeight: '500' }}>{label}</label>
+        <label style={{ fontSize: '14px', fontWeight: '500' }}>{label}:</label>
         {directions.map((dir, i) => (
           <label key={dir.id} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap' }}>
             <input
