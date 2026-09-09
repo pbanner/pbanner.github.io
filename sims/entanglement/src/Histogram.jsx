@@ -276,36 +276,50 @@ function formatSameOutcome(n, same, showPercentages, showUncertainty) {
 // quantity the way the ordinary Fixed-mode coincidence table's marginals
 // are.
 function SameOutcomeTable({ directionList, randomCoincidences, showPercentages, showUncertainty }) {
-  const headerStyle = { minWidth: CT_CELL_MIN_WIDTH, padding: '6px 8px', textAlign: 'center', fontWeight: 600, color: '#333' };
+  const headerStyle = { minWidth: CT_CELL_MIN_WIDTH, padding: '6px 8px', textAlign: 'center', fontWeight: 600, color: '#333', border: CT_BORDER };
   const cellStyle = { border: CT_BORDER, minWidth: CT_CELL_MIN_WIDTH, padding: '6px 8px', textAlign: 'center', fontWeight: 600, color: '#303030', fontVariantNumeric: 'tabular-nums' };
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#303030' }}>Same-Outcome Coincidences</h4>
-      <table style={{ borderCollapse: 'collapse', fontSize: '13px' }}>
-        <thead>
-          <tr>
-            <th style={{ border: 'none' }} />
-            {directionList.map((rightDir, j) => (
-              <th key={rightDir.id} style={headerStyle}>R D{j + 1}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {directionList.map((leftDir, i) => (
-            <tr key={leftDir.id}>
-              <th style={headerStyle}>L D{i + 1}</th>
-              {directionList.map((rightDir) => {
-                const { n, same } = cellCounts(randomCoincidences, leftDir.id, rightDir.id);
-                return (
-                  <td key={rightDir.id} style={cellStyle}>
-                    {formatSameOutcome(n, same, showPercentages, showUncertainty)}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    // The heading stays pinned to the top of this column regardless of the
+    // table's own height (it's a plain flow sibling, not part of the
+    // centering flex item below it) -- only the table itself is vertically
+    // centered in whatever space is left, so a short table (few directions)
+    // doesn't leave the heading looking oddly far from it.
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', height: '100%' }}>
+      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#303030', flexShrink: 0 }}>Same-Outcome Coincidences</h4>
+      <div style={{ flex: '1 1 auto', minHeight: 0, display: 'flex', alignItems: 'center' }}>
+        {/* maxHeight:'100%' (not just letting the table size itself
+            unbounded) is what stops a 4-direction, 5x5 grid from ever
+            growing past this panel's own available height and overlapping
+            the heading above -- same reasoning as RawDataTable's own
+            scroll box. */}
+        <div style={{ maxHeight: '100%', overflowY: 'auto' }}>
+          <table style={{ borderCollapse: 'collapse', fontSize: '13px' }}>
+            <thead>
+              <tr>
+                <th style={headerStyle} />
+                {directionList.map((rightDir, j) => (
+                  <th key={rightDir.id} style={headerStyle}>R D{j + 1}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {directionList.map((leftDir, i) => (
+                <tr key={leftDir.id}>
+                  <th style={headerStyle}>L D{i + 1}</th>
+                  {directionList.map((rightDir) => {
+                    const { n, same } = cellCounts(randomCoincidences, leftDir.id, rightDir.id);
+                    return (
+                      <td key={rightDir.id} style={cellStyle}>
+                        {formatSameOutcome(n, same, showPercentages, showUncertainty)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
@@ -328,31 +342,40 @@ function RawDataTable({ directionList, randomCoincidences }) {
     });
   });
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#303030' }}>Raw Counts</h4>
-      <div style={{ maxHeight: '260px', overflowY: 'auto', border: '1px solid #ccc', borderRadius: '4px' }}>
-        <table style={{ borderCollapse: 'collapse', fontSize: '12px' }}>
-          <thead>
-            <tr style={{ position: 'sticky', top: 0, background: '#f0f0f0' }}>
-              <th style={cellStyle}>Left dir.</th>
-              <th style={cellStyle}>Right dir.</th>
-              <th style={cellStyle}>Left outcome</th>
-              <th style={cellStyle}>Right outcome</th>
-              <th style={cellStyle}>Counts</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.key}>
-                <td style={cellStyle}>D{r.i + 1}</td>
-                <td style={cellStyle}>D{r.j + 1}</td>
-                <td style={cellStyle}>{r.armL === 'up' ? <ArrowIcon direction="up" /> : <ArrowIcon direction="down" />}</td>
-                <td style={cellStyle}>{r.armR === 'up' ? <ArrowIcon direction="up" /> : <ArrowIcon direction="down" />}</td>
-                <td style={cellStyle}>{r.count}</td>
+    // Same top-pinned-heading / vertically-centered-content split as
+    // SameOutcomeTable, so the two panels' headings line up regardless of
+    // which one's content happens to be taller. maxHeight:'100%' (not a
+    // fixed pixel cap) is what keeps a long list from ever growing past
+    // whatever space this panel actually has available and overlapping the
+    // heading above it -- a short list still shrinks to its own content and
+    // centers in the leftover space, same as SameOutcomeTable's own table.
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', height: '100%' }}>
+      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#303030', flexShrink: 0 }}>Raw Counts</h4>
+      <div style={{ flex: '1 1 auto', minHeight: 0, display: 'flex', alignItems: 'center' }}>
+        <div style={{ maxHeight: '100%', overflowY: 'auto', border: '1px solid #ccc', borderRadius: '4px' }}>
+          <table style={{ borderCollapse: 'collapse', fontSize: '12px' }}>
+            <thead>
+              <tr style={{ position: 'sticky', top: 0, background: '#f0f0f0' }}>
+                <th style={cellStyle}>Left dir.</th>
+                <th style={cellStyle}>Right dir.</th>
+                <th style={cellStyle}>Left outcome</th>
+                <th style={cellStyle}>Right outcome</th>
+                <th style={cellStyle}>Counts</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.key}>
+                  <td style={cellStyle}>D{r.i + 1}</td>
+                  <td style={cellStyle}>D{r.j + 1}</td>
+                  <td style={cellStyle}>{r.armL === 'up' ? <ArrowIcon direction="up" /> : <ArrowIcon direction="down" />}</td>
+                  <td style={cellStyle}>{r.armR === 'up' ? <ArrowIcon direction="up" /> : <ArrowIcon direction="down" />}</td>
+                  <td style={cellStyle}>{r.count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -372,7 +395,13 @@ function AggregateSameOutcome({ directionList, randomCoincidences, showPercentag
     });
   });
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+    // Unlike the other two panels, the heading here moves *with* its
+    // content rather than staying pinned to the top: this box is always
+    // just one line, so keeping the heading fixed at the top would leave it
+    // looking stranded above a lot of empty space next to a taller
+    // Same-Outcome table -- centering the whole heading+box group instead
+    // keeps them visually paired.
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '6px', height: '100%' }}>
       <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#303030' }}>Overall</h4>
       <div style={{ border: '1px solid #ccc', borderRadius: '4px', padding: '10px 18px', fontSize: '15px', fontWeight: 600, color: '#303030', whiteSpace: 'nowrap' }}>
         {showPercentages ? 'Psame' : 'Nsame'} = {formatSameOutcome(n, same, showPercentages, showUncertainty)}
@@ -382,12 +411,23 @@ function AggregateSameOutcome({ directionList, randomCoincidences, showPercentag
 }
 
 function RandomChoiceStats({ directionList, randomCoincidences, showPercentages, showUncertainty, showRawData }) {
+  // Each half gets its own fixed flex:1 share of the row and centers its
+  // own content within it -- rather than two naturally-sized items
+  // centered as a group, which let either one's own width (the raw-data
+  // table's especially, since its content -- and so its scrollbar -- comes
+  // and goes as data streams in) shift the *other*'s position every time it
+  // changed. minWidth:0 lets each half shrink below its content's natural
+  // width instead of overflowing the row when space is tight.
   return (
-    <div style={{ width: '100%', display: 'flex', flexDirection: 'row', gap: '28px', alignItems: 'flex-start', justifyContent: 'center', padding: '6px 0' }}>
-      <SameOutcomeTable directionList={directionList} randomCoincidences={randomCoincidences} showPercentages={showPercentages} showUncertainty={showUncertainty} />
-      {showRawData
-        ? <RawDataTable directionList={directionList} randomCoincidences={randomCoincidences} />
-        : <AggregateSameOutcome directionList={directionList} randomCoincidences={randomCoincidences} showPercentages={showPercentages} showUncertainty={showUncertainty} />}
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'row', padding: '6px 0' }}>
+      <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', justifyContent: 'center' }}>
+        <SameOutcomeTable directionList={directionList} randomCoincidences={randomCoincidences} showPercentages={showPercentages} showUncertainty={showUncertainty} />
+      </div>
+      <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', justifyContent: 'center' }}>
+        {showRawData
+          ? <RawDataTable directionList={directionList} randomCoincidences={randomCoincidences} />
+          : <AggregateSameOutcome directionList={directionList} randomCoincidences={randomCoincidences} showPercentages={showPercentages} showUncertainty={showUncertainty} />}
+      </div>
     </div>
   );
 }
