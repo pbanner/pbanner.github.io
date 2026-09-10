@@ -1,0 +1,933 @@
+import { useRef, useEffect, useState, useCallback } from 'react';
+import { theoreticalProbabilities } from './physics';
+import { PC_COLORS } from './colors';
+import { arrowWidth, drawArrow } from './canvasArrow';
+import ArrowIcon from './arrowIcon';
+
+// Plot layout -- all tunable
+const PADDING_TOP = 25;
+const PADDING_RIGHT = 12;    // room for the y-axis tick labels, which sit to the right of the axis
+const PADDING_BOTTOM = 20;
+const TICK_LABEL_GAP = 8;   // gap between the axis line and the tick numbers, and between the tick numbers and the "Counts" label past them
+const Y_AXIS_LABEL_THICKNESS = 12; // the rotated "Counts" label's own font size -- its horizontal footprint once turned sideways
+const Y_AXIS_LABEL_MARGIN = 4; // margin between the "Counts" label and the canvas's own left edge
+const AXIS_COLOR = '#303030';
+const AXIS_HEADROOM = 1.1;   // require the top tick to clear the tallest bar by this factor, so bars never crowd the very top and rescaling kicks in a bit before a bar would actually exceed the old top tick
+const TICK_LABEL_COLOR = '#606060';
+const MIN_AXIS_MAX = 20;     // the y-axis never scales down below this, even with 0 or few counts
+const TARGET_TICK_COUNT = 5; // aim for roughly this many ticks; niceTicks may land on slightly more/fewer
+const BAR_GAP_RATIO = 0.3;   // fraction of each bar's horizontal slot left empty as a gap
+const BAR_GROUP_MARGIN = 24; // extra empty space to each side of the whole set of bars, beyond the axis padding
+const MAX_BAR_WIDTH = 60;    // a bar never grows wider than this, however few detectors there are
+const ERROR_BAR_WIDTH_RATIO = 0.4;
+const BAR_LABEL_CLASH_HEIGHT = 18; // same-SG neighbors whose bars differ by at least this many px sit far enough apart vertically that their labels can't actually clash, so the horizontal offset is skipped
+const ERROR_BAR_WIDTH_MIN = 20;
+const TOTAL_COLOR = '#303030';
+const THEORY_LINE_COLOR = '#707070';
+const THEORY_LINE_WIDTH = 2;
+//const THEORY_LINE_DASH = [4, 3];
+const THEORY_LINE_OVERHANG = 6; // extra px each side beyond the bar's own width, so the line reads as "wider than the bar" rather than flush with its edges
+const LOUPE_DIAMETER = 200;  // css px, the magnifier's own on-screen size
+const LOUPE_ZOOM = 10;        // how much the loupe magnifies the chart underneath the cursor
+const LOUPE_INK_SCALE = 1 / LOUPE_ZOOM * 2.0; // shrinks line widths/font sizes before the zoom transform blows them back up, so they render at their normal apparent size instead of getting magnified too
+const HOVER_BORDER_COLOR = '#000000';
+const HOVER_BORDER_WIDTH = 2.5;
+
+// This sim always has exactly two fixed analyzers -- index 0 is the one
+// measuring the left-going particle, index 1 the right-going one -- so
+// detector labels read "Left"/"Right" rather than the Stern-Gerlach sim's
+// generic "SG1"/"SG2" (which numbered an arbitrary, user-built chain).
+function sideLabel(sgIndex) {
+  return sgIndex === 0 ? 'Left' : 'Right';
+}
+
+// Enough horizontal room for a 5-digit count in every numeric cell, fixed
+// regardless of how many digits a count actually has right now. Sizing
+// cells to their own content instead used to make the table's own width
+// (and so the chart's own allotted space next to it -- see the comment on
+// containerRef below) shift every time a count crossed a digit boundary
+// (9 -> 10, 99 -> 100, ...), which fired the chart canvas's ResizeObserver
+// and produced a visible flash on every such resize -- frequent enough at
+// a high streaming rate to look like constant blinking. A fixed width
+// removes the resize trigger at its source rather than trying to debounce
+// or hide the resulting redraw.
+const CT_CELL_MIN_WIDTH = '9ch';
+const CT_BORDER = '1px solid #999';
+// An inset box-shadow, not a wider border, marks a hovered cell -- it draws
+// inside the cell's existing box rather than adding to it, so (unlike
+// bumping border-width) it can never nudge the table's own layout size and
+// re-trigger the resize/blink this table's fixed CT_CELL_MIN_WIDTH was
+// already introduced to avoid (see that constant's own comment).
+const CT_HOVER_SHADOW = `inset 0 0 0 ${HOVER_BORDER_WIDTH}px ${HOVER_BORDER_COLOR}`;
+
+// True when the two detectors currently hovered (shared with the histogram
+// bars and LabPanel via displayBools.hoveredDetectors) are exactly this
+// cell's own Left/Right pair -- a bar hover only ever supplies one detector,
+// so this is naturally false whenever the hover came from a bar rather than
+// a table cell.
+function isCellHovered(hoveredDetectors, leftArm, rightArm) {
+  return (
+    hoveredDetectors.length === 2 &&
+    hoveredDetectors.some((h) => h.sgIndex === 0 && h.arm === leftArm) &&
+    hoveredDetectors.some((h) => h.sgIndex === 1 && h.arm === rightArm)
+  );
+}
+
+// Plain HTML/CSS, not canvas -- the joint (coincidence) counts this shows
+// replaced the old canvas-drawn legend (see the Histogram component's own
+// comment on `coincidences`), and a real <table> gets borders, shading, and
+// text alignment for free where hand-drawing the same grid in canvas would
+// have meant reimplementing all of that from scratch. `coincidences` is
+// { uu, ud, du, dd }, one count per joint outcome (u/d = up/down, first
+// letter the left particle's arm, second the right's) -- see App.jsx's
+// recordCoincidence for where these come from. The margins (row/column
+// sums) are exactly the same numbers as the main chart's Left/Right bars,
+// shown here too since that's the cross-check that makes a reader trust
+// the table: entanglement lives in the *joint* counts inside the box, not
+// in these marginal totals, which is why they're set apart with a rule
+// rather than folded into the grid.
+function CoincidenceTable({ coincidences, blocked, hoveredDetectors, setDisplayBools, showProbabilities }) {
+  if (blocked) {
+    return (
+      <div style={{ fontSize: '13px', color: '#888', textAlign: 'center', maxWidth: '150px', margin: '0 16px' }}>
+        No coincidences to show -- one side is blocked, so pairs are never
+        measured on both ends.
+      </div>
+    );
+  }
+
+  const { uu, ud, du, dd } = coincidences;
+  const leftUpMargin = uu + ud;
+  const leftDownMargin = du + dd;
+  const rightUpMargin = uu + du;
+  const rightDownMargin = ud + dd;
+  const total = uu + ud + du + dd;
+
+  // In probability mode every cell (joint counts and margins alike) shows
+  // its own share of `total` instead of its raw count -- the fractions this
+  // sim's histogram bars already express as percentages, just laid out as a
+  // joint distribution instead of one bar per detector. "---" (matching the
+  // histogram's own convention for "no percentage yet") stands in for 0/0
+  // rather than a nonsensical NaN% before any pairs have been recorded.
+  const fmt = (count) => {
+    if (!showProbabilities) return String(count);
+    return total > 0 ? `${(count / total * 100).toFixed(1)}%` : '---';
+  };
+
+  const headerStyle = { minWidth: CT_CELL_MIN_WIDTH, padding: '10px 10px', textAlign: 'center', fontWeight: 600, color: '#333' };
+  const cellStyle = { border: CT_BORDER, minWidth: CT_CELL_MIN_WIDTH, padding: '10px 10px', textAlign: 'center', fontWeight: 600, color: '#303030', fontVariantNumeric: 'tabular-nums' };
+  const oppositeStyle = { ...cellStyle, background: '#e8ecfb', borderColor: '#8fa0d8' };
+  const marginStyle = { minWidth: CT_CELL_MIN_WIDTH, padding: '10px 10px', textAlign: 'center', fontWeight: 500, color: '#666', fontVariantNumeric: 'tabular-nums' };
+  const blankStyle = { border: 'none', padding: '10px 10px' };
+
+  // Attached straight to each <td> below (not to, say, a <span> wrapping
+  // just the number inside it) -- a table cell's mouseenter/mouseleave fire
+  // for its whole rendered box, padding included, not only the text node,
+  // so this alone is what gives "whole-cell" hover sensing with no extra
+  // markup needed.
+  const hoverHandlers = (leftArm, rightArm) => ({
+    onMouseEnter: () =>
+      setDisplayBools((prev) => ({
+        ...prev,
+        hoveredDetectors: [{ sgIndex: 0, arm: leftArm }, { sgIndex: 1, arm: rightArm }],
+      })),
+    onMouseLeave: () => setDisplayBools((prev) => ({ ...prev, hoveredDetectors: [] })),
+  });
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', margin: '0 16px' }}>
+      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#303030' }}>Coincidence Counts</h4>
+      <table style={{ borderCollapse: 'collapse', fontSize: '13px' }}>
+        <tbody>
+          <tr>
+            <td style={blankStyle} />
+            <th style={headerStyle}>R <ArrowIcon direction="up" /></th>
+            <th style={{ ...headerStyle, borderLeft: CT_BORDER }}>R <ArrowIcon direction="down" /></th>
+            <td style={blankStyle} />
+          </tr>
+          <tr>
+            <th style={headerStyle}>L <ArrowIcon direction="up" /></th>
+            <td
+              style={{ ...cellStyle, ...(isCellHovered(hoveredDetectors, 'up', 'up') ? { boxShadow: CT_HOVER_SHADOW } : null) }}
+              {...hoverHandlers('up', 'up')}
+            >{fmt(uu)}</td>
+            <td
+              style={{ ...oppositeStyle, ...(isCellHovered(hoveredDetectors, 'up', 'down') ? { boxShadow: CT_HOVER_SHADOW } : null) }}
+              {...hoverHandlers('up', 'down')}
+            >{fmt(ud)}</td>
+            <td style={{ ...marginStyle, borderLeft: CT_BORDER }}>{fmt(leftUpMargin)}</td>
+          </tr>
+          <tr>
+            <th style={{ ...headerStyle, borderTop: CT_BORDER }}>L <ArrowIcon direction="down" /></th>
+            <td
+              style={{ ...oppositeStyle, ...(isCellHovered(hoveredDetectors, 'down', 'up') ? { boxShadow: CT_HOVER_SHADOW } : null) }}
+              {...hoverHandlers('down', 'up')}
+            >{fmt(du)}</td>
+            <td
+              style={{ ...cellStyle, ...(isCellHovered(hoveredDetectors, 'down', 'down') ? { boxShadow: CT_HOVER_SHADOW } : null) }}
+              {...hoverHandlers('down', 'down')}
+            >{fmt(dd)}</td>
+            <td style={{ ...marginStyle, borderLeft: CT_BORDER, borderTop: CT_BORDER }}>{fmt(leftDownMargin)}</td>
+          </tr>
+          <tr>
+            <td style={blankStyle} />
+            <td style={{ ...marginStyle, borderTop: CT_BORDER }}>{fmt(rightUpMargin)}</td>
+            <td style={{ ...marginStyle, borderTop: CT_BORDER, borderLeft: CT_BORDER }}>{fmt(rightDownMargin)}</td>
+            <td style={blankStyle} />
+          </tr>
+        </tbody>
+      </table>
+      <button
+        type="button"
+        className="control-bar-button"
+        style={{ fontSize: '12px', padding: '4px 10px' }}
+        onClick={() => setDisplayBools((prev) => ({ ...prev, showCoincidenceProbabilities: !prev.showCoincidenceProbabilities }))}
+      >
+        {showProbabilities ? 'Show coincidence counts' : 'Show probabilities'}
+      </button>
+    </div>
+  );
+}
+
+// Every PC currently placed in the experiment, in a stable left-to-right
+// order (by SG index, then up before down) -- this is what turns into one
+// bar each.
+function getDetectors(experiment) {
+  const detectors = [];
+  experiment.forEach((sg, sgIndex) => {
+    ['up', 'down'].forEach((arm) => {
+      if (sg[arm]?.type === 'pc') {
+        detectors.push({ sgIndex, arm, colorId: sg[arm].colorId, count: sg[arm].data });
+      }
+    });
+  });
+  return detectors;
+}
+
+// Picks a "nice" tick step -- 1, 2, or 5 times a power of 10 -- so the axis
+// relabels itself cleanly as the largest count grows, rather than ever
+// showing an arbitrary tick value like "37". Returns ticks from 0 up to
+// (at least) maxValue; the last tick is the axis's effective top.
+function niceTicks(minTop, targetCount) {
+  const roughStep = minTop / targetCount;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+  const normalized = roughStep / magnitude;
+  const niceNormalized = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  const step = niceNormalized * magnitude;
+  const topTick = Math.ceil(minTop / step) * step;
+
+  const ticks = [];
+  for (let v = 0; v <= topTick + step * 0.5; v += step) {
+    ticks.push(Math.round(v));
+  }
+  return ticks;
+}
+
+// --- Random choice mode's statistics displays --------------------------
+// App.jsx's randomCoincidences is a flat dictionary keyed by
+// "leftDirectionId|rightDirectionId|leftArm|rightArm" -> count (see its own
+// comment); everything below just reads out of that one structure.
+function cellCounts(randomCoincidences, leftId, rightId) {
+  const uu = randomCoincidences[`${leftId}|${rightId}|up|up`] ?? 0;
+  const ud = randomCoincidences[`${leftId}|${rightId}|up|down`] ?? 0;
+  const du = randomCoincidences[`${leftId}|${rightId}|down|up`] ?? 0;
+  const dd = randomCoincidences[`${leftId}|${rightId}|down|down`] ?? 0;
+  return { n: uu + ud + du + dd, same: uu + dd }; // same-outcome = both up or both down
+}
+
+// Binomial standard error, conditional on n (the number of pairs actually
+// measured at a given setting) -- of the *count* itself for the raw-count
+// display, and of the *proportion* same/n for the percentage display. Both
+// are the usual normal-approximation SE (sqrt(n*p*(1-p)) and
+// sqrt(p*(1-p)/n) respectively); a small-n or p near 0/1 case where that
+// approximation gets rough is still the standard, reasonable choice here,
+// not a place this sim tries to do anything fancier (e.g. Wilson intervals).
+function binomialCountSE(n, same) {
+  if (n === 0) return 0;
+  const p = same / n;
+  return Math.sqrt(n * p * (1 - p));
+}
+function binomialProportionSE(n, same) {
+  if (n === 0) return 0;
+  const p = same / n;
+  return Math.sqrt(p * (1 - p) / n);
+}
+
+// "12 ± 3.5" or "40.0% ± 11.2%" (or, with showUncertainty off, just the bare
+// number) -- shared by every cell of the same-outcome table and the
+// aggregate textbox, so the two always agree on formatting. "—" stands in
+// for a setting combination that's never actually been measured (n = 0),
+// same convention as CoincidenceTable's own "---" for an empty percentage.
+function formatSameOutcome(n, same, showPercentages, showUncertainty) {
+  if (n === 0) return '—';
+  if (showPercentages) {
+    const pct = (same / n) * 100;
+    if (!showUncertainty) return `${pct.toFixed(1)}%`;
+    return `${pct.toFixed(1)}% ± ${(binomialProportionSE(n, same) * 100).toFixed(1)}%`;
+  }
+  if (!showUncertainty) return String(same);
+  return `${same} ± ${binomialCountSE(n, same).toFixed(1)}`;
+}
+
+// The N x N grid: row i / column j is the count (or percentage) of pairs
+// measured at (left = direction i, right = direction j) whose two outcomes
+// agreed. No marginals -- a row or column sum here would just be "how many
+// pairs happened to land on this direction," not a meaningful physical
+// quantity the way the ordinary Fixed-mode coincidence table's marginals
+// are.
+function SameOutcomeTable({ directionList, randomCoincidences, showPercentages, showUncertainty }) {
+  const headerStyle = { minWidth: CT_CELL_MIN_WIDTH, padding: '6px 8px', textAlign: 'center', fontWeight: 600, color: '#333', border: CT_BORDER };
+  const cellStyle = { border: CT_BORDER, minWidth: CT_CELL_MIN_WIDTH, padding: '6px 8px', textAlign: 'center', fontWeight: 600, color: '#303030', fontVariantNumeric: 'tabular-nums' };
+  return (
+    // The heading stays pinned to the top of this column regardless of the
+    // table's own height (it's a plain flow sibling, not part of the
+    // centering flex item below it) -- only the table itself is vertically
+    // centered in whatever space is left, so a short table (few directions)
+    // doesn't leave the heading looking oddly far from it.
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', height: '100%' }}>
+      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#303030', flexShrink: 0 }}>Same-Outcome Coincidences</h4>
+      <div style={{ flex: '1 1 auto', minHeight: 0, display: 'flex', alignItems: 'center' }}>
+        {/* maxHeight:'100%' (not just letting the table size itself
+            unbounded) is what stops a 4-direction, 5x5 grid from ever
+            growing past this panel's own available height and overlapping
+            the heading above -- same reasoning as RawDataTable's own
+            scroll box. */}
+        <div style={{ maxHeight: '100%', overflowY: 'auto' }}>
+          <table style={{ borderCollapse: 'collapse', fontSize: '13px' }}>
+            <thead>
+              <tr>
+                <th style={headerStyle} />
+                {directionList.map((rightDir, j) => (
+                  <th key={rightDir.id} style={headerStyle}>R D{j + 1}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {directionList.map((leftDir, i) => (
+                <tr key={leftDir.id}>
+                  <th style={headerStyle}>L D{i + 1}</th>
+                  {directionList.map((rightDir) => {
+                    const { n, same } = cellCounts(randomCoincidences, leftDir.id, rightDir.id);
+                    return (
+                      <td key={rightDir.id} style={cellStyle}>
+                        {formatSameOutcome(n, same, showPercentages, showUncertainty)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Every possible (left direction, right direction, left outcome, right
+// outcome) combination, including the ones never actually measured (shown
+// as 0) -- its own scrolling container so a long list (up to 4x4x2x2 = 64
+// rows) never grows the rest of this panel.
+function RawDataTable({ directionList, randomCoincidences }) {
+  const cellStyle = { border: '1px solid #ddd', padding: '3px 8px', textAlign: 'center', fontVariantNumeric: 'tabular-nums' };
+  const rows = [];
+  directionList.forEach((leftDir, i) => {
+    directionList.forEach((rightDir, j) => {
+      ['up', 'down'].forEach((armL) => {
+        ['up', 'down'].forEach((armR) => {
+          const count = randomCoincidences[`${leftDir.id}|${rightDir.id}|${armL}|${armR}`] ?? 0;
+          rows.push({ key: `${leftDir.id}|${rightDir.id}|${armL}|${armR}`, i, j, armL, armR, count });
+        });
+      });
+    });
+  });
+  return (
+    // Same top-pinned-heading / vertically-centered-content split as
+    // SameOutcomeTable, so the two panels' headings line up regardless of
+    // which one's content happens to be taller. maxHeight:'100%' (not a
+    // fixed pixel cap) is what keeps a long list from ever growing past
+    // whatever space this panel actually has available and overlapping the
+    // heading above it -- a short list still shrinks to its own content and
+    // centers in the leftover space, same as SameOutcomeTable's own table.
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', height: '100%' }}>
+      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#303030', flexShrink: 0 }}>Raw Counts</h4>
+      <div style={{ flex: '1 1 auto', minHeight: 0, display: 'flex', alignItems: 'center' }}>
+        <div style={{ maxHeight: '100%', overflowY: 'auto', border: '1px solid #ccc', borderRadius: '4px' }}>
+          <table style={{ borderCollapse: 'collapse', fontSize: '12px' }}>
+            <thead>
+              <tr style={{ position: 'sticky', top: 0, background: '#f0f0f0' }}>
+                <th style={cellStyle}>Left dir.</th>
+                <th style={cellStyle}>Right dir.</th>
+                <th style={cellStyle}>Left outcome</th>
+                <th style={cellStyle}>Right outcome</th>
+                <th style={cellStyle}>Counts</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.key}>
+                  <td style={cellStyle}>D{r.i + 1}</td>
+                  <td style={cellStyle}>D{r.j + 1}</td>
+                  <td style={cellStyle}>{r.armL === 'up' ? <ArrowIcon direction="up" /> : <ArrowIcon direction="down" />}</td>
+                  <td style={cellStyle}>{r.armR === 'up' ? <ArrowIcon direction="up" /> : <ArrowIcon direction="down" />}</td>
+                  <td style={cellStyle}>{r.count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// The "raw data" checkbox's off-state: one pooled Nsame/Psame across every
+// setting combination at once, rather than the per-setting breakdown the
+// main table already shows.
+function AggregateSameOutcome({ directionList, randomCoincidences, showPercentages, showUncertainty }) {
+  let n = 0;
+  let same = 0;
+  directionList.forEach((leftDir) => {
+    directionList.forEach((rightDir) => {
+      const c = cellCounts(randomCoincidences, leftDir.id, rightDir.id);
+      n += c.n;
+      same += c.same;
+    });
+  });
+  return (
+    // Unlike the other two panels, the heading here moves *with* its
+    // content rather than staying pinned to the top: this box is always
+    // just one line, so keeping the heading fixed at the top would leave it
+    // looking stranded above a lot of empty space next to a taller
+    // Same-Outcome table -- centering the whole heading+box group instead
+    // keeps them visually paired.
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '6px', height: '100%' }}>
+      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#303030' }}>Overall</h4>
+      <div style={{ border: '1px solid #ccc', borderRadius: '4px', padding: '10px 18px', fontSize: '15px', fontWeight: 600, color: '#303030', whiteSpace: 'nowrap' }}>
+        {showPercentages ? 'Psame' : 'Nsame'} = {formatSameOutcome(n, same, showPercentages, showUncertainty)}
+      </div>
+    </div>
+  );
+}
+
+function RandomChoiceStats({ directionList, randomCoincidences, showPercentages, showUncertainty, showRawData }) {
+  // Each half gets its own fixed flex:1 share of the row and centers its
+  // own content within it -- rather than two naturally-sized items
+  // centered as a group, which let either one's own width (the raw-data
+  // table's especially, since its content -- and so its scrollbar -- comes
+  // and goes as data streams in) shift the *other*'s position every time it
+  // changed. minWidth:0 lets each half shrink below its content's natural
+  // width instead of overflowing the row when space is tight.
+  return (
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'row', padding: '6px 0' }}>
+      <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', justifyContent: 'center' }}>
+        <SameOutcomeTable directionList={directionList} randomCoincidences={randomCoincidences} showPercentages={showPercentages} showUncertainty={showUncertainty} />
+      </div>
+      <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', justifyContent: 'center' }}>
+        {showRawData
+          ? <RawDataTable directionList={directionList} randomCoincidences={randomCoincidences} />
+          : <AggregateSameOutcome directionList={directionList} randomCoincidences={randomCoincidences} showPercentages={showPercentages} showUncertainty={showUncertainty} />}
+      </div>
+    </div>
+  );
+}
+
+export default function Histogram({ experiment, displayBools, setDisplayBools, coincidences, source, analyzerMode, directionList, randomCoincidences }) {
+  const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  const [canvasDims, setCanvasDims] = useState({ width: 300, height: 200 });
+  
+  const [magnifierOn, setMagnifierOn] = useState(false);
+  const loupeCanvasRef = useRef(null);
+  const loupeWrapperRef = useRef(null);
+  // The cursor position (in the same CSS-pixel space as canvasDims) the
+  // loupe is currently centered on -- a ref, not state, since mousemove
+  // fires far too often to push through React's render cycle.
+  const cursorPosRef = useRef(null);
+
+  // Each bar's own hit-box (in the same CSS-pixel space as canvasDims),
+  // refreshed every main-canvas draw -- a ref, not state, since it's read
+  // only from the mousemove hit-test below, not something the render needs
+  // to react to itself.
+  const barRectsRef = useRef([]);
+
+  // Resize -- same devicePixelRatio handling as LabPanel's canvas (see the
+  // comment there for why), but using a ResizeObserver rather than a
+  // window 'resize' listener: this panel's width can change purely from
+  // flex layout (e.g. the "Set Measurement Bases" group growing as SGs are
+  // added) without the window itself ever resizing, which a 'resize'
+  // listener wouldn't catch.
+  // Depends on analyzerMode even though it doesn't read it, so when the
+  // user switches between the modes, the canvas correctly resizes.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+
+    const resizeCanvas = () => {
+      const newWidth = container.clientWidth;
+      const newHeight = container.clientHeight;
+      const dpr = window.devicePixelRatio || 1;
+
+      canvas.width = newWidth * dpr;
+      canvas.height = newHeight * dpr;
+      canvas.style.width = `${newWidth}px`;
+      canvas.style.height = `${newHeight}px`;
+      canvas.getContext('2d').scale(dpr, dpr);
+
+      setCanvasDims({ width: newWidth, height: newHeight });
+    };
+
+    resizeCanvas();
+    const observer = new ResizeObserver(resizeCanvas);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [analyzerMode]);
+
+  // inkScale lets this same drawing routine be reused, unmodified, to render
+  // into the magnifier loupe: the loupe applies a zoom transform to its own
+  // context before calling this, so every position (bar heights, gaps, tick
+  // spacing) comes out magnified for free -- but stroke widths and font
+  // sizes would get magnified right along with them unless divided down by
+  // that same zoom factor first, which is what inkScale is for. Passing 1
+  // (the default) reproduces the exact unmagnified drawing.
+  const drawHistogram = useCallback((ctx, inkScale = 1) => {
+    const { width, height } = canvasDims;
+    ctx.clearRect(0, 0, width, height);
+
+    const rawDetectors = getDetectors(experiment);
+    const dataTotal = rawDetectors.reduce((sum, d) => sum + d.count, 0);
+
+    // Theoretical probabilities are computed exactly (see physics.js), not
+    // sampled -- converted to an expected *count* by scaling against the
+    // same dataTotal the observed bars are drawn against, so the reference
+    // line is a fair comparison against however much data has actually
+    // been collected so far.
+    //
+    // theoreticalProbabilities() is normalized against the *entire* oven
+    // ensemble, including particles that never reach a placed PC at all
+    // (absorbed by a beam block, or run off the end of the chain
+    // unmeasured) -- but dataTotal only ever counts particles that landed
+    // in a placed PC, since that's all the histogram can see. Comparing
+    // raw theoryProb against that would make the reference lines too low
+    // (and not sum to dataTotal) any time a BB or an open end siphons off
+    // some fraction of the particles, so it's renormalized here to sum to
+    // 1 across just the placed PCs, matching what dataTotal actually
+    // represents.
+    const theoryOn = displayBools.showTheory;
+    const theoryMap = theoryOn
+      ? (() => {
+          const theoryList = theoreticalProbabilities(experiment, source);
+          const theorySum = theoryList.reduce((s, t) => s + t.prob, 0);
+          return new Map(theoryList.map((t) => [`${t.sgIndex}-${t.arm}`, theorySum > 0 ? t.prob / theorySum : 0]));
+        })()
+      : null;
+    const detectors = rawDetectors.map((d) => ({
+      ...d,
+      theoryProb: theoryMap ? (theoryMap.get(`${d.sgIndex}-${d.arm}`) ?? 0) : 0,
+    }));
+
+    // The axis has to be tall enough for the theory lines too, not just the
+    // observed bars, or a line for an under-sampled detector could get
+    // clipped off the top of the plot.
+    const dataMax = detectors.reduce((m, d) => {
+      const expected = theoryOn && dataTotal > 0 ? d.theoryProb * dataTotal : 0;
+      return Math.max(m, d.count, expected);
+    }, 0);
+    const requiredMax = Math.max(MIN_AXIS_MAX, dataMax * AXIS_HEADROOM);
+    const ticks = niceTicks(requiredMax, TARGET_TICK_COUNT);
+    const axisMax = ticks[ticks.length - 1];
+
+        // How much horizontal room the tick numbers need changes as the axis
+    // rescales (e.g. "20" vs "100000"), so the left padding -- and with it,
+    // where the "Counts" label sits -- is measured fresh each draw rather
+    // than fixed, keeping the label flush against the tick numbers no
+    // matter how wide they get.
+    ctx.font = '11px Arial';
+    const maxTickLabelWidth = ticks.reduce((w, t) => Math.max(w, ctx.measureText(String(t)).width), 0);
+    const paddingLeft = Y_AXIS_LABEL_MARGIN + Y_AXIS_LABEL_THICKNESS + TICK_LABEL_GAP + maxTickLabelWidth + TICK_LABEL_GAP;
+
+    const plotX0 = paddingLeft;
+    const plotX1 = width - PADDING_RIGHT;
+    const plotY0 = PADDING_TOP;
+    const plotY1 = height - PADDING_BOTTOM;
+
+    // Axes -- meet at the bottom-right corner; no gridlines crossing
+    // through the bars, just short tick marks off the y-axis.
+    ctx.strokeStyle = AXIS_COLOR;
+    ctx.lineWidth = 1.5 * inkScale;
+    ctx.beginPath();
+    ctx.moveTo(plotX0, plotY0);
+    ctx.lineTo(plotX0, plotY1);
+    ctx.lineTo(plotX1, plotY1);
+    ctx.stroke();
+
+    // Y-axis ticks + labels
+    ctx.fillStyle = TICK_LABEL_COLOR;
+    ctx.font = `11px Arial`;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ticks.forEach((tickValue) => {
+      const y = plotY1 - (tickValue / axisMax) * (plotY1 - plotY0);
+      ctx.beginPath();
+      ctx.moveTo(plotX0 - 5, y);
+      ctx.lineTo(plotX0 + 5, y);
+      ctx.stroke();
+      ctx.fillText(String(tickValue), plotX0 - TICK_LABEL_GAP, y);
+    });
+
+    // Y-axis title, rotated to read bottom-to-top and centered against the
+    // axis's full height, sitting just past the tick numbers -- paddingLeft
+    // above already reserved exactly enough room for this, however wide
+    // those numbers turned out to be.
+    ctx.save();
+    ctx.translate(Y_AXIS_LABEL_MARGIN + Y_AXIS_LABEL_THICKNESS / 2, (plotY0 + plotY1) / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillStyle = TICK_LABEL_COLOR;
+    ctx.font = `bold ${Y_AXIS_LABEL_THICKNESS}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Counts', 0, 0);
+    ctx.restore();
+
+    // For interactive hovering
+    const isMainDraw = inkScale === 1;
+    if (isMainDraw) barRectsRef.current = [];
+    // Bars, one per detector, growing up from the x-axis, colored to match
+    // that detector's own identifying dot. Bars belonging to the same SG
+    // sit flush against each other with no gap; a gap is inserted only
+    // where the SG changes. The whole set of (possibly grouped) bars is
+    // then centered as one cluster within the plot's bar area.
+    if (detectors.length > 0) {
+      const groupX0 = plotX0 + BAR_GROUP_MARGIN;
+      const groupX1 = plotX1 - BAR_GROUP_MARGIN;
+      const slotWidth = (groupX1 - groupX0) / detectors.length;
+      const barWidth = Math.min(MAX_BAR_WIDTH, slotWidth * (1 - BAR_GAP_RATIO));
+      const sgGapWidth = slotWidth * BAR_GAP_RATIO;
+      const sgGroupCount = new Set(detectors.map((d) => d.sgIndex)).size;
+      const clusterWidth = detectors.length * barWidth + (sgGroupCount - 1) * sgGapWidth;
+      const clusterStart = groupX0 + (groupX1 - groupX0 - clusterWidth) / 2;
+
+      const barHeightOf = (count) => Math.max(1.5, (count / axisMax) * (plotY1 - plotY0));
+
+      let cursor = clusterStart;
+      detectors.forEach((d, i) => {
+        if (i > 0 && d.sgIndex !== detectors[i - 1].sgIndex) {
+          cursor += sgGapWidth;
+        }
+        const barX = cursor;
+        const slotCenter = barX + barWidth / 2;
+        cursor += barWidth;
+
+        const barHeight = barHeightOf(d.count);
+        const barY = plotY1 - barHeight;
+
+        ctx.fillStyle = PC_COLORS[d.colorId] ?? '#999999';
+        ctx.fillRect(barX, barY, barWidth, barHeight);
+        // For bordering on the bar if hovered over it
+        if (isMainDraw) {
+          barRectsRef.current.push({ sgIndex: d.sgIndex, arm: d.arm, x: barX, y: barY, width: barWidth, height: barHeight });
+        }
+        const isHovered = displayBools.hoveredDetectors.some(
+          (h) => h.sgIndex === d.sgIndex && h.arm === d.arm
+        );
+        if (isHovered) {
+          ctx.strokeStyle = HOVER_BORDER_COLOR;
+          ctx.lineWidth = HOVER_BORDER_WIDTH * inkScale;
+          ctx.strokeRect(barX, barY, barWidth, barHeight);
+        }
+
+        // Draw the theory reference lines
+        if (theoryOn && dataTotal > 0) {
+          const expectedCount = d.theoryProb * dataTotal;
+          const lineY = plotY1 - (expectedCount / axisMax) * (plotY1 - plotY0);
+          const lineHalfWidth = barWidth / 2 + THEORY_LINE_OVERHANG;
+          ctx.strokeStyle = THEORY_LINE_COLOR;
+          ctx.lineWidth = THEORY_LINE_WIDTH * inkScale;
+          //ctx.setLineDash(THEORY_LINE_DASH);
+          ctx.beginPath();
+          ctx.moveTo(slotCenter - lineHalfWidth, lineY);
+          ctx.lineTo(slotCenter + lineHalfWidth, lineY);
+          ctx.stroke();
+          //ctx.setLineDash([]);
+        }
+
+        // Draw the error bars
+        const drawErrorBars = (d.count > 2 && displayBools.showErrorBars);
+        const errOffset = Math.sqrt(d.count)*(barHeight/d.count);
+        if (drawErrorBars) {
+          const halfErrorBarWidth = Math.min(barWidth*ERROR_BAR_WIDTH_RATIO, ERROR_BAR_WIDTH_MIN)/2;
+          ctx.strokeStyle = AXIS_COLOR;
+          ctx.lineWidth = 1.5 * inkScale;
+          ctx.beginPath();
+          ctx.moveTo(slotCenter - halfErrorBarWidth, barY - errOffset);
+          ctx.lineTo(slotCenter + halfErrorBarWidth, barY - errOffset);
+          ctx.moveTo(slotCenter, barY - errOffset);
+          ctx.lineTo(slotCenter, barY + errOffset);
+          ctx.moveTo(slotCenter - halfErrorBarWidth, barY + errOffset);
+          ctx.lineTo(slotCenter + halfErrorBarWidth, barY + errOffset);
+          ctx.stroke();
+        }
+
+        // Write the labels on all the bars
+        const showBothActual = (displayBools.showPercentages === 2 && dataTotal > 0);
+        ctx.fillStyle = PC_COLORS[d.colorId];
+        ctx.font = `11px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        const barLabel = ((displayBools.showPercentages === 1 && dataTotal === 0) ? "---" : "") + (displayBools.showPercentages !== 1 ? String(d.count) : "") + (showBothActual ? " (" : "") + ((displayBools.showPercentages !== 0 && dataTotal !== 0) ? (d.count/dataTotal*100).toFixed(1) + "%" : "") + (showBothActual ? ")" : "");
+        // Wider counts push their "(xx.x%)" half further out, so a fixed
+        // offset that clears a 3-digit count starts clashing again once
+        // counts hit 4+ digits -- scale it up by 3px per digit beyond 3.
+        const labelOffsetMagnitude = 3 * Math.max(1, String(d.count).length - 2);
+        const sameSgAsPrev = i > 0 && d.sgIndex === detectors[i - 1].sgIndex;
+        const sameSgAsNext = i < detectors.length - 1 && d.sgIndex === detectors[i + 1].sgIndex;
+        // Only one of these is ever true for a given bar (a detector has at
+        // most one same-SG neighbor per side, and never both a prev and a
+        // next in the same pair), so neighborHeight always resolves to
+        // "the other bar in this pair" when one exists.
+        const neighborHeight = sameSgAsPrev
+          ? barHeightOf(detectors[i - 1].count)
+          : sameSgAsNext
+          ? barHeightOf(detectors[i + 1].count)
+          : null;
+        // A bar sitting much taller than its neighbor already has its label
+        // well clear of that shorter neighbor's bar, so it doesn't need
+        // nudging. But the shorter bar's label sits right alongside the
+        // taller neighbor's face regardless of how big the height gap
+        // gets, so it still needs the offset -- hence comparing the signed
+        // difference (not the absolute gap) to the clash threshold: only
+        // this bar being the taller one by more than the threshold turns
+        // the offset off.
+        const needsOffset = neighborHeight !== null && (barHeight - neighborHeight) < BAR_LABEL_CLASH_HEIGHT;
+        const barLabelXOffset = (!showBothActual || !needsOffset) ? 0 : (sameSgAsPrev ? labelOffsetMagnitude : -labelOffsetMagnitude);
+        ctx.fillText(barLabel, barX + barWidth / 2 + barLabelXOffset, barY - 4 - (drawErrorBars ? errOffset : 0));
+
+        // Detector label below the bar, in the same style as the axis's own
+        // tick labels. The direction arrow is drawn as a filled path
+        // (drawArrow), not a Unicode glyph -- see canvasArrow.js for why.
+        ctx.fillStyle = TICK_LABEL_COLOR;
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        const detectorLabelText = sideLabel(d.sgIndex);
+        const detectorArrowSize = 11;
+        const detectorArrowGap = 3;
+        const detectorTextWidth = ctx.measureText(detectorLabelText).width;
+        const detectorLabelWidth = detectorTextWidth + detectorArrowGap + arrowWidth(detectorArrowSize);
+        const detectorLabelX0 = slotCenter - detectorLabelWidth / 2;
+        ctx.fillText(detectorLabelText, detectorLabelX0, plotY1 + 6);
+        drawArrow(
+          ctx,
+          detectorLabelX0 + detectorTextWidth + detectorArrowGap + arrowWidth(detectorArrowSize) / 2,
+          plotY1 + 6 + detectorArrowSize / 2,
+          detectorArrowSize,
+          d.arm === 'up' ? 'up' : 'down'
+        );
+      });
+    }
+
+    // Plot title
+    ctx.fillStyle = TOTAL_COLOR;
+    ctx.font = `bold 14px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Single-Detector Counts' + (displayBools.showTotal ? ` (N = ${dataTotal})` : ''), (plotX0 + plotX1)/2, PADDING_TOP / 2);
+    }, [experiment, displayBools, canvasDims, source]);
+
+  // Renders the loupe: re-runs the exact same drawHistogram routine against
+  // the loupe's own canvas, but first stacks a translate/scale/translate
+  // transform onto it that maps the region of the main chart around the
+  // cursor onto the loupe's full (small) area. Because that transform is
+  // applied to the context *before* drawHistogram runs, every position it
+  // computes (bar heights, gaps, tick spacing) comes out magnified for
+  // free -- drawHistogram itself never needs to know it's being magnified,
+  // aside from the inkScale passed through to keep line widths/fonts from
+  // being magnified right along with everything else.
+  const drawLoupe = useCallback(() => {
+    const loupeCanvas = loupeCanvasRef.current;
+    const cursor = cursorPosRef.current;
+    if (!loupeCanvas || !cursor) return;
+    const dpr = window.devicePixelRatio || 1;
+    const loupeCtx = loupeCanvas.getContext('2d');
+    // setTransform (not scale/translate relative to whatever was already
+    // there) so each redraw starts from a clean slate instead of compounding
+    // onto the previous frame's transform.
+    loupeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    loupeCtx.clearRect(0, 0, LOUPE_DIAMETER, LOUPE_DIAMETER);
+    loupeCtx.translate(LOUPE_DIAMETER / 2, LOUPE_DIAMETER / 2);
+    loupeCtx.scale(LOUPE_ZOOM, LOUPE_ZOOM);
+    loupeCtx.translate(-cursor.x, -cursor.y);
+    drawHistogram(loupeCtx, LOUPE_INK_SCALE);
+  }, [drawHistogram]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    drawHistogram(canvas.getContext('2d'));
+    if (magnifierOn) drawLoupe();
+  }, [drawHistogram, magnifierOn, drawLoupe]);
+
+  // Sets up the loupe canvas's own backing resolution whenever it mounts
+  // (i.e. whenever the magnifier is toggled on) -- same devicePixelRatio
+  // handling as the main canvas's resize effect above.
+  useEffect(() => {
+    if (!magnifierOn) return;
+    const loupeCanvas = loupeCanvasRef.current;
+    if (!loupeCanvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    loupeCanvas.width = LOUPE_DIAMETER * dpr;
+    loupeCanvas.height = LOUPE_DIAMETER * dpr;
+    loupeCanvas.style.width = `${LOUPE_DIAMETER}px`;
+    loupeCanvas.style.height = `${LOUPE_DIAMETER}px`;
+  }, [magnifierOn]);
+
+  // Independent of the magnifier -- always tracks the cursor to see if it's
+  // over a bar, and if so, shares that detector with LabPanel (via
+  // displayBools.hoveredDetectors) so it can highlight the matching PC. Only
+  // calls setDisplayBools when the hovered detector actually changes, not
+  // on every mousemove, since the vast majority of moves land on the same
+  // bar (or the same empty space) as the previous one.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    let lastKey = null;
+    const keyOf = (d) => (d ? `${d.sgIndex}-${d.arm}` : null);
+
+    const handleMouseMove = (e) => {
+      if (magnifierOn) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const hit = barRectsRef.current.find(
+        (r) => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height
+      );
+      const next = hit ? { sgIndex: hit.sgIndex, arm: hit.arm } : null;
+      const nextKey = keyOf(next);
+      if (nextKey === lastKey) return;
+      lastKey = nextKey;
+      setDisplayBools((prev) => ({ ...prev, hoveredDetectors: next ? [next] : [] }));
+    };
+    const handleMouseLeave = () => {
+      if (magnifierOn) return;
+      if (lastKey === null) return;
+      lastKey = null;
+      setDisplayBools((prev) => ({ ...prev, hoveredDetectors: [] }));
+    };
+
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mouseleave', handleMouseLeave);
+    return () => {
+      canvas.removeEventListener('mousemove', handleMouseMove);
+      canvas.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  }, [setDisplayBools, magnifierOn]);
+
+  // Tracks the cursor over the main canvas while the magnifier is active,
+  // positioning the loupe (via direct style mutation, not React state --
+  // mousemove fires far too often to re-render on) and redrawing it live.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const wrapper = loupeWrapperRef.current;
+    if (!canvas || !magnifierOn) return;
+
+    const handleMouseMove = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      cursorPosRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      if (wrapper) {
+        wrapper.style.left = `${cursorPosRef.current.x - LOUPE_DIAMETER / 2}px`;
+        wrapper.style.top = `${cursorPosRef.current.y - LOUPE_DIAMETER / 2}px`;
+        wrapper.style.display = 'block';
+      }
+      drawLoupe();
+    };
+    const handleMouseLeave = () => {
+      cursorPosRef.current = null;
+      if (wrapper) wrapper.style.display = 'none';
+    };
+
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mouseleave', handleMouseLeave);
+    return () => {
+      canvas.removeEventListener('mousemove', handleMouseMove);
+      canvas.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  }, [magnifierOn, drawLoupe]);
+
+  // Random choice mode replaces the whole bar chart + coincidence table with
+  // a completely different display -- there's no single "current" basis for
+  // the theory overlay or bar labels to describe once every pair used its
+  // own setting, so rather than thread that mode through every drawing
+  // routine above, this just swaps in RandomChoiceStats wholesale. All the
+  // canvas/loupe hooks above still ran (hooks can't be conditional), but
+  // harmlessly no-op against a container that was never rendered.
+  if (analyzerMode === 'random') {
+    return (
+      <RandomChoiceStats
+        directionList={directionList}
+        randomCoincidences={randomCoincidences}
+        showPercentages={displayBools.randomShowPercentages}
+        showUncertainty={displayBools.randomShowUncertainty}
+        showRawData={displayBools.randomShowRawData}
+      />
+    );
+  }
+
+  return (
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'row', gap: '10px' }}>
+      {/* The chart's own allotted space -- containerRef (and so the
+          ResizeObserver above) measures only this div, not the table
+          alongside it, which is what lets the table claim a fixed slice of
+          width and the chart shrink to whatever's left, rather than the
+          chart always claiming the room and pushing the table out. */}
+      <div ref={containerRef} style={{ flex: '1 1 auto', minWidth: 0, height: '100%', position: 'relative' }}>
+        {/* Clipping layer holding the chart and the loupe. Being absolutely
+            positioned, it (and everything in it) drops out of the ancestors'
+            intrinsic-width calculation -- without this, the canvas's own
+            fixed pixel width feeds .histogram-panel's max-content, which
+            feeds the group's and .control-bar-content's, and since
+            .control-bar just scrolls (overflow-x: auto) rather than forcing
+            anything narrower, the canvas could only ever grow: nothing ever
+            shrank it back, so the ResizeObserver never fired again.
+            overflow: hidden then keeps the loupe from spilling past the
+            chart's bottom edge into the group's scrollable overflow (which
+            popped a vertical scrollbar, whose width in turn nudged the
+            layout and, via the same ratchet, never recovered).
+            The button deliberately sits OUTSIDE this layer so its negative
+            left offset isn't clipped. */}
+        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+          <canvas ref={canvasRef} style={{ display: 'block' }} />
+          {magnifierOn && (
+            <div ref={loupeWrapperRef} className="histogram-loupe" style={{ display: 'none' }}>
+              <canvas ref={loupeCanvasRef} />
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          className={`control-bar-button icon-only-button icon-only-button-square histogram-magnifier-toggle${magnifierOn ? ' active' : ''}`}
+          onClick={() => setMagnifierOn((on) => !on)}
+          title="Magnify"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <circle cx="11" cy="11" r="7" />
+            <line x1="16.2" y1="16.2" x2="21" y2="21" />
+            <line x1="11" y1="8" x2="11" y2="14" />
+            <line x1="8" y1="11" x2="14" y2="11" />
+          </svg>
+        </button>
+      </div>
+      {displayBools.showCoincidenceTable && (
+        <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center' }}>
+          <CoincidenceTable
+            coincidences={coincidences}
+            blocked={Boolean(experiment[0]?.blocked || experiment[1]?.blocked)}
+            hoveredDetectors={displayBools.hoveredDetectors}
+            setDisplayBools={setDisplayBools}
+            showProbabilities={displayBools.showCoincidenceProbabilities}
+          />
+        </div>
+      )}
+    </div>
+  );
+}

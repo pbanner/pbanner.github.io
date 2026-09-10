@@ -7,3 +7,5 @@ https://pbanner.github.io/teaching-sims-landing.html
 https://pbanner.github.io/sims/polarization/dist/
 https://pbanner.github.io/sims/stern-gerlach/dist/
 https://pbanner.github.io/sims/spin-bloch-sphere/dist/
+https://pbanner.github.io/sims/optics-lab/dist/
+https://pbanner.github.io/sims/entanglement/dist/

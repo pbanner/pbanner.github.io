@@ -1,0 +1,421 @@
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh; /* fallback for browsers that don't support dvh below */
+  height: 100dvh; /* the *actual* visible viewport height -- plain 100vh on mobile Safari is sized as if the address-bar/toolbar chrome were always hidden, so on load (chrome still showing) this app's own box comes out taller than what's actually visible, leaving a sliver at the bottom only reachable by scrolling the whole page (which .overflow: hidden below can't prevent, since it's *this* box's height that's wrong, not content overflowing a correctly-sized one) */
+  width: 100%;
+  background: #fff;
+}
+
+/* Everything above the bottom control bar: the canvas and, alongside it,
+   the Source Controls sidebar. Sharing this row (rather than the sidebar
+   living inside .app-layout's own column flow some other way) is what
+   makes it span full height down to the bottom bar's own top edge. */
+.top-row {
+  display: flex;
+  flex-direction: row;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Canvas Area */
+.canvas-area {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #fafafa;
+  overflow: hidden;
+}
+
+/* Source Controls -- a fixed width (not sized to its own content) matters
+   here: LabPanel's canvas only re-measures its container on an actual
+   window 'resize' event (see LabPanel.jsx), not via a ResizeObserver, which
+   is fine only as long as canvas-area's own width is a pure function of the
+   window's width. A sidebar whose width instead depended on its content
+   (e.g. growing when a wider Bell-state label appears) would silently
+   leave the canvas stale between real window resizes. */
+.source-sidebar {
+  width: 300px;
+  flex: 0 0 300px;
+  /* Without this, a tall sourceType's content (e.g. the Hidden Instruction
+     Sets controls with several directions/rows) doesn't just scroll inside
+     this box -- being a flex item, its default min-height:auto lets its own
+     content's height win over the height .top-row's flexbox would otherwise
+     stretch it to, so it grows past .top-row (and so .app-layout's own
+     fixed 100dvh), pushing the whole page taller and forcing a *page*-level
+     scrollbar instead of this box's own overflow-y. min-height:0 is what
+     lets overflow-y:auto below actually be the one that activates. */
+  min-height: 0;
+  background: #f5f5f5;
+  border-left: 1px solid #ddd;
+  padding: 12px 14px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
+  text-align: left;
+  font-size: 13px;
+}
+
+.source-sidebar h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.source-sidebar select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Bottom control bar */
+.control-bar {
+  height: 250px;
+  /* Without this, a tall .top-row (e.g. the Hidden Instruction Sets
+     sidebar's content, whose own natural size feeds into .top-row's
+     content-based flex-basis before .source-sidebar's min-height:0/
+     overflow-y:auto ever get a say) can force a flexbox size conflict that
+     this bar -- not .top-row -- absorbs most of, shrinking well below its
+     own 250px instead of staying put while .top-row (and so the sidebar)
+     is what gives. flex-shrink:0 takes this bar out of that negotiation
+     entirely: its height is always exactly 250px, full stop, and .top-row
+     always gets exactly whatever's left. */
+  flex-shrink: 0;
+  background: #f5f5f5;
+  border-left: none;
+  border-top: 1px solid #ddd;
+  overflow-x: auto;
+  overflow-y: hidden;
+  display: flex;
+  flex-direction: row;
+}
+
+.control-bar-content {
+  display: flex;
+  flex-direction: row;
+  flex: 1 1 auto;
+  gap: 20px;
+  padding: 12px 20px;
+  height: 100%;
+}
+
+/* Panel Controls */
+.control-bar-group {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  gap: 6px;
+  min-width: max-content;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 1.0rem;
+  line-height: 1.2;
+  box-sizing: border-box;
+  overflow-y: auto;
+  /* Per spec, when overflow-y isn't 'visible', a still-default overflow-x
+     of 'visible' silently computes to 'auto' instead -- so without this,
+     any group can grow an unwanted horizontal scrollbar/scrollable region
+     the moment something inside it overflows sideways, even by content
+     that's invisible at rest (e.g. an absolutely-positioned tooltip label
+     with visibility: hidden -- still part of scrollWidth, unlike
+     display: none). Groups here should only ever scroll vertically. */
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+.control-bar-group h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.control-bar-group p {
+  margin: 0;
+  font-size: 13px;
+  color: #666;
+  line-height: 1.4;
+}
+
+.control-bar-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+}
+
+.control-bar-group input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.control-bar-button {
+  padding: 6px 6px;
+  margin: 2px 0px;
+  border: 1px solid #999;
+  background: #eee;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #111;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.control-bar-button:hover {
+  background: #ddd;
+  border-color: #bbb;
+}
+
+.control-bar-button.active {
+  background: #3498db;
+  color: white;
+  border-color: #3498db;
+}
+
+.control-bar-button.red-special:hover {
+  background: #972323;
+  color: white;
+  border-color: #972323;
+}
+
+.control-bar-button:disabled {
+  background: #d0d0d0;
+  border-color: #bbb;
+}
+
+/* The per-SG "Advanced" toggle in Set Measurement Bases -- same button
+   look as everywhere else (including the blue .active state), just smaller
+   to fit a compact row alongside the axis stepper / theta-phi textboxes. */
+.advanced-toggle-button {
+  padding: 3px 8px;
+  margin: 0;
+  font-size: 11px;
+  flex-shrink: 0; /* never lets the row's other content squeeze this narrower than its own text */
+}
+
+/* Histogram */
+.histogram-panel {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.histogram-canvas-wrap {
+  width: 100%;
+  height: 100%;
+}
+
+/* Coincidence table -- plain HTML/CSS, sitting alongside the histogram
+   canvas (not drawn on it); see Histogram.jsx's CoincidenceTable. */
+.coincidence-table-outer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.coincidence-table {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.coincidence-table th,
+.coincidence-table td {
+  padding: 5px 10px;
+  text-align: center;
+}
+
+.coincidence-table .ct-col-header,
+.coincidence-table .ct-row-header {
+  font-weight: 600;
+  color: #333;
+}
+
+.coincidence-table .ct-cell {
+  border: 1px solid #999;
+  min-width: 34px;
+  font-weight: 600;
+  color: #303030;
+}
+
+.coincidence-table .ct-cell.ct-opposite {
+  background: #e8ecfb;
+  border-color: #8fa0d8;
+}
+
+.coincidence-table .ct-margin {
+  color: #666;
+  font-weight: 500;
+}
+
+.coincidence-table .ct-row-margin {
+  border-left: 1px solid #999;
+}
+
+.coincidence-table .ct-col-margin {
+  border-top: 1px solid #999;
+}
+
+.coincidence-table .ct-blank {
+  border: none;
+}
+
+.coincidence-table-caption {
+  margin: 0;
+  font-size: 11px;
+  color: #888;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.coincidence-table-empty {
+  font-size: 13px;
+  color: #888;
+  text-align: center;
+  max-width: 150px;
+}
+
+.histogram-canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.histogram-magnifier-toggle {
+  position: absolute;
+  top: 6px;
+  left: -24px;
+  z-index: 2;
+}
+
+/* The magnifier loupe -- a small, separate canvas showing a zoomed crop of
+   the chart under the cursor. The circular shape and thick ring are plain
+   CSS (not canvas clipping): simpler, and avoids drawImage self-copy
+   ambiguity since the loupe is always a distinct canvas element from the
+   main chart it's sampling from. */
+.histogram-loupe {
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  border: 4px solid #333;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.histogram-loupe canvas {
+  display: block;
+}
+
+/* Custom axis stepper controls */
+.axis-stepper {
+  display: inline-flex;
+  height: 32px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  overflow: hidden;
+  /* Per spec, overflow != visible zeroes out a flex item's *automatic*
+     minimum size -- without this, a cramped flex row (like the field
+     overlay's, which is much narrower than the sidebar's own AxisStepper
+     rows) squeezes this all the way to 0 width to make room for its
+     siblings instead of wrapping or shrinking them, silently clipping the
+     axis value and arrows to nothing. */
+  flex-shrink: 0;
+}
+
+.axis-stepper-value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  background: #fff;
+  border-right: 1px solid #ddd;
+}
+
+.axis-stepper-value.disabled {
+  background: #eeeeee;   /* same look browsers give a disabled <input type="text"> */
+  color: #999999;
+  cursor: not-allowed;
+}
+
+.axis-stepper-arrows {
+  display: flex;
+  flex-direction: column;
+  width: 22px;
+}
+
+.axis-stepper-arrow {
+  flex: 1;
+  border: none;
+  background: #f5f5f5;
+  cursor: pointer;
+  font-size: 8px;
+  line-height: 1;
+  color: #666;
+  padding: 0;
+}
+
+.axis-stepper-arrow:hover {
+  background: #e0e0e0;
+}
+
+.axis-stepper-arrow:first-child {
+  border-bottom: 1px solid #ddd;
+}
+
+/*
+All for making the slider not have different colors
+on left and right of the circle
+*/
+input[type="range"] {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #404040;
+  outline: none;
+  appearance: none;
+}
+input[type="range"]:disabled {
+  background: #cccccc;   /* slightly lighter gray track, in place of the active dark one */
+  cursor: not-allowed;
+}
+/* Webkit browsers (Chrome, Safari) */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #3498db;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+input[type="range"]:disabled::-webkit-slider-thumb {
+  background: #999999;   /* gray thumb, in place of the active blue one */
+  cursor: not-allowed;
+}
+/* Firefox */
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #3498db;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+input[type="range"]::-moz-range-track {
+  background: transparent;
+  border: none;
+}
