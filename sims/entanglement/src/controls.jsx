@@ -105,7 +105,7 @@ export function AxisStepper({ label, value, advanced, onStep, onSetAdvanced, onS
       {advanced ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <label style={{ width: '12px' }}>θ</label>
+            <label style={{ width: '12px' }}>θ:</label>
             <NumberField
               min={0}
               max={180}
@@ -119,7 +119,7 @@ export function AxisStepper({ label, value, advanced, onStep, onSetAdvanced, onS
           </div>
           {!PHI_LOCKED && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <label style={{ width: '12px' }}>ϕ</label>
+              <label style={{ width: '12px' }}>ϕ:</label>
               <NumberField
                 min={0}
                 max={360}
