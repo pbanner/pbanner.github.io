@@ -2,9 +2,10 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import './App.css';
 import LabPanel from './LabPanel';
 import Histogram from './Histogram';
-import { AxisStepper, SliderPlusTextboxControl, NumberField } from './controls';
+import { AxisStepper, SliderPlusTextboxControl, NumberField, ComplexExprField } from './controls';
 import { SG_OPTION_LABELS, SG_OPTION_BASES, DEG_TO_RAD } from './axisOptions';
 import { BELL_STATES, findInstructionColumnIndex } from './physics';
+import { compileComplexExpression } from './complexExpr';
 import TeX from './TeX';
 import InstructionSetControls from './instructionSets';
 import { createInitialInstructionSheet, addSignToRows, removeSignFromRows, generateAllInstructionSets } from './instructionSetsData';
@@ -387,22 +388,33 @@ function SourceControls({
             <TeX math={CUSTOM_STATE_FORMULA_TEX} />
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {['a', 'b', 'c', 'd'].map((k) => (
-              <label key={k} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
-                <span style={{ minWidth: '24px', whiteSpace: 'nowrap' }}>{k} =</span>
-                <NumberField
-                  step="0.01"
-                  value={customCoeffs[k]}
-                  onCommit={(v) => changeCoeff(k, v)}
-                  disabled={disabled}
-                  style={{ width: '80px', padding: '2px' }}
-                />
-              </label>
-            ))}
+            {['a', 'b', 'c', 'd'].map((k) => {
+              const compiled = compileComplexExpression(customCoeffs[k]);
+              return (
+                <div key={k}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+                    <span style={{ minWidth: '24px', whiteSpace: 'nowrap' }}>{k} =</span>
+                    <ComplexExprField
+                      value={customCoeffs[k]}
+                      onCommit={(v) => changeCoeff(k, v)}
+                      disabled={disabled}
+                      style={{ width: '140px', padding: '2px' }}
+                    />
+                  </label>
+                  {!compiled.ok && (
+                    <p style={{ margin: '2px 0 0 32px', color: '#cc3333', fontSize: '11px' }}>{compiled.error}</p>
+                  )}
+                </div>
+              );
+            })}
           </div>
           <p style={{ fontSize: '12px', color: '#666', margin: '8px 0 0 0', lineHeight: '1.5' }}>
             Coefficients don't need to be normalized -- (1, 0, 0, 1) works
-            just as well as (1/√2, 0, 0, 1/√2).
+            just as well as (1/sqrt(2), 0, 0, 1/sqrt(2)). Each one is a full
+            expression, not just a plain number -- i, e, and pi are all
+            understood, along with sin/cos/tan/sqrt and the usual + - * / ^
+            and parentheses, so a coefficient can be negative, imaginary, or
+            a complex exponential like e^(i*pi/4).
           </p>
         </>
       )}
@@ -482,7 +494,12 @@ export default function App() {
   // {1,0,0,1} reproduces this sim's original, controls-less classical model
   // (a fixed 50/50 up-up/down-down mixture) exactly.
   const [classicalWeights, setClassicalWeights] = useState({ uu: 1, ud: 0, du: 0, dd: 1 });
-  const [customCoeffs, setCustomCoeffs] = useState({ a: 1, b: 0, c: 0, d: 1 });
+  // Each of these is a complexExpr.js source string, not a plain number --
+  // it's compiled (see the `source` object below and anyCustomCoeffInvalid)
+  // wherever the actual complex value is needed, so a coefficient can be
+  // any expression that module understands (negative, imaginary, a
+  // complex exponential, ...), not just a bare real number.
+  const [customCoeffs, setCustomCoeffs] = useState({ a: '1', b: '0', c: '0', d: '1' });
 
   // Every piece of initial state below that's derived from a freshly-built
   // direction list is computed together, in this one lazy initializer,
@@ -619,11 +636,18 @@ export default function App() {
         ? { kind: 'quantum', coeffs: BELL_STATES.find((b) => b.key === bellKey).coeffs }
         : {
             kind: 'quantum',
+            // A coefficient that doesn't currently parse falls back to a
+            // plain 0 -- harmless here since anyCustomCoeffInvalid (below)
+            // is what actually keeps Start/Make One Pair from running on
+            // it; this fallback only exists so the Histogram overlay (which
+            // recomputes on every render regardless of whether Run is
+            // enabled) has *some* number to work with mid-edit, same
+            // reasoning as physics.js's own instruction-set fallback.
             coeffs: {
-              uu: { re: customCoeffs.a, im: 0 },
-              ud: { re: customCoeffs.b, im: 0 },
-              du: { re: customCoeffs.c, im: 0 },
-              dd: { re: customCoeffs.d, im: 0 },
+              uu: compileComplexExpression(customCoeffs.a).value ?? { re: 0, im: 0 },
+              ud: compileComplexExpression(customCoeffs.b).value ?? { re: 0, im: 0 },
+              du: compileComplexExpression(customCoeffs.c).value ?? { re: 0, im: 0 },
+              dd: compileComplexExpression(customCoeffs.d).value ?? { re: 0, im: 0 },
             },
           };
 
@@ -682,6 +706,12 @@ export default function App() {
   // above -- there's no "current" setting to show a warning arrow at on the
   // canvas.
   const anyRandomSamplingEmpty = analyzerMode === 'random' && (randomSampledDirectionIds[0].length === 0 || randomSampledDirectionIds[1].length === 0);
+  // A custom-state coefficient that doesn't currently parse already shows
+  // its own red error message right under the field it belongs to (see
+  // SourceControls above) -- same reasoning as anyInstructionInvalid's own
+  // comment for treating this as a silent Start/Make-One-Pair no-op rather
+  // than disabling the button outright.
+  const anyCustomCoeffInvalid = sourceType === 'custom' && ['a', 'b', 'c', 'd'].some((k) => !compileComplexExpression(customCoeffs[k]).ok);
 
   const changeAnalyzerMode = (mode) => {
     setAnalyzerMode(mode);
@@ -769,7 +799,7 @@ export default function App() {
     // disables the button itself (see the render below), but this guard
     // stays too as a belt-and-braces check against the button somehow being
     // clicked anyway.
-    if (anyInstructionInvalid || anyRandomSamplingEmpty) return;
+    if (anyInstructionInvalid || anyRandomSamplingEmpty || anyCustomCoeffInvalid) return;
     if (expMode.dc === 'single') {
       labPanelRef.current?.spawnParticle();
       return;
@@ -778,13 +808,13 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (expMode.dc === 'stream' && expMode.running && tabVisible && !anyInstructionInvalid && !anyRandomSamplingEmpty) {
+    if (expMode.dc === 'stream' && expMode.running && tabVisible && !anyInstructionInvalid && !anyRandomSamplingEmpty && !anyCustomCoeffInvalid) {
       streamTimerRef.current = setInterval(() => {
         labPanelRef.current?.spawnParticle();
       }, 1 / expMode.rate * 1000);
       return () => clearInterval(streamTimerRef.current);
     }
-  }, [expMode.dc, expMode.running, expMode.rate, tabVisible, anyInstructionInvalid, anyRandomSamplingEmpty]);
+  }, [expMode.dc, expMode.running, expMode.rate, tabVisible, anyInstructionInvalid, anyRandomSamplingEmpty, anyCustomCoeffInvalid]);
 
   return (
     <div className="app-layout">

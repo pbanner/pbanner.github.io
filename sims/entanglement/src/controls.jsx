@@ -45,6 +45,36 @@ export function NumberField({ value, onCommit, parse = parseFloat, ...inputProps
   );
 }
 
+// A plain <input type="text"> counterpart to NumberField above, for the
+// Quantum Custom State amplitude fields (App.jsx) -- same "buffer while
+// focused, commit on blur" reasoning (so each keystroke doesn't fire
+// resetDataCollection on its own), just without NumberField's type="number"
+// input and parseFloat, neither of which can accept -- or even let a
+// browser's number input *contain* -- anything like "1/sqrt(2)" or "i".
+// Committing here is unconditional (there's no numeric parse to fail): a
+// half-typed or invalid expression is still a string worth keeping exactly
+// as typed, so the caller's own complexExpr.js compile step (and whatever
+// error message it shows) is what tells the user something's wrong, not a
+// silently-rejected commit.
+export function ComplexExprField({ value, onCommit, disabled, style }) {
+  const [editing, setEditing] = useState(false);
+  const [textValue, setTextValue] = useState('');
+  const displayValue = editing ? textValue : value;
+
+  return (
+    <input
+      type="text"
+      value={displayValue}
+      disabled={disabled}
+      onFocus={() => { setTextValue(value); setEditing(true); }}
+      onChange={(e) => setTextValue(e.target.value)}
+      onBlur={() => { setEditing(false); onCommit(textValue); }}
+      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+      style={style}
+    />
+  );
+}
+
 // A stepper through X/Y/Z (or, in `advanced` mode, raw theta/phi textboxes)
 // for any [theta, phi] axis value. Deliberately knows nothing about *what*
 // the axis belongs to (an analyzer's measurement basis, or one arm's field)
