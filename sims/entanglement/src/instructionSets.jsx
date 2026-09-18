@@ -155,17 +155,15 @@ function SheetPanel({ sheet, setSheet, readOnly, noteText, disabled, resetDataCo
         </tbody>
       </table>
       {!readOnly && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '6px', marginTop: '8px' }}>
+        <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: '6px', marginTop: '8px' }}>
           {!generateAll && (
             <button type="button" className="control-bar-button" onClick={() => mutate((prev) => addInstructionRow(prev, allIds))} disabled={disabled} style={{ fontSize: '12px' }}>
               + Add row
             </button>
           )}
-          {hasZeroWeightRow && (
-            <button type="button" className="control-bar-button" onClick={() => mutate(removeZeroWeightInstructionRows)} disabled={disabled} style={{ fontSize: '12px' }}>
-              Remove rows with weight 0
-            </button>
-          )}
+          <button type="button" className="control-bar-button" onClick={() => mutate(removeZeroWeightInstructionRows)} disabled={disabled || !hasZeroWeightRow} style={{ fontSize: '12px' }}>
+            Remove rows with weight 0
+          </button>
         </div>
       )}
     </>
