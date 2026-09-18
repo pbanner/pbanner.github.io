@@ -287,9 +287,8 @@ function SourceControls({
 
       {sourceType === 'classical' && (
         <>
-          <p style={{ fontSize: '13px', margin: '10px 0 8px 0', lineHeight: '1.6' }}>
-            Each pair is definitely one of the four states below -- never a
-            superposition of them -- with relative weight:
+          <p style={{ fontSize: '13px', margin: '10px 0 8px 0', lineHeight: '1.3' }}>
+            <strong>This model:</strong> Each pair is produced in one of the four states below. The source randomly picks which one, with probability give by the weight.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {CLASSICAL_WEIGHT_ROWS.map(({ key, arms }) => (
@@ -333,6 +332,9 @@ function SourceControls({
 
       {sourceType === 'bell' && (
         <>
+          <p style={{ fontSize: '13px', margin: '10px 0 8px 0', lineHeight: '1.3' }}>
+            <strong>This model:</strong> The source produces the Bell state you choose from the buttons below.
+          </p>
           <div style={{ display: 'flex', gap: '6px', margin: '10px 0 10px 0' }}>
             {BELL_STATES.map((b) => (
               <button
@@ -348,7 +350,7 @@ function SourceControls({
               </button>
             ))}
           </div>
-          <p style={{ fontSize: '13px', margin: 0, lineHeight: '1.6' }}>
+          <p style={{ fontSize: '20px', margin: '10px 0px', lineHeight: '1.6', textAlign: 'center' }}>
             <TeX math={bellExpressionTex(selectedBell)} />
           </p>
         </>
@@ -356,6 +358,9 @@ function SourceControls({
 
       {sourceType === 'custom' && (
         <>
+          <p style={{ fontSize: '13px', margin: '10px 0 8px 0', lineHeight: '1.3' }}>
+            <strong>This model:</strong> The source produces pairs in the superposition below, whose coefficients you can choose.
+          </p>
           <p style={{ fontSize: '13px', margin: '10px 0 8px 0', lineHeight: '1.6' }}>
             <TeX math={CUSTOM_STATE_FORMULA_TEX} />
           </p>
