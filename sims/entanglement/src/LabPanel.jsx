@@ -88,12 +88,22 @@ function getSGLabel(angles) {
 }
 
 // In Random choice mode there's no single "current" direction to label this
-// analyzer with -- a fresh one is drawn per *pair*, faster than any label
-// could meaningfully track once a stream is running -- so it just reads "?",
+// analyzer with -- a fresh one is drawn per *pair*. During a stream that's
+// faster than any label could meaningfully track, so it just reads "?",
 // unless exactly one direction is checked for this side, in which case
 // there's really only one possible setting and it can be labeled normally.
-function analyzerLabel(sg, sgIndex, analyzerMode, directionList, randomSampledDirectionIds) {
+// In Make One Pair mode, though, a pair sits still until the next click, so
+// `pickedDirectionId` (the direction that pair's own random draw actually
+// landed on -- null in every other mode, see spawnParticle/lastRandomPick
+// below) takes priority over both of those: it's both correct and, unlike
+// the single-checked-direction case, still meaningful with several
+// directions checked.
+function analyzerLabel(sg, sgIndex, analyzerMode, directionList, randomSampledDirectionIds, pickedDirectionId) {
   if (analyzerMode !== 'random') return getSGLabel(sg.basis);
+  if (pickedDirectionId) {
+    const direction = directionList.find((d) => d.id === pickedDirectionId);
+    if (direction) return getSGLabel([direction.thetaDeg * DEG_TO_RAD, direction.phiDeg * DEG_TO_RAD]);
+  }
   const ids = randomSampledDirectionIds[sgIndex];
   if (ids.length === 1) {
     const direction = directionList.find((d) => d.id === ids[0]);
@@ -276,6 +286,11 @@ const LabPanel = forwardRef(function LabPanel(
   const pendingCoincidencesRef = useRef(new Map());
   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
   const [axis, setAxis] = useState(300); // y-coordinate of halfway down the canvas
+  // In Random choice mode, which direction each side's *last* Make One Pair
+  // click actually drew -- see analyzerLabel's own comment for why this
+  // only ever gets set (in spawnParticle) while in that mode, and is read
+  // back only there too, never during a stream.
+  const [lastRandomPick, setLastRandomPick] = useState({ 0: null, 1: null });
   const [ovenImageRef, ovenImageLoaded] = useImage(ovenImage);
   const [ovenOffImageRef, ovenOffImageLoaded] = useImage(ovenOffImage);
   const [sgImageRef, sgImageLoaded] = useImage(sgImage);
@@ -370,7 +385,8 @@ const LabPanel = forwardRef(function LabPanel(
         ctx.fillStyle = '#303030';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        const sgLabel = analyzerLabel(sg, sgIndex, analyzerMode, directionList, randomSampledDirectionIds);
+        const pickedDirectionId = expMode.dc === 'single' ? lastRandomPick[sgIndex] : null;
+        const sgLabel = analyzerLabel(sg, sgIndex, analyzerMode, directionList, randomSampledDirectionIds, pickedDirectionId);
         if (Array.isArray(sgLabel)) {
           ctx.font = '16px Arial';
           const lineHeight = 18;
@@ -476,7 +492,7 @@ const LabPanel = forwardRef(function LabPanel(
         });
       });
     });
-  }, [experiment, expMode, displayBools, axis, canvasDims, hoveredDetectors, invalidAnalyzer, analyzerMode, directionList, randomSampledDirectionIds, pcImageRef, bbImageRef, ovenImageRef, ovenOffImageRef, sgImageRef]);
+  }, [experiment, expMode, displayBools, axis, canvasDims, hoveredDetectors, invalidAnalyzer, analyzerMode, directionList, randomSampledDirectionIds, lastRandomPick, pcImageRef, bbImageRef, ovenImageRef, ovenOffImageRef, sgImageRef]);
 
   const drawParticles = useCallback((ctx) => {
     const ovenCenterX = canvasDims.width / 2;
@@ -657,6 +673,12 @@ const LabPanel = forwardRef(function LabPanel(
   const spawnParticle = () => {
     const randomL = analyzerMode === 'random' ? pickRandomDirection(0) : null;
     const randomR = analyzerMode === 'random' ? pickRandomDirection(1) : null;
+    // Only worth remembering in Make One Pair mode -- see
+    // analyzerLabel/lastRandomPick's own comments for why a stream never
+    // reads this back regardless.
+    if (analyzerMode === 'random' && expMode.dc === 'single') {
+      setLastRandomPick({ 0: randomL?.directionId ?? null, 1: randomR?.directionId ?? null });
+    }
     const basisL = randomL ? randomL.basis : experiment[0].basis;
     const basisR = randomR ? randomR.basis : experiment[1].basis;
     const { armL, armR } = samplePairOutcome(basisL, basisR, source);
