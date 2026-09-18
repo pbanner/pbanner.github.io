@@ -28,12 +28,18 @@ import { NumberField } from './controls';
 // One instruction row: a clickable +/- toggle per (displayed) direction, a
 // weight box, and (only when it duplicates another row) a message row
 // directly beneath it -- rather than squeezed inline, which this sidebar's
-// width can't spare.
-function InstructionRow({ row, directions, readOnly, disabled, isDuplicate, soleRow, onToggleSign, onChangeWeight }) {
+// width can't spare. `isHighlighted` briefly flashes the row that produced
+// the last Make One Pair click's outcome (see SheetPanel/App.jsx's own
+// hiddenChoice) -- combined with duplicate-row's own outline, if both
+// happen at once, rather than one overriding the other.
+function InstructionRow({ row, directions, readOnly, disabled, isDuplicate, isHighlighted, soleRow, onToggleSign, onChangeWeight }) {
   const cellStyle = { border: '1px solid #ccc', padding: '2px 3px', textAlign: 'center' };
   return (
     <>
-      <tr style={isDuplicate ? { outline: '2px solid #cc3333', outlineOffset: '-1px' } : undefined}>
+      <tr
+        className={isHighlighted ? 'hidden-choice-flash' : undefined}
+        style={isDuplicate ? { outline: '2px solid #cc3333', outlineOffset: '-1px' } : undefined}
+      >
         {directions.map((dir) => {
           const isUp = row.signs[dir.id] === 'up';
           return (
@@ -85,7 +91,7 @@ function InstructionRow({ row, directions, readOnly, disabled, isDuplicate, sole
 // which of those this particular sheet currently shows -- everything,
 // except in Independent + Random-choice mode, where each side only shows
 // the directions it currently samples (see App.jsx).
-function SheetPanel({ sheet, setSheet, readOnly, noteText, disabled, resetDataCollection, allDirections, displayedDirectionIds }) {
+function SheetPanel({ sheet, setSheet, readOnly, noteText, disabled, resetDataCollection, allDirections, displayedDirectionIds, highlightRowId, highlightToken }) {
   const { rows, generateAll } = sheet;
   const displayed = allDirections
     .map((dir, globalIndex) => ({ ...dir, globalIndex }))
@@ -139,19 +145,27 @@ function SheetPanel({ sheet, setSheet, readOnly, noteText, disabled, resetDataCo
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <InstructionRow
-              key={row.id}
-              row={row}
-              directions={displayed}
-              readOnly={readOnly}
-              disabled={disabled}
-              isDuplicate={duplicateIds.has(row.id)}
-              soleRow={rows.length === 1}
-              onToggleSign={(dirId) => mutate((prev) => toggleInstructionSign(prev, row.id, dirId))}
-              onChangeWeight={(w) => mutate((prev) => changeInstructionWeight(prev, row.id, w))}
-            />
-          ))}
+          {rows.map((row) => {
+            const isHighlighted = row.id === highlightRowId;
+            return (
+              <InstructionRow
+                // Re-keyed on highlightToken only while highlighted, like
+                // SourceControls' own classical rows -- forces React to
+                // remount (and so restart the flash on) this row even when
+                // the very same one is drawn again on the next click.
+                key={isHighlighted ? `${row.id}-${highlightToken}` : row.id}
+                row={row}
+                directions={displayed}
+                readOnly={readOnly}
+                disabled={disabled}
+                isDuplicate={duplicateIds.has(row.id)}
+                isHighlighted={isHighlighted}
+                soleRow={rows.length === 1}
+                onToggleSign={(dirId) => mutate((prev) => toggleInstructionSign(prev, row.id, dirId))}
+                onChangeWeight={(w) => mutate((prev) => changeInstructionWeight(prev, row.id, w))}
+              />
+            );
+          })}
         </tbody>
       </table>
       {!readOnly && (
@@ -179,12 +193,19 @@ export default function InstructionSetControls({
   particle1, setParticle1,
   particle2, setParticle2,
   allDirections, displayedDirectionIds,
+  highlightRowIds, highlightToken,
   disabled, resetDataCollection,
 }) {
   const changeRelationship = (value) => { setRelationship(value); resetDataCollection(); };
   const isIndependent = relationship === 'independent';
   const showingParticle2 = showing === 'particle2';
   const allIds = allDirections.map((d) => d.id);
+  // Whichever sheet is currently on screen -- Particle 1's real rows, or
+  // (tied or independent) Particle 2's -- gets that side's own reported id;
+  // the other side's pick just isn't visible until the dropdown switches to
+  // it, same as any other per-side state this sidebar only shows one of at
+  // a time.
+  const highlightRowId = showingParticle2 ? highlightRowIds?.particle2 : highlightRowIds?.particle1;
 
   let panelProps;
   if (showingParticle2 && isIndependent) {
@@ -233,7 +254,14 @@ export default function InstructionSetControls({
           <option value="particle2">Particle 2</option>
         </select>
       </div>
-      <SheetPanel {...panelProps} allDirections={allDirections} disabled={disabled} resetDataCollection={resetDataCollection} />
+      <SheetPanel
+        {...panelProps}
+        allDirections={allDirections}
+        highlightRowId={highlightRowId}
+        highlightToken={highlightToken}
+        disabled={disabled}
+        resetDataCollection={resetDataCollection}
+      />
     </>
   );
 }

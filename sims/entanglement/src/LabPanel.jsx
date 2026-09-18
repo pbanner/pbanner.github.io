@@ -264,7 +264,7 @@ function buildBlockedLocalPath(axis) {
 const LabPanel = forwardRef(function LabPanel(
   {
     experiment, setExperiment, expMode, displayBools, setParticleCount, resetToken, tabVisible, hoveredDetectors,
-    onCoincidence, source, invalidAnalyzer, analyzerMode, directionList, randomSampledDirectionIds,
+    onCoincidence, onHiddenChoice, source, invalidAnalyzer, analyzerMode, directionList, randomSampledDirectionIds,
   },
   ref
 ) {
@@ -681,13 +681,23 @@ const LabPanel = forwardRef(function LabPanel(
     }
     const basisL = randomL ? randomL.basis : experiment[0].basis;
     const basisR = randomR ? randomR.basis : experiment[1].basis;
-    const { armL, armR } = samplePairOutcome(basisL, basisR, source);
+    const { armL, armR, hidden } = samplePairOutcome(basisL, basisR, source);
     const leftBlocked = experiment[0].blocked;
     const rightBlocked = experiment[1].blocked;
     // Both particles below share this same id -- it's how the tick loop's
     // coincidence crediting recognizes them as one pair's two halves rather
-    // than two unrelated detector hits that happened to land together.
+    // than two unrelated detector hits that happened to land together. It
+    // also tags this pair's own hidden-choice report just below, so a
+    // repeat pick of the very same row/weight still re-triggers its flash
+    // rather than looking like nothing happened.
     const pairId = nextPairIdRef.current++;
+    // Only reported in Make One Pair mode -- a stream would otherwise fire
+    // this dozens of times a second, and (per lastRandomPick's own
+    // reasoning above) that's not a rate any UI highlight could track
+    // either.
+    if (expMode.dc === 'single' && hidden) {
+      onHiddenChoice?.({ ...hidden, pairId });
+    }
     particlesRef.current = [
       ...particlesRef.current,
       leftBlocked

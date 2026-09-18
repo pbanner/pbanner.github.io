@@ -248,7 +248,7 @@ function SourceControls({
   sourceType, setSourceType, bellKey, setBellKey, classicalWeights, setClassicalWeights, customCoeffs, setCustomCoeffs,
   instructionRelationship, setInstructionRelationship, instructionShowing, setInstructionShowing,
   instructionParticle1, setInstructionParticle1, instructionParticle2, setInstructionParticle2,
-  directionList, displayedDirectionIds,
+  directionList, displayedDirectionIds, hiddenChoice,
   disabled, resetDataCollection,
 }) {
   const selectedBell = BELL_STATES.find((b) => b.key === bellKey);
@@ -291,20 +291,31 @@ function SourceControls({
             <strong>This model:</strong> Each pair is produced in one of the four states below. The source randomly picks which one, with probability give by the weight.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {CLASSICAL_WEIGHT_ROWS.map(({ key, arms }) => (
-              <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
-                  <TeX math={spinKetTex(arms)} /> =
-                </span>
-                <NumberField
-                  step="0.01"
-                  value={classicalWeights[key]}
-                  onCommit={(v) => changeClassicalWeight(key, v)}
-                  disabled={disabled}
-                  style={{ width: '80px', padding: '2px' }}
-                />
-              </label>
-            ))}
+            {CLASSICAL_WEIGHT_ROWS.map(({ key, arms }) => {
+              const isPicked = hiddenChoice?.kind === 'classical' && hiddenChoice.key === key;
+              return (
+                // Re-keyed on pairId only while picked -- React then treats
+                // this as a brand-new element on every pick, remounting it
+                // (and so restarting the flash below) even when the very
+                // same row is picked twice in a row.
+                <label
+                  key={isPicked ? `${key}-${hiddenChoice.pairId}` : key}
+                  className={isPicked ? 'hidden-choice-flash' : undefined}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+                    <TeX math={spinKetTex(arms)} /> =
+                  </span>
+                  <NumberField
+                    step="0.01"
+                    value={classicalWeights[key]}
+                    onCommit={(v) => changeClassicalWeight(key, v)}
+                    disabled={disabled}
+                    style={{ width: '80px', padding: '2px' }}
+                  />
+                </label>
+              );
+            })}
           </div>
           <p style={{ fontSize: '12px', color: '#666', margin: '8px 0 0 0', lineHeight: '1.5' }}>
             Weights don't need to be normalized -- (1, 0, 0, 1) works just as
@@ -325,6 +336,15 @@ function SourceControls({
           setParticle2={setInstructionParticle2}
           allDirections={directionList}
           displayedDirectionIds={displayedDirectionIds}
+          // Each side reports its own row id (the same id on both when the
+          // relationship shares one sheet -- see samplePairOutcome), so
+          // whichever sheet SheetPanel is currently showing highlights
+          // against the matching one of the two.
+          highlightRowIds={{
+            particle1: hiddenChoice?.kind === 'instructionSets' ? hiddenChoice.rowIdL : null,
+            particle2: hiddenChoice?.kind === 'instructionSets' ? hiddenChoice.rowIdR : null,
+          }}
+          highlightToken={hiddenChoice?.pairId}
           disabled={disabled}
           resetDataCollection={resetDataCollection}
         />
@@ -687,6 +707,16 @@ export default function App() {
   const [resetToken, setResetToken] = useState(0);
   const streamTimerRef = useRef(null);
 
+  // The hidden choice behind the most recent Make One Pair click, for a
+  // 'classical' or 'instructionSets' source -- null for every other source
+  // (nothing hidden to report) and, per LabPanel's own onHiddenChoice
+  // guard, never updated by a stream. { kind: 'classical', key, pairId } or
+  // { kind: 'instructionSets', rowIdL, rowIdR, pairId }; pairId (unique per
+  // pair, even a repeat of the same row/key) is what lets SourceControls'
+  // flash animation below retrigger on every click rather than just the
+  // first time a given row is picked. See physics.js's samplePairOutcome.
+  const [hiddenChoice, setHiddenChoice] = useState(null);
+
   const controlsLocked = particleCount > 0;
 
   // A basis change invalidates whatever's been collected so far -- called
@@ -765,6 +795,7 @@ export default function App() {
             tabVisible={tabVisible}
             hoveredDetectors={histDisplayBools.hoveredDetectors}
             onCoincidence={recordCoincidence}
+            onHiddenChoice={setHiddenChoice}
             source={source}
             invalidAnalyzer={instructionInvalid}
             analyzerMode={analyzerMode}
@@ -796,6 +827,7 @@ export default function App() {
               0: relevantDirectionIdsForSide(0, directionList.map((d) => d.id), randomSampledDirectionIds),
               1: relevantDirectionIdsForSide(1, directionList.map((d) => d.id), randomSampledDirectionIds),
             }}
+            hiddenChoice={hiddenChoice}
             disabled={controlsLocked}
             resetDataCollection={resetDataCollection}
           />
