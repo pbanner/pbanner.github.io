@@ -813,7 +813,7 @@ export default function App() {
             </label>
             {followDirectionList && (
               <>
-                <p style={{ fontSize: '14px', margin: '0 0 -4px 0' }}><strong>Direction list</strong> (click to edit):</p>
+                <p style={{ fontSize: '14px', margin: '0 0 -4px 0' }}><strong>Direction list (θ, ϕ)</strong> (click to edit):</p>
                 <DirectionList
                   directions={directionList}
                   onEditDirection={handleEditDirection}
