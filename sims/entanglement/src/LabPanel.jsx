@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { samplePairOutcome } from './physics';
-import { DEG_TO_RAD } from './axisOptions';
+import { DEG_TO_RAD, RAD_TO_DEG } from './axisOptions';
 import { PC_COLORS } from './colors';
 import { drawArrow, arrowWidth } from './canvasArrow';
 import sgImage from './assets/sg/SG.png';
@@ -68,18 +68,23 @@ const BEAM_TRANSVERSE_WIDTH = 14;  // px, full spread of the (uniform) beam jitt
 const PARTICLE_RADIUS = 4;
 const PARTICLE_COLOR = '#3498db';
 
-const SUB_LABELS = "₁₂₃₄₅₆₇₈₉";
-function getSGLabel(angles, id) {
-  if (angles[0] == 0) {
-    return 'Z';
-  } else if (angles[0] == Math.PI / 2) {
-    if (angles[1] == 0) {
-      return 'X';
-    } else if (angles[1] == Math.PI / 2) {
-      return 'Y';
-    }
+// Angles are always whole degrees at the source (directionListData.js), but
+// they arrive here as radians (sg.basis), so round on the way back to
+// degrees to avoid flagging something like 89.99999999999999 as "not X".
+// Returns a plain string for the on-axis cases, or a [thetaLine, phiLine]
+// pair for everything else -- the caller decides how to draw each.
+function getSGLabel(angles) {
+  const thetaDeg = Math.round(angles[0] * RAD_TO_DEG);
+  const phiDeg = Math.round(angles[1] * RAD_TO_DEG);
+  if (thetaDeg === 0) return 'Z';
+  if (thetaDeg === 180) return '-Z';
+  if (thetaDeg === 90) {
+    if (phiDeg === 0) return 'X';
+    if (phiDeg === 90) return 'Y';
+    if (phiDeg === 180) return '-X';
+    if (phiDeg === 270) return '-Y';
   }
-  return 'n̂' + SUB_LABELS[id];
+  return [`θ: ${thetaDeg}°`, `ϕ: ${phiDeg}°`];
 }
 
 // In Random choice mode there's no single "current" direction to label this
@@ -88,11 +93,11 @@ function getSGLabel(angles, id) {
 // unless exactly one direction is checked for this side, in which case
 // there's really only one possible setting and it can be labeled normally.
 function analyzerLabel(sg, sgIndex, analyzerMode, directionList, randomSampledDirectionIds) {
-  if (analyzerMode !== 'random') return getSGLabel(sg.basis, sgIndex);
+  if (analyzerMode !== 'random') return getSGLabel(sg.basis);
   const ids = randomSampledDirectionIds[sgIndex];
   if (ids.length === 1) {
     const direction = directionList.find((d) => d.id === ids[0]);
-    if (direction) return getSGLabel([direction.thetaDeg * DEG_TO_RAD, direction.phiDeg * DEG_TO_RAD], sgIndex);
+    if (direction) return getSGLabel([direction.thetaDeg * DEG_TO_RAD, direction.phiDeg * DEG_TO_RAD]);
   }
   return '?';
 }
@@ -363,10 +368,18 @@ const LabPanel = forwardRef(function LabPanel(
         ctx.drawImage(sgImageRef.current, SG_X0_LOCAL, axis - SG_HEIGHT / 2, SG_WIDTH, SG_HEIGHT);
 
         ctx.fillStyle = '#303030';
-        ctx.font = '32px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        drawUnflippedText(ctx, side, analyzerLabel(sg, sgIndex, analyzerMode, directionList, randomSampledDirectionIds), SG_X0_LOCAL + 62, axis);
+        const sgLabel = analyzerLabel(sg, sgIndex, analyzerMode, directionList, randomSampledDirectionIds);
+        if (Array.isArray(sgLabel)) {
+          ctx.font = '16px Arial';
+          const lineHeight = 18;
+          drawUnflippedText(ctx, side, sgLabel[0], SG_X0_LOCAL + 62, axis - lineHeight / 2);
+          drawUnflippedText(ctx, side, sgLabel[1], SG_X0_LOCAL + 62, axis + lineHeight / 2);
+        } else {
+          ctx.font = '32px Arial';
+          drawUnflippedText(ctx, side, sgLabel, SG_X0_LOCAL + 62, axis);
+        }
 
         if (invalidAnalyzer?.[sgIndex]) {
           ctx.strokeStyle = INVALID_ANALYZER_COLOR;
