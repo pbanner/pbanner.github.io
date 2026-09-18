@@ -227,7 +227,7 @@ export default function InstructionSetControls({
       </div>
       <hr style={{ margin: '6px 0px' }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 10px 0' }}>
-        <label style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>Showing instructions for:</label>
+        <label style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>View instructions for:</label>
         <select value={showing} onChange={(e) => setShowing(e.target.value)} style={{ flex: 1, fontSize: '12px', padding: '3px' }}>
           <option value="particle1">Particle 1</option>
           <option value="particle2">Particle 2</option>
