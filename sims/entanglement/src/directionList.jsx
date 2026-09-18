@@ -149,7 +149,12 @@ export function DirectionListStepper({ label, directions, selectedId, onSelectDi
 // zero is the one state that has to be actively blocked (there'd be nothing
 // left to sample), via the red outline + message below, same visual
 // language as the instruction-set table's own duplicate-row message.
-export function DirectionSamplingRow({ label, directions, selectedIds, onToggle, disabled }) {
+// `pickedId` briefly flashes the checkbox for whichever direction the last
+// Make One Pair click actually drew for this side (App.jsx's own
+// lastRandomPick, mirroring the same hidden-choice flash used for the
+// classical/instruction-set source rows) -- null outside Make One Pair
+// mode, so a stream never lights any of these up.
+export function DirectionSamplingRow({ label, directions, selectedIds, onToggle, disabled, pickedId, pickedToken }) {
   const isChecked = (id) => selectedIds.includes(id);
   const invalid = selectedIds.length === 0;
   return (
@@ -161,17 +166,28 @@ export function DirectionSamplingRow({ label, directions, selectedIds, onToggle,
         }}
       >
         <label style={{ fontSize: '14px', fontWeight: '500' }}>{label}:</label>
-        {directions.map((dir, i) => (
-          <label key={dir.id} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap' }}>
-            <input
-              type="checkbox"
-              checked={isChecked(dir.id)}
-              onChange={(e) => onToggle(dir.id, e.target.checked)}
-              disabled={disabled}
-            />
-            D{i + 1}
-          </label>
-        ))}
+        {directions.map((dir, i) => {
+          const isPicked = dir.id === pickedId;
+          return (
+            <label
+              // Re-keyed on pickedToken only while picked, like the
+              // classical/instruction-set rows -- forces React to remount
+              // (and so restart the flash on) this checkbox even when the
+              // very same direction is drawn again on the next click.
+              key={isPicked ? `${dir.id}-${pickedToken}` : dir.id}
+              className={isPicked ? 'hidden-choice-flash' : undefined}
+              style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap' }}
+            >
+              <input
+                type="checkbox"
+                checked={isChecked(dir.id)}
+                onChange={(e) => onToggle(dir.id, e.target.checked)}
+                disabled={disabled}
+              />
+              D{i + 1}
+            </label>
+          );
+        })}
       </div>
       {invalid && (
         <p style={{ margin: '0 0 0 2px', color: '#cc3333', fontSize: '11px' }}>

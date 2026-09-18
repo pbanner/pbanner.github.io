@@ -118,6 +118,8 @@ function AnalyzerStepper({ index, sg, setExperiment, disabled, resetDataCollecti
           directions={samplingMode.directions}
           selectedIds={samplingMode.selectedIds}
           onToggle={samplingMode.onToggle}
+          pickedId={samplingMode.pickedId}
+          pickedToken={samplingMode.pickedToken}
           disabled={disabled || sg.blocked}
         />
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 6px 6px 6px' }}>
@@ -717,6 +719,14 @@ export default function App() {
   // first time a given row is picked. See physics.js's samplePairOutcome.
   const [hiddenChoice, setHiddenChoice] = useState(null);
 
+  // Which direction each side's last Make One Pair click actually drew, in
+  // Random choice mode -- mirrors LabPanel's own internal copy (which it
+  // keeps for the SG label), reported up separately so this sidebar's own
+  // Left:/Right: checkboxes can flash the matching one too. { 0: id|null,
+  // 1: id|null, pairId }; pairId is what lets the flash retrigger even when
+  // the same direction is drawn again on the next click.
+  const [lastRandomPick, setLastRandomPick] = useState({ 0: null, 1: null, pairId: null });
+
   const controlsLocked = particleCount > 0;
 
   // A basis change invalidates whatever's been collected so far -- called
@@ -796,6 +806,7 @@ export default function App() {
             hoveredDetectors={histDisplayBools.hoveredDetectors}
             onCoincidence={recordCoincidence}
             onHiddenChoice={setHiddenChoice}
+            onRandomPick={setLastRandomPick}
             source={source}
             invalidAnalyzer={instructionInvalid}
             analyzerMode={analyzerMode}
@@ -880,6 +891,8 @@ export default function App() {
                           }));
                           resetDataCollection();
                         },
+                        pickedId: lastRandomPick[i],
+                        pickedToken: lastRandomPick.pairId,
                       }
                     : null
                 }

@@ -264,7 +264,7 @@ function buildBlockedLocalPath(axis) {
 const LabPanel = forwardRef(function LabPanel(
   {
     experiment, setExperiment, expMode, displayBools, setParticleCount, resetToken, tabVisible, hoveredDetectors,
-    onCoincidence, onHiddenChoice, source, invalidAnalyzer, analyzerMode, directionList, randomSampledDirectionIds,
+    onCoincidence, onHiddenChoice, onRandomPick, source, invalidAnalyzer, analyzerMode, directionList, randomSampledDirectionIds,
   },
   ref
 ) {
@@ -671,26 +671,29 @@ const LabPanel = forwardRef(function LabPanel(
   // discarded -- that particle gets the short "walk into the wall" path
   // instead, and is never credited to a detector.
   const spawnParticle = () => {
+    // Generated up front, rather than just before building the particles
+    // below, so it's already available to this pair's own random-pick and
+    // hidden-choice reports too -- it's how the tick loop's coincidence
+    // crediting recognizes a pair's two particles as partners, and (tagging
+    // those two reports) also what lets App.jsx's flash animations
+    // retrigger on a repeat pick of the very same direction/row/weight
+    // rather than looking like nothing happened.
+    const pairId = nextPairIdRef.current++;
     const randomL = analyzerMode === 'random' ? pickRandomDirection(0) : null;
     const randomR = analyzerMode === 'random' ? pickRandomDirection(1) : null;
-    // Only worth remembering in Make One Pair mode -- see
+    // Only worth remembering/reporting in Make One Pair mode -- see
     // analyzerLabel/lastRandomPick's own comments for why a stream never
     // reads this back regardless.
     if (analyzerMode === 'random' && expMode.dc === 'single') {
-      setLastRandomPick({ 0: randomL?.directionId ?? null, 1: randomR?.directionId ?? null });
+      const picked = { 0: randomL?.directionId ?? null, 1: randomR?.directionId ?? null };
+      setLastRandomPick(picked);
+      onRandomPick?.({ ...picked, pairId });
     }
     const basisL = randomL ? randomL.basis : experiment[0].basis;
     const basisR = randomR ? randomR.basis : experiment[1].basis;
     const { armL, armR, hidden } = samplePairOutcome(basisL, basisR, source);
     const leftBlocked = experiment[0].blocked;
     const rightBlocked = experiment[1].blocked;
-    // Both particles below share this same id -- it's how the tick loop's
-    // coincidence crediting recognizes them as one pair's two halves rather
-    // than two unrelated detector hits that happened to land together. It
-    // also tags this pair's own hidden-choice report just below, so a
-    // repeat pick of the very same row/weight still re-triggers its flash
-    // rather than looking like nothing happened.
-    const pairId = nextPairIdRef.current++;
     // Only reported in Make One Pair mode -- a stream would otherwise fire
     // this dozens of times a second, and (per lastRandomPick's own
     // reasoning above) that's not a rate any UI highlight could track
