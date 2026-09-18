@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { samplePairOutcome } from './physics';
 import { DEG_TO_RAD, RAD_TO_DEG } from './axisOptions';
+import { PHI_LOCKED } from './queryParams';
 import { PC_COLORS } from './colors';
 import { drawArrow, arrowWidth } from './canvasArrow';
 import sgImage from './assets/sg/SG.png';
@@ -71,8 +72,9 @@ const PARTICLE_COLOR = '#3498db';
 // Angles are always whole degrees at the source (directionListData.js), but
 // they arrive here as radians (sg.basis), so round on the way back to
 // degrees to avoid flagging something like 89.99999999999999 as "not X".
-// Returns a plain string for the on-axis cases, or a [thetaLine, phiLine]
-// pair for everything else -- the caller decides how to draw each.
+// Returns a plain string for the on-axis cases, or a one- or two-line array
+// for everything else -- the caller decides how to draw each, and how many
+// lines it got.
 function getSGLabel(angles) {
   const thetaDeg = Math.round(angles[0] * RAD_TO_DEG);
   const phiDeg = Math.round(angles[1] * RAD_TO_DEG);
@@ -84,7 +86,12 @@ function getSGLabel(angles) {
     if (phiDeg === 180) return '-X';
     if (phiDeg === 270) return '-Y';
   }
-  return [`θ: ${thetaDeg}°`, `ϕ: ${phiDeg}°`];
+  // With phi locked to 0 (queryParams.js) -- and so never Y or -X's own 90
+  // or 270 above either, phi being the only thing that ever distinguishes
+  // them from X -- there's nothing left for a second line to say, and
+  // "theta" is the only angle this sim still exposes, so it needs no
+  // "theta:" prefix to disambiguate it from anything.
+  return PHI_LOCKED ? [`${thetaDeg}°`] : [`θ: ${thetaDeg}°`, `ϕ: ${phiDeg}°`];
 }
 
 // In Random choice mode there's no single "current" direction to label this
@@ -387,7 +394,13 @@ const LabPanel = forwardRef(function LabPanel(
         ctx.textBaseline = 'middle';
         const pickedDirectionId = expMode.dc === 'single' ? lastRandomPick[sgIndex] : null;
         const sgLabel = analyzerLabel(sg, sgIndex, analyzerMode, directionList, randomSampledDirectionIds, pickedDirectionId);
-        if (Array.isArray(sgLabel)) {
+        if (Array.isArray(sgLabel) && sgLabel.length === 1) {
+          // The phi-locked, single-line case -- a bigger font than the
+          // two-line one below, since one line alone leaves noticeably
+          // more of the SG box's own vertical space to fill.
+          ctx.font = '24px Arial';
+          drawUnflippedText(ctx, side, sgLabel[0], SG_X0_LOCAL + 62, axis);
+        } else if (Array.isArray(sgLabel)) {
           ctx.font = '16px Arial';
           const lineHeight = 18;
           drawUnflippedText(ctx, side, sgLabel[0], SG_X0_LOCAL + 62, axis - lineHeight / 2);

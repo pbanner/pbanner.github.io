@@ -11,6 +11,7 @@ import InstructionSetControls from './instructionSets';
 import { createInitialInstructionSheet, addSignToRows, removeSignFromRows, generateAllInstructionSets } from './instructionSetsData';
 import { DirectionList, DirectionListStepper, DirectionSamplingRow } from './directionList';
 import { createInitialDirectionList, addDirection, deleteDirection, editDirection } from './directionListData';
+import { PHI_LOCKED } from './queryParams';
 
 // Unicode glyphs (▶ ⏸) bake their own, font-dependent vertical padding into
 // the glyph box, so flexbox centering lines up the boxes but not the visible
@@ -918,7 +919,7 @@ export default function App() {
             </label>
             {followDirectionList && (
               <>
-                <p style={{ fontSize: '14px', margin: '0 0 -4px 0' }}><strong>Direction list (θ, ϕ)</strong> (click to edit):</p>
+                <p style={{ fontSize: '14px', margin: '0 0 -4px 0' }}><strong>Direction list ({PHI_LOCKED ? 'θ' : 'θ, ϕ'})</strong> (click to edit):</p>
                 <DirectionList
                   directions={directionList}
                   onEditDirection={handleEditDirection}

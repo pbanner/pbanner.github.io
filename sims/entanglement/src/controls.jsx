@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { SG_OPTION_LABELS, SG_OPTION_BASES, RAD_TO_DEG, DEG_TO_RAD, roundDeg } from './axisOptions';
+import { PHI_LOCKED } from './queryParams';
 
 // A plain <input type="number"> whose displayed text, while focused, is a
 // local buffer rather than always mirroring the committed numeric value --
@@ -116,19 +117,21 @@ export function AxisStepper({ label, value, advanced, onStep, onSetAdvanced, onS
             />
             <span>°</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <label style={{ width: '12px' }}>ϕ</label>
-            <NumberField
-              min={0}
-              max={360}
-              step={1}
-              value={roundDeg(value[1] * RAD_TO_DEG)}
-              disabled={disabled}
-              onCommit={(v) => onSetAngle('phi', v * DEG_TO_RAD)}
-              style={{ width: '70px', padding: '2px' }}
-            />
-            <span>°</span>
-          </div>
+          {!PHI_LOCKED && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <label style={{ width: '12px' }}>ϕ</label>
+              <NumberField
+                min={0}
+                max={360}
+                step={1}
+                value={roundDeg(value[1] * RAD_TO_DEG)}
+                disabled={disabled}
+                onCommit={(v) => onSetAngle('phi', v * DEG_TO_RAD)}
+                style={{ width: '70px', padding: '2px' }}
+              />
+              <span>°</span>
+            </div>
+          )}
         </div>
       ) : (
         <div className="axis-stepper">
