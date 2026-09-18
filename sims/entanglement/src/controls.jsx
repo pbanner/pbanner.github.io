@@ -55,7 +55,16 @@ export function NumberField({ value, onCommit, parse = parseFloat, ...inputProps
 // half-typed or invalid expression is still a string worth keeping exactly
 // as typed, so the caller's own complexExpr.js compile step (and whatever
 // error message it shows) is what tells the user something's wrong, not a
-// silently-rejected commit.
+// silently-rejected commit. Rendered in a fixed-width font, like the
+// optics-lab sim's own trial-function textbox (its .sweep-trial-row
+// input[type="text"]) -- this field is always an expression, never prose,
+// and monospace is what makes parentheses/operators easy to visually pair
+// up while typing one.
+// Exported so App.jsx's own explanatory text can highlight an inline
+// expression snippet (e.g. "1/sqrt(2)") in the exact same font as the
+// field it's describing.
+export const EXPR_FONT_FAMILY = "'Courier New', monospace";
+
 export function ComplexExprField({ value, onCommit, disabled, style }) {
   const [editing, setEditing] = useState(false);
   const [textValue, setTextValue] = useState('');
@@ -70,7 +79,7 @@ export function ComplexExprField({ value, onCommit, disabled, style }) {
       onChange={(e) => setTextValue(e.target.value)}
       onBlur={() => { setEditing(false); onCommit(textValue); }}
       onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-      style={style}
+      style={{ fontFamily: EXPR_FONT_FAMILY, ...style }}
     />
   );
 }

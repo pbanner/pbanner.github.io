@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import './App.css';
 import LabPanel from './LabPanel';
 import Histogram from './Histogram';
-import { AxisStepper, SliderPlusTextboxControl, NumberField, ComplexExprField } from './controls';
+import { AxisStepper, SliderPlusTextboxControl, NumberField, ComplexExprField, EXPR_FONT_FAMILY } from './controls';
 import { SG_OPTION_LABELS, SG_OPTION_BASES, DEG_TO_RAD } from './axisOptions';
 import { BELL_STATES, findInstructionColumnIndex } from './physics';
 import { compileComplexExpression } from './complexExpr';
@@ -226,6 +226,15 @@ function bellExpressionTex(bell) {
 const CUSTOM_STATE_FORMULA_TEX =
   `a${spinKetTex(['up', 'up'])} + b${spinKetTex(['up', 'down'])} + c${spinKetTex(['down', 'up'])} + d${spinKetTex(['down', 'down'])}`;
 
+// Same "highlighted inline code" look the optics-lab sim's own trial-
+// function help popover uses for its operator/function/constant lists
+// (App.css's .sweep-trial-help-popover code) -- reproduced here as a
+// plain inline style (matching this file's own convention of styling
+// one-off text inline rather than growing App.css for something used in
+// exactly one place), sharing controls.jsx's EXPR_FONT_FAMILY so a
+// snippet reads in the exact same font as the field it's describing.
+const CODE_SNIPPET_STYLE = { fontFamily: EXPR_FONT_FAMILY, background: '#f0f0f0', padding: '1px 4px', borderRadius: '3px' };
+
 // The four definite states the classical model's hidden-variable coin can
 // hand out, in the same up-up/up-down/down-up/down-down order as every other
 // joint-outcome listing in this file -- each row's own weight input is
@@ -408,14 +417,17 @@ function SourceControls({
               );
             })}
           </div>
-          <p style={{ fontSize: '12px', color: '#666', margin: '8px 0 0 0', lineHeight: '1.5' }}>
-            Coefficients don't need to be normalized -- (1, 0, 0, 1) works
-            just as well as (1/sqrt(2), 0, 0, 1/sqrt(2)). Each one is a full
-            expression, not just a plain number -- i, e, and pi are all
-            understood, along with sin/cos/tan/sqrt and the usual + - * / ^
-            and parentheses, so a coefficient can be negative, imaginary, or
-            a complex exponential like e^(i*pi/4).
-          </p>
+          <div style={{ fontSize: '12px', color: '#666', margin: '8px 0 0 0', lineHeight: '1.6' }}>
+            <p style={{ margin: '4px 0' }}>
+              Coefficients don't need to be normalized -- <code style={CODE_SNIPPET_STYLE}>1, 0, 0, 1</code> works
+              just as well as <code style={CODE_SNIPPET_STYLE}>1/sqrt(2), 0, 0, 1/sqrt(2)</code>.
+            </p>
+            <p style={{ margin: '4px 0' }}>Each one is a full expression, not just a plain number.</p>
+            <p style={{ margin: '4px 0' }}>Operators: <code style={CODE_SNIPPET_STYLE}>+ - * / ^</code></p>
+            <p style={{ margin: '4px 0' }}>Functions: <code style={CODE_SNIPPET_STYLE}>sin cos tan sqrt</code></p>
+            <p style={{ margin: '4px 0' }}>Constants: <code style={CODE_SNIPPET_STYLE}>i e pi</code></p>
+            <p style={{ margin: '4px 0' }}>Example: <code style={CODE_SNIPPET_STYLE}>e^(i*pi/4)</code></p>
+          </div>
         </>
       )}
     </>
