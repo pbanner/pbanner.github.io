@@ -418,15 +418,30 @@ function SourceControls({
             })}
           </div>
           <div style={{ fontSize: '12px', color: '#666', margin: '8px 0 0 0', lineHeight: '1.6' }}>
+            <p style={{ margin: '4px 0' }}>Each textbox accepts math expressions:</p>
+            <p style={{ margin: '4px 18px' }}>• Operators: 
+              <code style={CODE_SNIPPET_STYLE}>+</code> 
+              <code style={CODE_SNIPPET_STYLE}>-</code> 
+              <code style={CODE_SNIPPET_STYLE}>*</code> 
+              <code style={CODE_SNIPPET_STYLE}>/</code> 
+              <code style={CODE_SNIPPET_STYLE}>^</code> 
+              </p>
+            <p style={{ margin: '4px 18px' }}>• Functions: 
+              <code style={CODE_SNIPPET_STYLE}>sin</code> 
+              <code style={CODE_SNIPPET_STYLE}>cos</code> 
+              <code style={CODE_SNIPPET_STYLE}>tan</code> 
+              <code style={CODE_SNIPPET_STYLE}>sqrt</code> 
+            </p>
+            <p style={{ margin: '4px 18px' }}>• Constants:
+              <code style={CODE_SNIPPET_STYLE}>i</code>
+              <code style={CODE_SNIPPET_STYLE}>e</code>
+              <code style={CODE_SNIPPET_STYLE}>pi</code>
+            </p>
+            <p style={{ margin: '4px 18px' }}>• Example: <code style={CODE_SNIPPET_STYLE}>e^(i*pi/4)</code></p>
             <p style={{ margin: '4px 0' }}>
-              Coefficients don't need to be normalized -- <code style={CODE_SNIPPET_STYLE}>1, 0, 0, 1</code> works
+              <strong>Note:</strong> Coefficients don't need to be normalized -- <code style={CODE_SNIPPET_STYLE}>1, 0, 0, 1</code> works
               just as well as <code style={CODE_SNIPPET_STYLE}>1/sqrt(2), 0, 0, 1/sqrt(2)</code>.
             </p>
-            <p style={{ margin: '4px 0' }}>Each one is a full expression, not just a plain number.</p>
-            <p style={{ margin: '4px 0' }}>Operators: <code style={CODE_SNIPPET_STYLE}>+ - * / ^</code></p>
-            <p style={{ margin: '4px 0' }}>Functions: <code style={CODE_SNIPPET_STYLE}>sin cos tan sqrt</code></p>
-            <p style={{ margin: '4px 0' }}>Constants: <code style={CODE_SNIPPET_STYLE}>i e pi</code></p>
-            <p style={{ margin: '4px 0' }}>Example: <code style={CODE_SNIPPET_STYLE}>e^(i*pi/4)</code></p>
           </div>
         </>
       )}
