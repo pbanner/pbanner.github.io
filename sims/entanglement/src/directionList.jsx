@@ -11,13 +11,19 @@
 import { useState } from 'react';
 import { MAX_DIRECTIONS } from './directionListData';
 import { NumberField } from './controls';
+import { PHI_LOCKED } from './queryParams';
 
 // One direction, shown as plain "Direction N: [theta]°, [phi]°" text until
 // clicked, at which point the numbers become two small whole-degree inputs
 // in place of themselves -- each NumberField commits on blur (or Enter,
 // which just blurs), and clicking anywhere outside both inputs (Tab, click
 // elsewhere, or Enter itself) reverts to plain text via the container's own
-// onBlur below.
+// onBlur below. With phi locked to 0 (queryParams.js), phi's own box (and
+// its own ", [phi]°" in the plain-text form) is dropped entirely rather
+// than shown fixed at 0 -- there's nothing left for a locked-out control to
+// usefully communicate. onEdit's own phi argument is still always whatever
+// direction.phiDeg already is (0), never a value this component sourced
+// itself, so phi genuinely never changes while its control is hidden.
 function DirectionLabel({ index, direction, onEdit, disabled }) {
   const [editing, setEditing] = useState(false);
   const prefix = `• Direction ${index + 1}: `;
@@ -29,7 +35,7 @@ function DirectionLabel({ index, direction, onEdit, disabled }) {
         title={disabled ? undefined : 'Click to edit'}
         style={{ cursor: disabled ? 'default' : 'pointer', fontSize: '13px', whiteSpace: 'nowrap' }}
       >
-        <strong>{prefix}</strong>{direction.thetaDeg}°, {direction.phiDeg}°
+        <strong>{prefix}</strong>{direction.thetaDeg}°{PHI_LOCKED ? '' : `, ${direction.phiDeg}°`}
       </span>
     );
   }
@@ -50,17 +56,22 @@ function DirectionLabel({ index, direction, onEdit, disabled }) {
         onCommit={(v) => onEdit(v, direction.phiDeg)}
         style={{ width: '36px', padding: '2px', fontSize: '12px' }}
       />
-      °,
-      <NumberField
-        min={0}
-        max={360}
-        step={1}
-        parse={(raw) => parseInt(raw, 10)}
-        value={direction.phiDeg}
-        onCommit={(v) => onEdit(direction.thetaDeg, v)}
-        style={{ width: '36px', padding: '2px', fontSize: '12px' }}
-      />
       °
+      {!PHI_LOCKED && (
+        <>
+          ,
+          <NumberField
+            min={0}
+            max={360}
+            step={1}
+            parse={(raw) => parseInt(raw, 10)}
+            value={direction.phiDeg}
+            onCommit={(v) => onEdit(direction.thetaDeg, v)}
+            style={{ width: '36px', padding: '2px', fontSize: '12px' }}
+          />
+          °
+        </>
+      )}
     </span>
   );
 }
@@ -137,7 +148,9 @@ export function DirectionListStepper({ label, directions, selectedId, onSelectDi
           <button type="button" className="axis-stepper-arrow" onClick={() => step(-1)} aria-label="Previous direction" disabled={disabled}>▼</button>
         </div>
       </div>
-      <span style={{ fontSize: '13px', color: '#666', whiteSpace: 'nowrap' }}>{direction.thetaDeg}°, {direction.phiDeg}°</span>
+      <span style={{ fontSize: '13px', color: '#666', whiteSpace: 'nowrap' }}>
+        {direction.thetaDeg}°{PHI_LOCKED ? '' : `, ${direction.phiDeg}°`}
+      </span>
     </div>
   );
 }
@@ -149,7 +162,12 @@ export function DirectionListStepper({ label, directions, selectedId, onSelectDi
 // zero is the one state that has to be actively blocked (there'd be nothing
 // left to sample), via the red outline + message below, same visual
 // language as the instruction-set table's own duplicate-row message.
-export function DirectionSamplingRow({ label, directions, selectedIds, onToggle, disabled }) {
+// `pickedId` briefly flashes the checkbox for whichever direction the last
+// Make One Pair click actually drew for this side (App.jsx's own
+// lastRandomPick, mirroring the same hidden-choice flash used for the
+// classical/instruction-set source rows) -- null outside Make One Pair
+// mode, so a stream never lights any of these up.
+export function DirectionSamplingRow({ label, directions, selectedIds, onToggle, disabled, pickedId, pickedToken }) {
   const isChecked = (id) => selectedIds.includes(id);
   const invalid = selectedIds.length === 0;
   return (
@@ -161,17 +179,28 @@ export function DirectionSamplingRow({ label, directions, selectedIds, onToggle,
         }}
       >
         <label style={{ fontSize: '14px', fontWeight: '500' }}>{label}:</label>
-        {directions.map((dir, i) => (
-          <label key={dir.id} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap' }}>
-            <input
-              type="checkbox"
-              checked={isChecked(dir.id)}
-              onChange={(e) => onToggle(dir.id, e.target.checked)}
-              disabled={disabled}
-            />
-            D{i + 1}
-          </label>
-        ))}
+        {directions.map((dir, i) => {
+          const isPicked = dir.id === pickedId;
+          return (
+            <label
+              // Re-keyed on pickedToken only while picked, like the
+              // classical/instruction-set rows -- forces React to remount
+              // (and so restart the flash on) this checkbox even when the
+              // very same direction is drawn again on the next click.
+              key={isPicked ? `${dir.id}-${pickedToken}` : dir.id}
+              className={isPicked ? 'hidden-choice-flash' : undefined}
+              style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap' }}
+            >
+              <input
+                type="checkbox"
+                checked={isChecked(dir.id)}
+                onChange={(e) => onToggle(dir.id, e.target.checked)}
+                disabled={disabled}
+              />
+              D{i + 1}
+            </label>
+          );
+        })}
       </div>
       {invalid && (
         <p style={{ margin: '0 0 0 2px', color: '#cc3333', fontSize: '11px' }}>

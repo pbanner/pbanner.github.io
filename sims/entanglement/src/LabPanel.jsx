@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { samplePairOutcome } from './physics';
-import { DEG_TO_RAD } from './axisOptions';
+import { DEG_TO_RAD, RAD_TO_DEG } from './axisOptions';
+import { PHI_LOCKED } from './queryParams';
 import { PC_COLORS } from './colors';
 import { drawArrow, arrowWidth } from './canvasArrow';
 import sgImage from './assets/sg/SG.png';
@@ -68,31 +69,52 @@ const BEAM_TRANSVERSE_WIDTH = 14;  // px, full spread of the (uniform) beam jitt
 const PARTICLE_RADIUS = 4;
 const PARTICLE_COLOR = '#3498db';
 
-const SUB_LABELS = "₁₂₃₄₅₆₇₈₉";
-function getSGLabel(angles, id) {
-  if (angles[0] == 0) {
-    return 'Z';
-  } else if (angles[0] == Math.PI / 2) {
-    if (angles[1] == 0) {
-      return 'X';
-    } else if (angles[1] == Math.PI / 2) {
-      return 'Y';
-    }
+// Angles are always whole degrees at the source (directionListData.js), but
+// they arrive here as radians (sg.basis), so round on the way back to
+// degrees to avoid flagging something like 89.99999999999999 as "not X".
+// Returns a plain string for the on-axis cases, or a one- or two-line array
+// for everything else -- the caller decides how to draw each, and how many
+// lines it got.
+function getSGLabel(angles) {
+  const thetaDeg = Math.round(angles[0] * RAD_TO_DEG);
+  const phiDeg = Math.round(angles[1] * RAD_TO_DEG);
+  if (thetaDeg === 0) return 'Z';
+  if (thetaDeg === 180) return '-Z';
+  if (thetaDeg === 90) {
+    if (phiDeg === 0) return 'X';
+    if (phiDeg === 90) return 'Y';
+    if (phiDeg === 180) return '-X';
+    if (phiDeg === 270) return '-Y';
   }
-  return 'n̂' + SUB_LABELS[id];
+  // With phi locked to 0 (queryParams.js) -- and so never Y or -X's own 90
+  // or 270 above either, phi being the only thing that ever distinguishes
+  // them from X -- there's nothing left for a second line to say, and
+  // "theta" is the only angle this sim still exposes, so it needs no
+  // "theta:" prefix to disambiguate it from anything.
+  return PHI_LOCKED ? [`${thetaDeg}°`] : [`θ: ${thetaDeg}°`, `ϕ: ${phiDeg}°`];
 }
 
 // In Random choice mode there's no single "current" direction to label this
-// analyzer with -- a fresh one is drawn per *pair*, faster than any label
-// could meaningfully track once a stream is running -- so it just reads "?",
+// analyzer with -- a fresh one is drawn per *pair*. During a stream that's
+// faster than any label could meaningfully track, so it just reads "?",
 // unless exactly one direction is checked for this side, in which case
 // there's really only one possible setting and it can be labeled normally.
-function analyzerLabel(sg, sgIndex, analyzerMode, directionList, randomSampledDirectionIds) {
-  if (analyzerMode !== 'random') return getSGLabel(sg.basis, sgIndex);
+// In Make One Pair mode, though, a pair sits still until the next click, so
+// `pickedDirectionId` (the direction that pair's own random draw actually
+// landed on -- null in every other mode, see spawnParticle/lastRandomPick
+// below) takes priority over both of those: it's both correct and, unlike
+// the single-checked-direction case, still meaningful with several
+// directions checked.
+function analyzerLabel(sg, sgIndex, analyzerMode, directionList, randomSampledDirectionIds, pickedDirectionId) {
+  if (analyzerMode !== 'random') return getSGLabel(sg.basis);
+  if (pickedDirectionId) {
+    const direction = directionList.find((d) => d.id === pickedDirectionId);
+    if (direction) return getSGLabel([direction.thetaDeg * DEG_TO_RAD, direction.phiDeg * DEG_TO_RAD]);
+  }
   const ids = randomSampledDirectionIds[sgIndex];
   if (ids.length === 1) {
     const direction = directionList.find((d) => d.id === ids[0]);
-    if (direction) return getSGLabel([direction.thetaDeg * DEG_TO_RAD, direction.phiDeg * DEG_TO_RAD], sgIndex);
+    if (direction) return getSGLabel([direction.thetaDeg * DEG_TO_RAD, direction.phiDeg * DEG_TO_RAD]);
   }
   return '?';
 }
@@ -249,7 +271,7 @@ function buildBlockedLocalPath(axis) {
 const LabPanel = forwardRef(function LabPanel(
   {
     experiment, setExperiment, expMode, displayBools, setParticleCount, resetToken, tabVisible, hoveredDetectors,
-    onCoincidence, source, invalidAnalyzer, analyzerMode, directionList, randomSampledDirectionIds,
+    onCoincidence, onHiddenChoice, onRandomPick, source, invalidAnalyzer, analyzerMode, directionList, randomSampledDirectionIds,
   },
   ref
 ) {
@@ -271,6 +293,11 @@ const LabPanel = forwardRef(function LabPanel(
   const pendingCoincidencesRef = useRef(new Map());
   const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
   const [axis, setAxis] = useState(300); // y-coordinate of halfway down the canvas
+  // In Random choice mode, which direction each side's *last* Make One Pair
+  // click actually drew -- see analyzerLabel's own comment for why this
+  // only ever gets set (in spawnParticle) while in that mode, and is read
+  // back only there too, never during a stream.
+  const [lastRandomPick, setLastRandomPick] = useState({ 0: null, 1: null });
   const [ovenImageRef, ovenImageLoaded] = useImage(ovenImage);
   const [ovenOffImageRef, ovenOffImageLoaded] = useImage(ovenOffImage);
   const [sgImageRef, sgImageLoaded] = useImage(sgImage);
@@ -363,10 +390,25 @@ const LabPanel = forwardRef(function LabPanel(
         ctx.drawImage(sgImageRef.current, SG_X0_LOCAL, axis - SG_HEIGHT / 2, SG_WIDTH, SG_HEIGHT);
 
         ctx.fillStyle = '#303030';
-        ctx.font = '32px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        drawUnflippedText(ctx, side, analyzerLabel(sg, sgIndex, analyzerMode, directionList, randomSampledDirectionIds), SG_X0_LOCAL + 62, axis);
+        const pickedDirectionId = expMode.dc === 'single' ? lastRandomPick[sgIndex] : null;
+        const sgLabel = analyzerLabel(sg, sgIndex, analyzerMode, directionList, randomSampledDirectionIds, pickedDirectionId);
+        if (Array.isArray(sgLabel) && sgLabel.length === 1) {
+          // The phi-locked, single-line case -- a bigger font than the
+          // two-line one below, since one line alone leaves noticeably
+          // more of the SG box's own vertical space to fill.
+          ctx.font = '24px Arial';
+          drawUnflippedText(ctx, side, sgLabel[0], SG_X0_LOCAL + 62, axis);
+        } else if (Array.isArray(sgLabel)) {
+          ctx.font = '16px Arial';
+          const lineHeight = 18;
+          drawUnflippedText(ctx, side, sgLabel[0], SG_X0_LOCAL + 62, axis - lineHeight / 2);
+          drawUnflippedText(ctx, side, sgLabel[1], SG_X0_LOCAL + 62, axis + lineHeight / 2);
+        } else {
+          ctx.font = '32px Arial';
+          drawUnflippedText(ctx, side, sgLabel, SG_X0_LOCAL + 62, axis);
+        }
 
         if (invalidAnalyzer?.[sgIndex]) {
           ctx.strokeStyle = INVALID_ANALYZER_COLOR;
@@ -463,7 +505,7 @@ const LabPanel = forwardRef(function LabPanel(
         });
       });
     });
-  }, [experiment, expMode, displayBools, axis, canvasDims, hoveredDetectors, invalidAnalyzer, analyzerMode, directionList, randomSampledDirectionIds, pcImageRef, bbImageRef, ovenImageRef, ovenOffImageRef, sgImageRef]);
+  }, [experiment, expMode, displayBools, axis, canvasDims, hoveredDetectors, invalidAnalyzer, analyzerMode, directionList, randomSampledDirectionIds, lastRandomPick, pcImageRef, bbImageRef, ovenImageRef, ovenOffImageRef, sgImageRef]);
 
   const drawParticles = useCallback((ctx) => {
     const ovenCenterX = canvasDims.width / 2;
@@ -642,17 +684,36 @@ const LabPanel = forwardRef(function LabPanel(
   // discarded -- that particle gets the short "walk into the wall" path
   // instead, and is never credited to a detector.
   const spawnParticle = () => {
+    // Generated up front, rather than just before building the particles
+    // below, so it's already available to this pair's own random-pick and
+    // hidden-choice reports too -- it's how the tick loop's coincidence
+    // crediting recognizes a pair's two particles as partners, and (tagging
+    // those two reports) also what lets App.jsx's flash animations
+    // retrigger on a repeat pick of the very same direction/row/weight
+    // rather than looking like nothing happened.
+    const pairId = nextPairIdRef.current++;
     const randomL = analyzerMode === 'random' ? pickRandomDirection(0) : null;
     const randomR = analyzerMode === 'random' ? pickRandomDirection(1) : null;
+    // Only worth remembering/reporting in Make One Pair mode -- see
+    // analyzerLabel/lastRandomPick's own comments for why a stream never
+    // reads this back regardless.
+    if (analyzerMode === 'random' && expMode.dc === 'single') {
+      const picked = { 0: randomL?.directionId ?? null, 1: randomR?.directionId ?? null };
+      setLastRandomPick(picked);
+      onRandomPick?.({ ...picked, pairId });
+    }
     const basisL = randomL ? randomL.basis : experiment[0].basis;
     const basisR = randomR ? randomR.basis : experiment[1].basis;
-    const { armL, armR } = samplePairOutcome(basisL, basisR, source);
+    const { armL, armR, hidden } = samplePairOutcome(basisL, basisR, source);
     const leftBlocked = experiment[0].blocked;
     const rightBlocked = experiment[1].blocked;
-    // Both particles below share this same id -- it's how the tick loop's
-    // coincidence crediting recognizes them as one pair's two halves rather
-    // than two unrelated detector hits that happened to land together.
-    const pairId = nextPairIdRef.current++;
+    // Only reported in Make One Pair mode -- a stream would otherwise fire
+    // this dozens of times a second, and (per lastRandomPick's own
+    // reasoning above) that's not a rate any UI highlight could track
+    // either.
+    if (expMode.dc === 'single' && hidden) {
+      onHiddenChoice?.({ ...hidden, pairId });
+    }
     particlesRef.current = [
       ...particlesRef.current,
       leftBlocked

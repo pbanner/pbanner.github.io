@@ -358,19 +358,124 @@ export function jointProbabilities(basisL, basisR, source) {
   return jointProbabilitiesQuantum(basisL, basisR, source.coeffs);
 }
 
-// Monte-Carlo draw of one pair's joint outcome, weighted by
-// jointProbabilities -- the two arms are sampled together, from one shared
-// random number, precisely because (for a 'quantum' source) they are not
-// independent.
+// One weighted draw among 'uu'/'ud'/'du'/'dd', given their relative weights
+// -- same "up to normalization" contract as everywhere else in this file.
+// All-zero weights (jointProbabilitiesClassical's own degenerate case) falls
+// back to 'uu' rather than throwing, the same spirit as that function's own
+// all-zero fallback.
+function drawWeightedKey(weights) {
+  const total = weights.uu + weights.ud + weights.du + weights.dd;
+  if (total === 0) return 'uu';
+  const r = Math.random() * total;
+  let acc = 0;
+  for (const key of ['uu', 'ud', 'du', 'dd']) {
+    acc += weights[key];
+    if (r < acc) return key;
+  }
+  return 'dd'; // floating-point fallback if the four weights summed to just under `total`
+}
+
+// The classical model's own two actual steps, made explicit rather than
+// pre-aggregated into jointProbabilitiesClassical's closed form: first the
+// oven's weighted coin flip fixes a definite (hiddenL, hiddenR) pairing,
+// then each analyzer's own Born-rule measurement (singleProb) is drawn
+// independently against that fixed hidden value. This computes exactly the
+// same joint distribution jointProbabilitiesClassical's nested sum does --
+// it's just carried out as two real random draws instead of one draw
+// against a pre-summed table, so the hidden pairing itself is something a
+// caller can actually report (e.g. to flash the matching weight row in the
+// UI) rather than something only ever marginalized away.
+function sampleClassicalOutcome(basisL, basisR, weights) {
+  const key = drawWeightedKey(weights);
+  const hiddenL = key[0] === 'u';
+  const hiddenR = key[1] === 'u';
+  const armL = Math.random() < singleProb(basisL, 'up', hiddenL) ? 'up' : 'down';
+  const armR = Math.random() < singleProb(basisR, 'up', hiddenR) ? 'up' : 'down';
+  return { armL, armR, hidden: { kind: 'classical', key } };
+}
+
+// One weighted draw among `rows` (each one instruction set), by `weight` --
+// same contract as drawWeightedKey above, just over a caller-supplied list
+// rather than the fixed four classical keys. All-zero weights fall back to
+// the first row (a sheet is never editable down to zero rows, so `rows` is
+// never itself empty -- see removeZeroWeightInstructionRows).
+function drawWeightedRow(rows) {
+  const total = rows.reduce((sum, row) => sum + row.weight, 0);
+  if (total === 0) return rows[0];
+  const r = Math.random() * total;
+  let acc = 0;
+  for (const row of rows) {
+    acc += row.weight;
+    if (r < acc) return row;
+  }
+  return rows[rows.length - 1]; // floating-point fallback, same spirit as drawWeightedKey's own
+}
+
+// The instruction-sets model's own actual process, likewise made explicit:
+// draw the row(s) the oven's weighted die roll actually picked, then just
+// *read* each side's answer straight off it -- a row's signs are a
+// predetermined answer, not a further probability, so (unlike the classical
+// model above) there's no second Born-rule draw once the row is fixed.
+// Shared sheets (identical/opposite) draw one row and read both sides from
+// it (Right's answer flipped for 'opposite'); independent sheets draw each
+// side's own row from its own separate sheet. Either way, the drawn row
+// id(s) come back alongside the arms -- exactly the "which row" identity
+// jointProbabilitiesInstructionSets' pre-aggregated marginal can't offer a
+// caller, since it never draws a discrete row at all.
+function sampleInstructionSetOutcome(basisL, basisR, source) {
+  const { relationship, directionList, particle1, particle2 } = source;
+  const dirIndexL = findInstructionColumnIndex(basisL, directionList);
+  const dirIndexR = findInstructionColumnIndex(basisR, directionList);
+  if (dirIndexL === -1 || dirIndexR === -1) {
+    // Same "shouldn't happen, but don't throw" situation as
+    // jointProbabilitiesInstructionSets -- App.jsx itself keeps a pair from
+    // ever actually being run in this state.
+    return { armL: 'down', armR: 'down', hidden: null };
+  }
+  const dirIdL = directionList[dirIndexL].id;
+  const dirIdR = directionList[dirIndexR].id;
+
+  if (relationship === 'independent') {
+    const rowL = drawWeightedRow(particle1.rows);
+    const rowR = drawWeightedRow(particle2.rows);
+    return {
+      armL: rowL.signs[dirIdL],
+      armR: rowR.signs[dirIdR],
+      hidden: { kind: 'instructionSets', rowIdL: rowL.id, rowIdR: rowR.id },
+    };
+  }
+
+  const row = drawWeightedRow(particle1.rows);
+  const rightSign = row.signs[dirIdR];
+  return {
+    armL: row.signs[dirIdL],
+    armR: relationship === 'opposite' ? flipSign(rightSign) : rightSign,
+    // One shared row, so both sides report the very same id -- the row
+    // highlights identically whichever of the two sheets is displayed.
+    hidden: { kind: 'instructionSets', rowIdL: row.id, rowIdR: row.id },
+  };
+}
+
+// Monte-Carlo draw of one pair's joint outcome -- the two arms are sampled
+// together, not independently, and (for the classical and instruction-sets
+// sources) alongside whatever hidden, pre-existing choice actually produced
+// them (`hidden`; null for a quantum source, which has no such thing to
+// report) so a caller can surface it -- e.g. LabPanel flashing the matching
+// weight row or instruction-set row -- without having to re-derive it
+// itself. jointProbabilities (and so Histogram.jsx's theoretical-
+// probability overlay) is untouched by any of this -- this is only about
+// how a single actual pair gets drawn.
 export function samplePairOutcome(basisL, basisR, source) {
-  const probs = jointProbabilities(basisL, basisR, source);
+  if (source.kind === 'classical') return sampleClassicalOutcome(basisL, basisR, source.weights);
+  if (source.kind === 'instructionSets') return sampleInstructionSetOutcome(basisL, basisR, source);
+  const probs = jointProbabilitiesQuantum(basisL, basisR, source.coeffs);
   const r = Math.random();
   let acc = 0;
   for (const key of ['uu', 'ud', 'du', 'dd']) {
     acc += probs[key];
-    if (r < acc) return { armL: key[0] === 'u' ? 'up' : 'down', armR: key[1] === 'u' ? 'up' : 'down' };
+    if (r < acc) return { armL: key[0] === 'u' ? 'up' : 'down', armR: key[1] === 'u' ? 'up' : 'down', hidden: null };
   }
-  return { armL: 'down', armR: 'down' }; // floating-point fallback if the four probabilities summed to just under 1
+  return { armL: 'down', armR: 'down', hidden: null }; // floating-point fallback if the four probabilities summed to just under 1
 }
 
 // Exact theoretical hit probability for each of the four fixed detectors,

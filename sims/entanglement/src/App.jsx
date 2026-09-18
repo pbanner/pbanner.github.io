@@ -2,14 +2,16 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import './App.css';
 import LabPanel from './LabPanel';
 import Histogram from './Histogram';
-import { AxisStepper, SliderPlusTextboxControl, NumberField } from './controls';
+import { AxisStepper, SliderPlusTextboxControl, NumberField, ComplexExprField, EXPR_FONT_FAMILY } from './controls';
 import { SG_OPTION_LABELS, SG_OPTION_BASES, DEG_TO_RAD } from './axisOptions';
 import { BELL_STATES, findInstructionColumnIndex } from './physics';
+import { compileComplexExpression } from './complexExpr';
 import TeX from './TeX';
 import InstructionSetControls from './instructionSets';
 import { createInitialInstructionSheet, addSignToRows, removeSignFromRows, generateAllInstructionSets } from './instructionSetsData';
 import { DirectionList, DirectionListStepper, DirectionSamplingRow } from './directionList';
 import { createInitialDirectionList, addDirection, deleteDirection, editDirection } from './directionListData';
+import { PHI_LOCKED } from './queryParams';
 
 // Unicode glyphs (▶ ⏸) bake their own, font-dependent vertical padding into
 // the glyph box, so flexbox centering lines up the boxes but not the visible
@@ -118,6 +120,8 @@ function AnalyzerStepper({ index, sg, setExperiment, disabled, resetDataCollecti
           directions={samplingMode.directions}
           selectedIds={samplingMode.selectedIds}
           onToggle={samplingMode.onToggle}
+          pickedId={samplingMode.pickedId}
+          pickedToken={samplingMode.pickedToken}
           disabled={disabled || sg.blocked}
         />
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 6px 6px 6px' }}>
@@ -223,6 +227,15 @@ function bellExpressionTex(bell) {
 const CUSTOM_STATE_FORMULA_TEX =
   `a${spinKetTex(['up', 'up'])} + b${spinKetTex(['up', 'down'])} + c${spinKetTex(['down', 'up'])} + d${spinKetTex(['down', 'down'])}`;
 
+// Same "highlighted inline code" look the optics-lab sim's own trial-
+// function help popover uses for its operator/function/constant lists
+// (App.css's .sweep-trial-help-popover code) -- reproduced here as a
+// plain inline style (matching this file's own convention of styling
+// one-off text inline rather than growing App.css for something used in
+// exactly one place), sharing controls.jsx's EXPR_FONT_FAMILY so a
+// snippet reads in the exact same font as the field it's describing.
+const CODE_SNIPPET_STYLE = { fontFamily: EXPR_FONT_FAMILY, background: '#f0f0f0', padding: '1px 4px', borderRadius: '3px' };
+
 // The four definite states the classical model's hidden-variable coin can
 // hand out, in the same up-up/up-down/down-up/down-down order as every other
 // joint-outcome listing in this file -- each row's own weight input is
@@ -248,7 +261,7 @@ function SourceControls({
   sourceType, setSourceType, bellKey, setBellKey, classicalWeights, setClassicalWeights, customCoeffs, setCustomCoeffs,
   instructionRelationship, setInstructionRelationship, instructionShowing, setInstructionShowing,
   instructionParticle1, setInstructionParticle1, instructionParticle2, setInstructionParticle2,
-  directionList, displayedDirectionIds,
+  directionList, displayedDirectionIds, hiddenChoice,
   disabled, resetDataCollection,
 }) {
   const selectedBell = BELL_STATES.find((b) => b.key === bellKey);
@@ -287,25 +300,35 @@ function SourceControls({
 
       {sourceType === 'classical' && (
         <>
-          <p style={{ fontSize: '13px', margin: '10px 0 8px 0', lineHeight: '1.6' }}>
-            Each pair is definitely one of the four states below -- never a
-            superposition of them -- with relative weight:
+          <p style={{ fontSize: '13px', margin: '10px 0 8px 0', lineHeight: '1.3' }}>
+            <strong>This model:</strong> Each pair is produced in one of the four states below. The source randomly picks which one, with probability give by the weight.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {CLASSICAL_WEIGHT_ROWS.map(({ key, arms }) => (
-              <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
-                  <TeX math={spinKetTex(arms)} /> =
-                </span>
-                <NumberField
-                  step="0.01"
-                  value={classicalWeights[key]}
-                  onCommit={(v) => changeClassicalWeight(key, v)}
-                  disabled={disabled}
-                  style={{ width: '80px', padding: '2px' }}
-                />
-              </label>
-            ))}
+            {CLASSICAL_WEIGHT_ROWS.map(({ key, arms }) => {
+              const isPicked = hiddenChoice?.kind === 'classical' && hiddenChoice.key === key;
+              return (
+                // Re-keyed on pairId only while picked -- React then treats
+                // this as a brand-new element on every pick, remounting it
+                // (and so restarting the flash below) even when the very
+                // same row is picked twice in a row.
+                <label
+                  key={isPicked ? `${key}-${hiddenChoice.pairId}` : key}
+                  className={isPicked ? 'hidden-choice-flash' : undefined}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+                    <TeX math={spinKetTex(arms)} /> =
+                  </span>
+                  <NumberField
+                    step="0.01"
+                    value={classicalWeights[key]}
+                    onCommit={(v) => changeClassicalWeight(key, v)}
+                    disabled={disabled}
+                    style={{ width: '80px', padding: '2px' }}
+                  />
+                </label>
+              );
+            })}
           </div>
           <p style={{ fontSize: '12px', color: '#666', margin: '8px 0 0 0', lineHeight: '1.5' }}>
             Weights don't need to be normalized -- (1, 0, 0, 1) works just as
@@ -326,6 +349,15 @@ function SourceControls({
           setParticle2={setInstructionParticle2}
           allDirections={directionList}
           displayedDirectionIds={displayedDirectionIds}
+          // Each side reports its own row id (the same id on both when the
+          // relationship shares one sheet -- see samplePairOutcome), so
+          // whichever sheet SheetPanel is currently showing highlights
+          // against the matching one of the two.
+          highlightRowIds={{
+            particle1: hiddenChoice?.kind === 'instructionSets' ? hiddenChoice.rowIdL : null,
+            particle2: hiddenChoice?.kind === 'instructionSets' ? hiddenChoice.rowIdR : null,
+          }}
+          highlightToken={hiddenChoice?.pairId}
           disabled={disabled}
           resetDataCollection={resetDataCollection}
         />
@@ -333,6 +365,9 @@ function SourceControls({
 
       {sourceType === 'bell' && (
         <>
+          <p style={{ fontSize: '13px', margin: '10px 0 8px 0', lineHeight: '1.3' }}>
+            <strong>This model:</strong> The source produces the Bell state you choose from the buttons below.
+          </p>
           <div style={{ display: 'flex', gap: '6px', margin: '10px 0 10px 0' }}>
             {BELL_STATES.map((b) => (
               <button
@@ -348,7 +383,7 @@ function SourceControls({
               </button>
             ))}
           </div>
-          <p style={{ fontSize: '13px', margin: 0, lineHeight: '1.6' }}>
+          <p style={{ fontSize: '20px', margin: '10px 0px', lineHeight: '1.6', textAlign: 'center' }}>
             <TeX math={bellExpressionTex(selectedBell)} />
           </p>
         </>
@@ -356,27 +391,59 @@ function SourceControls({
 
       {sourceType === 'custom' && (
         <>
+          <p style={{ fontSize: '13px', margin: '10px 0 8px 0', lineHeight: '1.3' }}>
+            <strong>This model:</strong> The source produces pairs in the superposition below, whose coefficients you can choose.
+          </p>
           <p style={{ fontSize: '13px', margin: '10px 0 8px 0', lineHeight: '1.6' }}>
             <TeX math={CUSTOM_STATE_FORMULA_TEX} />
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {['a', 'b', 'c', 'd'].map((k) => (
-              <label key={k} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
-                <span style={{ minWidth: '24px', whiteSpace: 'nowrap' }}>{k} =</span>
-                <NumberField
-                  step="0.01"
-                  value={customCoeffs[k]}
-                  onCommit={(v) => changeCoeff(k, v)}
-                  disabled={disabled}
-                  style={{ width: '80px', padding: '2px' }}
-                />
-              </label>
-            ))}
+            {['a', 'b', 'c', 'd'].map((k) => {
+              const compiled = compileComplexExpression(customCoeffs[k]);
+              return (
+                <div key={k}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+                    <span style={{ minWidth: '24px', whiteSpace: 'nowrap' }}>{k} =</span>
+                    <ComplexExprField
+                      value={customCoeffs[k]}
+                      onCommit={(v) => changeCoeff(k, v)}
+                      disabled={disabled}
+                      style={{ width: '140px', padding: '2px' }}
+                    />
+                  </label>
+                  {!compiled.ok && (
+                    <p style={{ margin: '2px 0 0 32px', color: '#cc3333', fontSize: '11px' }}>{compiled.error}</p>
+                  )}
+                </div>
+              );
+            })}
           </div>
-          <p style={{ fontSize: '12px', color: '#666', margin: '8px 0 0 0', lineHeight: '1.5' }}>
-            Coefficients don't need to be normalized -- (1, 0, 0, 1) works
-            just as well as (1/√2, 0, 0, 1/√2).
-          </p>
+          <div style={{ fontSize: '12px', color: '#666', margin: '8px 0 0 0', lineHeight: '1.6' }}>
+            <p style={{ margin: '4px 0' }}>Each textbox accepts math expressions:</p>
+            <p style={{ margin: '4px 18px' }}>• Operators: 
+              <code style={CODE_SNIPPET_STYLE}>+</code> 
+              <code style={CODE_SNIPPET_STYLE}>-</code> 
+              <code style={CODE_SNIPPET_STYLE}>*</code> 
+              <code style={CODE_SNIPPET_STYLE}>/</code> 
+              <code style={CODE_SNIPPET_STYLE}>^</code> 
+              </p>
+            <p style={{ margin: '4px 18px' }}>• Functions: 
+              <code style={CODE_SNIPPET_STYLE}>sin</code> 
+              <code style={CODE_SNIPPET_STYLE}>cos</code> 
+              <code style={CODE_SNIPPET_STYLE}>tan</code> 
+              <code style={CODE_SNIPPET_STYLE}>sqrt</code> 
+            </p>
+            <p style={{ margin: '4px 18px' }}>• Constants:
+              <code style={CODE_SNIPPET_STYLE}>i</code>
+              <code style={CODE_SNIPPET_STYLE}>e</code>
+              <code style={CODE_SNIPPET_STYLE}>pi</code>
+            </p>
+            <p style={{ margin: '4px 18px' }}>• Example: <code style={CODE_SNIPPET_STYLE}>e^(i*pi/4)</code></p>
+            <p style={{ margin: '4px 0' }}>
+              <strong>Note:</strong> Coefficients don't need to be normalized -- <code style={CODE_SNIPPET_STYLE}>1, 0, 0, 1</code> works
+              just as well as <code style={CODE_SNIPPET_STYLE}>1/sqrt(2), 0, 0, 1/sqrt(2)</code>.
+            </p>
+          </div>
         </>
       )}
     </>
@@ -455,7 +522,12 @@ export default function App() {
   // {1,0,0,1} reproduces this sim's original, controls-less classical model
   // (a fixed 50/50 up-up/down-down mixture) exactly.
   const [classicalWeights, setClassicalWeights] = useState({ uu: 1, ud: 0, du: 0, dd: 1 });
-  const [customCoeffs, setCustomCoeffs] = useState({ a: 1, b: 0, c: 0, d: 1 });
+  // Each of these is a complexExpr.js source string, not a plain number --
+  // it's compiled (see the `source` object below and anyCustomCoeffInvalid)
+  // wherever the actual complex value is needed, so a coefficient can be
+  // any expression that module understands (negative, imaginary, a
+  // complex exponential, ...), not just a bare real number.
+  const [customCoeffs, setCustomCoeffs] = useState({ a: '1', b: '0', c: '0', d: '1' });
 
   // Every piece of initial state below that's derived from a freshly-built
   // direction list is computed together, in this one lazy initializer,
@@ -592,11 +664,18 @@ export default function App() {
         ? { kind: 'quantum', coeffs: BELL_STATES.find((b) => b.key === bellKey).coeffs }
         : {
             kind: 'quantum',
+            // A coefficient that doesn't currently parse falls back to a
+            // plain 0 -- harmless here since anyCustomCoeffInvalid (below)
+            // is what actually keeps Start/Make One Pair from running on
+            // it; this fallback only exists so the Histogram overlay (which
+            // recomputes on every render regardless of whether Run is
+            // enabled) has *some* number to work with mid-edit, same
+            // reasoning as physics.js's own instruction-set fallback.
             coeffs: {
-              uu: { re: customCoeffs.a, im: 0 },
-              ud: { re: customCoeffs.b, im: 0 },
-              du: { re: customCoeffs.c, im: 0 },
-              dd: { re: customCoeffs.d, im: 0 },
+              uu: compileComplexExpression(customCoeffs.a).value ?? { re: 0, im: 0 },
+              ud: compileComplexExpression(customCoeffs.b).value ?? { re: 0, im: 0 },
+              du: compileComplexExpression(customCoeffs.c).value ?? { re: 0, im: 0 },
+              dd: compileComplexExpression(customCoeffs.d).value ?? { re: 0, im: 0 },
             },
           };
 
@@ -655,6 +734,12 @@ export default function App() {
   // above -- there's no "current" setting to show a warning arrow at on the
   // canvas.
   const anyRandomSamplingEmpty = analyzerMode === 'random' && (randomSampledDirectionIds[0].length === 0 || randomSampledDirectionIds[1].length === 0);
+  // A custom-state coefficient that doesn't currently parse already shows
+  // its own red error message right under the field it belongs to (see
+  // SourceControls above) -- same reasoning as anyInstructionInvalid's own
+  // comment for treating this as a silent Start/Make-One-Pair no-op rather
+  // than disabling the button outright.
+  const anyCustomCoeffInvalid = sourceType === 'custom' && ['a', 'b', 'c', 'd'].some((k) => !compileComplexExpression(customCoeffs[k]).ok);
 
   const changeAnalyzerMode = (mode) => {
     setAnalyzerMode(mode);
@@ -681,6 +766,24 @@ export default function App() {
   const [particleCount, setParticleCount] = useState(0);
   const [resetToken, setResetToken] = useState(0);
   const streamTimerRef = useRef(null);
+
+  // The hidden choice behind the most recent Make One Pair click, for a
+  // 'classical' or 'instructionSets' source -- null for every other source
+  // (nothing hidden to report) and, per LabPanel's own onHiddenChoice
+  // guard, never updated by a stream. { kind: 'classical', key, pairId } or
+  // { kind: 'instructionSets', rowIdL, rowIdR, pairId }; pairId (unique per
+  // pair, even a repeat of the same row/key) is what lets SourceControls'
+  // flash animation below retrigger on every click rather than just the
+  // first time a given row is picked. See physics.js's samplePairOutcome.
+  const [hiddenChoice, setHiddenChoice] = useState(null);
+
+  // Which direction each side's last Make One Pair click actually drew, in
+  // Random choice mode -- mirrors LabPanel's own internal copy (which it
+  // keeps for the SG label), reported up separately so this sidebar's own
+  // Left:/Right: checkboxes can flash the matching one too. { 0: id|null,
+  // 1: id|null, pairId }; pairId is what lets the flash retrigger even when
+  // the same direction is drawn again on the next click.
+  const [lastRandomPick, setLastRandomPick] = useState({ 0: null, 1: null, pairId: null });
 
   const controlsLocked = particleCount > 0;
 
@@ -724,7 +827,7 @@ export default function App() {
     // disables the button itself (see the render below), but this guard
     // stays too as a belt-and-braces check against the button somehow being
     // clicked anyway.
-    if (anyInstructionInvalid || anyRandomSamplingEmpty) return;
+    if (anyInstructionInvalid || anyRandomSamplingEmpty || anyCustomCoeffInvalid) return;
     if (expMode.dc === 'single') {
       labPanelRef.current?.spawnParticle();
       return;
@@ -733,13 +836,13 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (expMode.dc === 'stream' && expMode.running && tabVisible && !anyInstructionInvalid && !anyRandomSamplingEmpty) {
+    if (expMode.dc === 'stream' && expMode.running && tabVisible && !anyInstructionInvalid && !anyRandomSamplingEmpty && !anyCustomCoeffInvalid) {
       streamTimerRef.current = setInterval(() => {
         labPanelRef.current?.spawnParticle();
       }, 1 / expMode.rate * 1000);
       return () => clearInterval(streamTimerRef.current);
     }
-  }, [expMode.dc, expMode.running, expMode.rate, tabVisible, anyInstructionInvalid, anyRandomSamplingEmpty]);
+  }, [expMode.dc, expMode.running, expMode.rate, tabVisible, anyInstructionInvalid, anyRandomSamplingEmpty, anyCustomCoeffInvalid]);
 
   return (
     <div className="app-layout">
@@ -760,6 +863,8 @@ export default function App() {
             tabVisible={tabVisible}
             hoveredDetectors={histDisplayBools.hoveredDetectors}
             onCoincidence={recordCoincidence}
+            onHiddenChoice={setHiddenChoice}
+            onRandomPick={setLastRandomPick}
             source={source}
             invalidAnalyzer={instructionInvalid}
             analyzerMode={analyzerMode}
@@ -791,6 +896,7 @@ export default function App() {
               0: relevantDirectionIdsForSide(0, directionList.map((d) => d.id), randomSampledDirectionIds),
               1: relevantDirectionIdsForSide(1, directionList.map((d) => d.id), randomSampledDirectionIds),
             }}
+            hiddenChoice={hiddenChoice}
             disabled={controlsLocked}
             resetDataCollection={resetDataCollection}
           />
@@ -813,7 +919,7 @@ export default function App() {
             </label>
             {followDirectionList && (
               <>
-                <p style={{ fontSize: '14px', margin: '0 0 -4px 0' }}><strong>Direction list</strong> (click to edit):</p>
+                <p style={{ fontSize: '14px', margin: '0 0 -4px 0' }}><strong>Direction list {PHI_LOCKED ? '' : '(θ, ϕ)'}</strong> (click to edit):</p>
                 <DirectionList
                   directions={directionList}
                   onEditDirection={handleEditDirection}
@@ -843,6 +949,8 @@ export default function App() {
                           }));
                           resetDataCollection();
                         },
+                        pickedId: lastRandomPick[i],
+                        pickedToken: lastRandomPick.pairId,
                       }
                     : null
                 }

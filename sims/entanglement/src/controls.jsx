@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { SG_OPTION_LABELS, SG_OPTION_BASES, RAD_TO_DEG, DEG_TO_RAD, roundDeg } from './axisOptions';
+import { PHI_LOCKED } from './queryParams';
 
 // A plain <input type="number"> whose displayed text, while focused, is a
 // local buffer rather than always mirroring the committed numeric value --
@@ -45,6 +46,45 @@ export function NumberField({ value, onCommit, parse = parseFloat, ...inputProps
   );
 }
 
+// A plain <input type="text"> counterpart to NumberField above, for the
+// Quantum Custom State amplitude fields (App.jsx) -- same "buffer while
+// focused, commit on blur" reasoning (so each keystroke doesn't fire
+// resetDataCollection on its own), just without NumberField's type="number"
+// input and parseFloat, neither of which can accept -- or even let a
+// browser's number input *contain* -- anything like "1/sqrt(2)" or "i".
+// Committing here is unconditional (there's no numeric parse to fail): a
+// half-typed or invalid expression is still a string worth keeping exactly
+// as typed, so the caller's own complexExpr.js compile step (and whatever
+// error message it shows) is what tells the user something's wrong, not a
+// silently-rejected commit. Rendered in a fixed-width font, like the
+// optics-lab sim's own trial-function textbox (its .sweep-trial-row
+// input[type="text"]) -- this field is always an expression, never prose,
+// and monospace is what makes parentheses/operators easy to visually pair
+// up while typing one.
+// Exported so App.jsx's own explanatory text can highlight an inline
+// expression snippet (e.g. "1/sqrt(2)") in the exact same font as the
+// field it's describing.
+export const EXPR_FONT_FAMILY = "'Courier New', monospace";
+
+export function ComplexExprField({ value, onCommit, disabled, style }) {
+  const [editing, setEditing] = useState(false);
+  const [textValue, setTextValue] = useState('');
+  const displayValue = editing ? textValue : value;
+
+  return (
+    <input
+      type="text"
+      value={displayValue}
+      disabled={disabled}
+      onFocus={() => { setTextValue(value); setEditing(true); }}
+      onChange={(e) => setTextValue(e.target.value)}
+      onBlur={() => { setEditing(false); onCommit(textValue); }}
+      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+      style={{ fontFamily: EXPR_FONT_FAMILY, ...style }}
+    />
+  );
+}
+
 // A stepper through X/Y/Z (or, in `advanced` mode, raw theta/phi textboxes)
 // for any [theta, phi] axis value. Deliberately knows nothing about *what*
 // the axis belongs to (an analyzer's measurement basis, or one arm's field)
@@ -65,7 +105,7 @@ export function AxisStepper({ label, value, advanced, onStep, onSetAdvanced, onS
       {advanced ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <label style={{ width: '12px' }}>θ</label>
+            <label style={{ width: '12px' }}>θ:</label>
             <NumberField
               min={0}
               max={180}
@@ -77,19 +117,21 @@ export function AxisStepper({ label, value, advanced, onStep, onSetAdvanced, onS
             />
             <span>°</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <label style={{ width: '12px' }}>ϕ</label>
-            <NumberField
-              min={0}
-              max={360}
-              step={1}
-              value={roundDeg(value[1] * RAD_TO_DEG)}
-              disabled={disabled}
-              onCommit={(v) => onSetAngle('phi', v * DEG_TO_RAD)}
-              style={{ width: '70px', padding: '2px' }}
-            />
-            <span>°</span>
-          </div>
+          {!PHI_LOCKED && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <label style={{ width: '12px' }}>ϕ:</label>
+              <NumberField
+                min={0}
+                max={360}
+                step={1}
+                value={roundDeg(value[1] * RAD_TO_DEG)}
+                disabled={disabled}
+                onCommit={(v) => onSetAngle('phi', v * DEG_TO_RAD)}
+                style={{ width: '70px', padding: '2px' }}
+              />
+              <span>°</span>
+            </div>
+          )}
         </div>
       ) : (
         <div className="axis-stepper">
