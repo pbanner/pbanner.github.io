@@ -1,9 +1,10 @@
 import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { upEigenstate, downEigenstate, applyT, applyField, recombineThroughFields, sampleOvenState, cAbs2, theoreticalProbabilities } from './physics';
+import { upEigenstate, downEigenstate, applyT, applyField, recombineThroughFields, sampleOvenState, cAbs2, theoreticalProbabilityMap } from './physics';
 import { PC_COLORS } from './colors';
 import { arrowWidth, drawArrow } from './canvasArrow';
 import { AxisStepper } from './controls';
-import { SG_OPTION_LABELS, SG_OPTION_BASES } from './axisOptions';
+import { SG_OPTION_LABELS, SG_OPTION_BASES, RAD_TO_DEG, roundDeg } from './axisOptions';
+import { PHI_LOCKED, NORMALIZE_TO_DETECTED } from './queryParams';
 import sgImage from './assets/SG.png';
 import pcImage from './assets/PC.png';
 import bbImage from './assets/BB.png';
@@ -102,18 +103,28 @@ const ERROR_TEXT_MAX_WIDTH = 200;  // px -- how far the wrapped warning text may
 const ERROR_TEXT_LINE_HEIGHT = 18; // px between wrapped lines
 const ERROR_TEXT_GAP = 14;         // px between a warning circle's edge and its text
 
-const SUB_LABELS = "₁₂₃₄₅₆₇₈₉";
-function getSGLabel(angles, id) {
-  if (angles[0] == 0) {
-    return 'Z';
-  } else if (angles[0] == Math.PI/2) {
-    if (angles[1] == 0) {
-      return 'X';
-    } else if (angles[1] == Math.PI/2) {
-      return 'Y';
-    }
+// Same labeling scheme as the entanglement sim's own getSGLabel: a plain
+// string for the on-axis cases, or a one- or two-line array of angles for
+// everything else -- the caller decides how to draw each, and how many
+// lines it got. Unlike there, angles here aren't guaranteed whole degrees
+// (the theta/phi textboxes accept e.g. 37.5), so this rounds with roundDeg
+// -- enough to hide floating-point noise like 89.99999999999999 without
+// mislabeling a genuinely off-axis 89.6 as "X" the way Math.round would.
+function getSGLabel(angles) {
+  const thetaDeg = roundDeg(angles[0] * RAD_TO_DEG);
+  const phiDeg = roundDeg(angles[1] * RAD_TO_DEG);
+  if (thetaDeg === 0) return 'Z';
+  if (thetaDeg === 180) return '-Z';
+  if (thetaDeg === 90) {
+    if (phiDeg === 0) return 'X';
+    if (phiDeg === 90) return 'Y';
+    if (phiDeg === 180) return '-X';
+    if (phiDeg === 270) return '-Y';
   }
-  return 'n̂'+SUB_LABELS[id];
+  // With phi locked to 0 (queryParams.js) there's nothing left for a
+  // second line to say, and theta is the only angle still exposed, so it
+  // needs no "θ:" prefix to disambiguate it from anything.
+  return PHI_LOCKED ? [`${thetaDeg}°`] : [`θ: ${thetaDeg}°`, `ϕ: ${phiDeg}°`];
 }
 
 function useImage(src) {
@@ -756,7 +767,7 @@ function FieldOverlayPanel({ sgIndex, arm, field, setExperiment, resetDataCollec
 }
 
 const LabPanel = forwardRef(function LabPanel(
-  { experiment, setExperiment, expMode, setExpMode, displayBools, setParticleCount, resetToken, resetDataCollection, tabVisible, startError, hoveredDetector, controlsLocked },
+  { experiment, setExperiment, expMode, setExpMode, displayBools, setParticleCount, setOvenTotal, resetToken, resetDataCollection, tabVisible, startError, hoveredDetector, controlsLocked },
   ref
 ) {
   const canvasRef = useRef(null);
@@ -883,16 +894,13 @@ const LabPanel = forwardRef(function LabPanel(
     const activeComponentImageRef = expMode.build === 1 ? pcImageRef : bbImageRef;
 
     // theoryScreenshotToggle (Shift+P): exact theoretical hit probability
-    // per placed PC, renormalized to sum to 1 across just the placed PCs --
-    // built the same way Histogram.jsx builds its own theory overlay, so
+    // per placed PC, normalized to every particle out of the oven (or, with
+    // ?normalize=detected, to just the detected ones) -- via the same
+    // physics.js helper Histogram.jsx uses for its own theory overlay, so
     // the percentage shown here on the apparatus always matches the one the
     // histogram would show.
     const theoryMap = displayBools.theoryScreenshotToggle
-      ? (() => {
-          const theoryList = theoreticalProbabilities(experiment);
-          const theorySum = theoryList.reduce((s, t) => s + t.prob, 0);
-          return new Map(theoryList.map((t) => [`${t.sgIndex}-${t.arm}`, theorySum > 0 ? t.prob / theorySum : 0]));
-        })()
+      ? theoreticalProbabilityMap(experiment, NORMALIZE_TO_DETECTED)
       : null;
 
     // Draw the SGs, one copy of the ref image each, plus the basis labels
@@ -919,12 +927,27 @@ const LabPanel = forwardRef(function LabPanel(
         // Draw the SGs
         ctx.drawImage(sgImageRef.current, x0, axis - SG_HEIGHT / 2, SG_WIDTH, SG_HEIGHT);
 
-        // Draw the basis label
+        // Draw the basis label -- font sizes match the entanglement sim's
+        // own for each of getSGLabel's three shapes, so the two sims' SG
+        // boxes read the same.
         ctx.fillStyle = '#303030';
-        ctx.font = '32px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(getSGLabel(sg.basis, i), x0+62, axis);
+        const sgLabel = getSGLabel(sg.basis);
+        if (Array.isArray(sgLabel) && sgLabel.length === 1) {
+          // The phi-locked, single-line case -- bigger than the two-line
+          // case below, since one line alone leaves more of the box to fill.
+          ctx.font = '24px Arial';
+          ctx.fillText(sgLabel[0], x0+62, axis);
+        } else if (Array.isArray(sgLabel)) {
+          ctx.font = '16px Arial';
+          const lineHeight = 18;
+          ctx.fillText(sgLabel[0], x0+62, axis - lineHeight / 2);
+          ctx.fillText(sgLabel[1], x0+62, axis + lineHeight / 2);
+        } else {
+          ctx.font = '32px Arial';
+          ctx.fillText(sgLabel, x0+62, axis);
+        }
 
         // Draw whatever's really placed on each arm -- except the site
         // currently snapped to in build mode, whose occupant (if any) is
@@ -1214,6 +1237,11 @@ const LabPanel = forwardRef(function LabPanel(
       });
 
       if (finished.length > 0) {
+        // Every finished particle counts toward the oven total, wherever
+        // it ended up (PC, BB, or off the end) -- counted on arrival, not
+        // on spawn, so in-flight particles never drag percentages down
+        // relative to the PC counts, which also only update on arrival.
+        setOvenTotal((n) => n + finished.length);
         const pcHits = finished.filter((p) => p.terminal && p.terminal.dest.type === 'pc');
         if (pcHits.length > 0) {
           setExperiment((prev) => {

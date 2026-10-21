@@ -349,6 +349,13 @@ export default function App() {
   // Particle propagation
   const labPanelRef = useRef(null);
   const [particleCount, setParticleCount] = useState(0);
+  // Every particle out of the oven whose flight has finished, wherever it
+  // ended up (PC or BB) -- the denominator for every displayed percentage
+  // unless ?normalize=detected (see queryParams.js). PC hit counts alone
+  // can't supply this, since BB-absorbed particles are never recorded
+  // anywhere else. Incremented by LabPanel's animation loop, zeroed
+  // alongside the PC counts in resetDataCollection.
+  const [ovenTotal, setOvenTotal] = useState(0);
   const [resetToken, setResetToken] = useState(0);
   const streamTimerRef = useRef(null);
 
@@ -378,6 +385,7 @@ export default function App() {
   // would zero itself out the instant a particle actually landed.
   const resetDataCollection = () => {
     setResetToken((t) => t + 1);
+    setOvenTotal(0);
     setExpMode((prev) => ({ ...prev, running: false }));
     setExperiment((prev) => prev.map((sg) => ({
       ...sg,
@@ -481,6 +489,7 @@ export default function App() {
           setExpMode={setExpMode}
           displayBools={displayBools}
           setParticleCount={setParticleCount}
+          setOvenTotal={setOvenTotal}
           resetToken={resetToken}
           resetDataCollection={resetDataCollection}
           tabVisible={tabVisible}
@@ -572,7 +581,7 @@ export default function App() {
             </div>
             <div className="histogram-panel">
               <div className="histogram-canvas-wrap">
-                <Histogram experiment={experiment} displayBools={histDisplayBools} setDisplayBools={setHistDisplayBools} />
+                <Histogram experiment={experiment} ovenTotal={ovenTotal} displayBools={histDisplayBools} setDisplayBools={setHistDisplayBools} />
               </div>
             </div>
           </div>

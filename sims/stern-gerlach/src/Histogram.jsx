@@ -1,7 +1,8 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { theoreticalProbabilities } from './physics';
+import { theoreticalProbabilityMap } from './physics';
 import { PC_COLORS } from './colors';
 import { arrowWidth, drawArrow } from './canvasArrow';
+import { NORMALIZE_TO_DETECTED } from './queryParams';
 
 // Plot layout -- all tunable
 const PADDING_TOP = 25;
@@ -71,7 +72,7 @@ function niceTicks(minTop, targetCount) {
   return ticks;
 }
 
-export default function Histogram({ experiment, displayBools, setDisplayBools }) {
+export default function Histogram({ experiment, ovenTotal, displayBools, setDisplayBools }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [canvasDims, setCanvasDims] = useState({ width: 300, height: 200 });
@@ -134,31 +135,21 @@ export default function Histogram({ experiment, displayBools, setDisplayBools })
 
     const rawDetectors = getDetectors(experiment);
     const dataTotal = rawDetectors.reduce((sum, d) => sum + d.count, 0);
+    // The population every percentage (and the "N =" in the title) is
+    // measured against: every particle out of the oven by default, or just
+    // the detected ones with ?normalize=detected (see queryParams.js).
+    const normTotal = NORMALIZE_TO_DETECTED ? dataTotal : ovenTotal;
 
     // Theoretical probabilities are computed exactly (see physics.js), not
-    // sampled -- converted to an expected *count* by scaling against the
-    // same dataTotal the observed bars are drawn against, so the reference
-    // line is a fair comparison against however much data has actually
-    // been collected so far.
-    //
-    // theoreticalProbabilities() is normalized against the *entire* oven
-    // ensemble, including particles that never reach a placed PC at all
-    // (absorbed by a beam block, or run off the end of the chain
-    // unmeasured) -- but dataTotal only ever counts particles that landed
-    // in a placed PC, since that's all the histogram can see. Comparing
-    // raw theoryProb against that would make the reference lines too low
-    // (and not sum to dataTotal) any time a BB or an open end siphons off
-    // some fraction of the particles, so it's renormalized here to sum to
-    // 1 across just the placed PCs, matching what dataTotal actually
-    // represents.
+    // sampled -- converted to an expected *count* by scaling against
+    // normTotal, so the reference line is a fair comparison against
+    // however much data has actually been collected so far. The map is
+    // normalized against that same population (theoreticalProbabilityMap
+    // renormalizes over just the placed PCs when normTotal is dataTotal),
+    // so probability times total always describes one consistent set of
+    // particles.
     const theoryOn = displayBools.showTheory;
-    const theoryMap = theoryOn
-      ? (() => {
-          const theoryList = theoreticalProbabilities(experiment);
-          const theorySum = theoryList.reduce((s, t) => s + t.prob, 0);
-          return new Map(theoryList.map((t) => [`${t.sgIndex}-${t.arm}`, theorySum > 0 ? t.prob / theorySum : 0]));
-        })()
-      : null;
+    const theoryMap = theoryOn ? theoreticalProbabilityMap(experiment, NORMALIZE_TO_DETECTED) : null;
     const detectors = rawDetectors.map((d) => ({
       ...d,
       theoryProb: theoryMap ? (theoryMap.get(`${d.sgIndex}-${d.arm}`) ?? 0) : 0,
@@ -168,7 +159,7 @@ export default function Histogram({ experiment, displayBools, setDisplayBools })
     // observed bars, or a line for an under-sampled detector could get
     // clipped off the top of the plot.
     const dataMax = detectors.reduce((m, d) => {
-      const expected = theoryOn && dataTotal > 0 ? d.theoryProb * dataTotal : 0;
+      const expected = theoryOn && normTotal > 0 ? d.theoryProb * normTotal : 0;
       return Math.max(m, d.count, expected);
     }, 0);
     const requiredMax = Math.max(MIN_AXIS_MAX, dataMax * AXIS_HEADROOM);
@@ -281,8 +272,8 @@ export default function Histogram({ experiment, displayBools, setDisplayBools })
         }
 
         // Draw the theory reference lines
-        if (theoryOn && dataTotal > 0) {
-          const expectedCount = d.theoryProb * dataTotal;
+        if (theoryOn && normTotal > 0) {
+          const expectedCount = d.theoryProb * normTotal;
           const lineY = plotY1 - (expectedCount / axisMax) * (plotY1 - plotY0);
           const lineHalfWidth = barWidth / 2 + THEORY_LINE_OVERHANG;
           ctx.strokeStyle = THEORY_LINE_COLOR;
@@ -313,12 +304,12 @@ export default function Histogram({ experiment, displayBools, setDisplayBools })
         }
 
         // Write the labels on all the bars
-        const showBothActual = (displayBools.showPercentages === 2 && dataTotal > 0);
+        const showBothActual = (displayBools.showPercentages === 2 && normTotal > 0);
         ctx.fillStyle = PC_COLORS[d.colorId];
         ctx.font = `11px Arial`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
-        const barLabel = ((displayBools.showPercentages === 1 && dataTotal === 0) ? "---" : "") + (displayBools.showPercentages !== 1 ? String(d.count) : "") + (showBothActual ? " (" : "") + ((displayBools.showPercentages !== 0 && dataTotal !== 0) ? (d.count/dataTotal*100).toFixed(1) + "%" : "") + (showBothActual ? ")" : "");
+        const barLabel = ((displayBools.showPercentages === 1 && normTotal === 0) ? "---" : "") + (displayBools.showPercentages !== 1 ? String(d.count) : "") + (showBothActual ? " (" : "") + ((displayBools.showPercentages !== 0 && normTotal !== 0) ? (d.count/normTotal*100).toFixed(1) + "%" : "") + (showBothActual ? ")" : "");
         // Wider counts push their "(xx.x%)" half further out, so a fixed
         // offset that clears a 3-digit count starts clashing again once
         // counts hit 4+ digits -- scale it up by 3px per digit beyond 3.
@@ -414,8 +405,8 @@ export default function Histogram({ experiment, displayBools, setDisplayBools })
     ctx.font = `bold 14px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('Experimental Data' + (displayBools.showTotal ? ` (N = ${dataTotal})` : ''), (plotX0 + plotX1)/2, PADDING_TOP / 2);
-    }, [experiment, displayBools, canvasDims]);
+    ctx.fillText('Experimental Data' + (displayBools.showTotal ? ` (N = ${normTotal})` : ''), (plotX0 + plotX1)/2, PADDING_TOP / 2);
+    }, [experiment, ovenTotal, displayBools, canvasDims]);
 
   // Renders the loupe: re-runs the exact same drawHistogram routine against
   // the loupe's own canvas, but first stacks a translate/scale/translate

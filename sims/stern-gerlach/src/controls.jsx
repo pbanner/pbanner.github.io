@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { SG_OPTION_LABELS, SG_OPTION_BASES, RAD_TO_DEG, DEG_TO_RAD, roundDeg } from './axisOptions';
+import { PHI_LOCKED } from './queryParams';
 
 // A stepper through X/Y/Z (or, in `advanced` mode, raw theta/phi textboxes)
 // for any [theta, phi] axis value. Deliberately knows nothing about *what*
@@ -41,23 +42,27 @@ export function AxisStepper({ label, value, advanced, onStep, onSetAdvanced, onS
             />
             <span>°</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <label style={{ width: '12px' }}>ϕ</label>
-            <input
-              type="number"
-              min={0}
-              max={360}
-              step={1}
-              value={roundDeg(value[1] * RAD_TO_DEG)}
-              disabled={disabled}
-              onChange={(e) => {
-                const v = parseFloat(e.target.value);
-                if (!Number.isNaN(v)) onSetAngle('phi', v * DEG_TO_RAD);
-              }}
-              style={{ width: '70px', padding: '2px' }}
-            />
-            <span>°</span>
-          </div>
+          {/* With phi locked to 0 (queryParams.js) the phi box is dropped
+              entirely, so phi genuinely never changes from 0. */}
+          {!PHI_LOCKED && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <label style={{ width: '12px' }}>ϕ</label>
+              <input
+                type="number"
+                min={0}
+                max={360}
+                step={1}
+                value={roundDeg(value[1] * RAD_TO_DEG)}
+                disabled={disabled}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  if (!Number.isNaN(v)) onSetAngle('phi', v * DEG_TO_RAD);
+                }}
+                style={{ width: '70px', padding: '2px' }}
+              />
+              <span>°</span>
+            </div>
+          )}
         </div>
       ) : (
         <div className="axis-stepper">
