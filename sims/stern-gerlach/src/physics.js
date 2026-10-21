@@ -209,3 +209,20 @@ export function theoreticalProbabilities(experiment) {
   recurse(0, null, 1);
   return results;
 }
+
+// theoreticalProbabilities, keyed by `${sgIndex}-${arm}` for lookup, and
+// normalized against the same population the observed percentages are --
+// shared by Histogram.jsx's theory reference lines and LabPanel.jsx's
+// Shift+P theory cards so the two can never disagree with each other or
+// with the bars. With normalizeToDetected false, that's the whole oven
+// ensemble, which is exactly what theoreticalProbabilities already returns.
+// With it true, it's only the particles that land in *some* placed PC, so
+// the probabilities are renormalized to sum to 1 across just the placed
+// PCs -- otherwise a BB siphoning off some fraction of the particles would
+// leave the theory too low compared to data that never saw those
+// particles at all.
+export function theoreticalProbabilityMap(experiment, normalizeToDetected) {
+  const theoryList = theoreticalProbabilities(experiment);
+  const norm = normalizeToDetected ? theoryList.reduce((s, t) => s + t.prob, 0) : 1;
+  return new Map(theoryList.map((t) => [`${t.sgIndex}-${t.arm}`, norm > 0 ? t.prob / norm : 0]));
+}
