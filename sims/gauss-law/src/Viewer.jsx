@@ -26,11 +26,15 @@ function CameraLight() {
 // colors are the same so the lines through the origin don't stand out
 // either. It's built lying in three's default XZ plane, so it's rotated a
 // quarter turn about x to lie in XY instead (our floor, since z is up).
+//
+// The grid is drawn first (renderOrder -1) and doesn't write depth, so
+// anything else at z = 0 -- the axes, a dragged charge's guides -- always
+// draws over it instead of z-fighting with the grid lines it overlaps.
 const GRID_COLOR = '#d3d7dc';
 function Floor() {
   const size = 2 * WORLD_HALF_EXTENT;
   return (
-    <gridHelper args={[size, Math.round(size / SNAP_STEP), GRID_COLOR, GRID_COLOR]} rotation={[Math.PI / 2, 0, 0]} />
+    <gridHelper args={[size, Math.round(size / SNAP_STEP), GRID_COLOR, GRID_COLOR]} rotation={[Math.PI / 2, 0, 0]} renderOrder={-1} material-depthWrite={false} />
   );
 }
 
@@ -223,10 +227,11 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
             type={getChargeType(charge.type)}
             position={charge.position}
             highlighted={charge.id === draggingId || (draggingId == null && charge.id === hoveredId)}
+            showGuides={charge.id === draggingId}
           />
         ))}
 
-        {ghost && <ChargeMarker type={getChargeType(ghost.type)} position={ghost.position} ghost />}
+        {ghost && <ChargeMarker type={getChargeType(ghost.type)} position={ghost.position} ghost showGuides />}
 
         {/* makeDefault registers these as the scene's controls, which the
             axis gizmo needs in order to swing the camera when an axis is

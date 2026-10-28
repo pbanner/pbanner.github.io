@@ -92,3 +92,35 @@ export function pickCharge(ray, charges, radius) {
   }
   return best;
 }
+
+// The dashed coordinate guides drawn around a dragged charge at
+// `position` = (x, y, z) (see ChargeMarker), as [start, end] pairs in
+// world coordinates:
+//   - straight down (or up) from the charge to its foot (x, y, 0) on the
+//     xy plane,
+//   - from the foot to (x, 0, 0) on the x axis and to (0, y, 0) on the
+//     y axis,
+//   - from the charge across to (0, 0, z) on the z axis.
+// A guide that would have zero length -- because the charge is already on
+// the plane or axis it points to -- is left out, and so is one that exactly
+// repeats an earlier guide (e.g. for a charge at (0, y, 0), the guides to
+// the x axis and to the z axis would both run from the charge to the
+// origin), since overlapping dashed lines flicker where their dashes
+// interfere.
+export function chargeGuideSegments([x, y, z]) {
+  const nonzero = (v) => Math.abs(v) > 1e-9;
+  const charge = [x, y, z];
+  const foot = [x, y, 0];
+  const candidates = [];
+  if (nonzero(z)) candidates.push([charge, foot]);
+  if (nonzero(y)) candidates.push([foot, [x, 0, 0]]);
+  if (nonzero(x)) candidates.push([foot, [0, y, 0]]);
+  if (nonzero(x) || nonzero(y)) candidates.push([charge, [0, 0, z]]);
+  const seen = new Set();
+  return candidates.filter(([a, b]) => {
+    const key = [String(a), String(b)].sort().join('|'); // same key either direction
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
