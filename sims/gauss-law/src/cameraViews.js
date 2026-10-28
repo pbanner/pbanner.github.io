@@ -1,64 +1,51 @@
 // Camera moves for the axis gizmo (AxisGizmo.jsx): clicking an axis label
-// swings the camera around to look along that axis. Plain math, no React.
+// turns the camera to look along that axis, by the smallest rotation that
+// gets it there. The view is free to roll or flip on the way. No React.
 //
-// The camera is described the way OrbitControls describes it, in spherical
-// coordinates around its target, with z up: a distance r, a polar angle
-// (0 = straight above the target, pi/2 = level with it, pi = straight
-// below) and an azimuth (the compass direction of the camera from the
-// target, measured from +x toward +y). Moving the polar angle and azimuth
-// is exactly an orbit, with the camera's up staying +z throughout, so the
-// view never rolls -- the same motion as dragging the view by hand.
+// A camera's orientation is a rotation (here a quaternion) taking its own
+// axes to the world: its +x is screen-right, +y is screen-up, and +z points
+// back out of the screen, so it looks along its -z. three.js cameras work
+// this way.
+import { Matrix4, Quaternion, Vector3 } from 'three';
 
-// Straight above or below the target, the azimuth no longer changes where
-// the camera is, only how the picture is turned. OrbitControls works out
-// the azimuth from the camera's position, so exactly at the pole it would
-// lose it. Stopping this far (in radians) short of the pole keeps it,
-// while still looking straight down (or up) to the eye.
-const POLE_OFFSET = 1e-3;
+const WORLD_AXES = [
+  new Vector3(1, 0, 0), new Vector3(-1, 0, 0),
+  new Vector3(0, 1, 0), new Vector3(0, -1, 0),
+  new Vector3(0, 0, 1), new Vector3(0, 0, -1),
+];
 
-export function sphericalAround([x, y, z], [tx, ty, tz]) {
-  const dx = x - tx;
-  const dy = y - ty;
-  const dz = z - tz;
-  const r = Math.hypot(dx, dy, dz);
-  return { r, polar: Math.acos(Math.max(-1, Math.min(1, dz / r))), azimuth: Math.atan2(dy, dx) };
-}
-
-export function positionAround({ r, polar, azimuth }, [tx, ty, tz]) {
-  return [
-    tx + r * Math.sin(polar) * Math.cos(azimuth),
-    ty + r * Math.sin(polar) * Math.sin(azimuth),
-    tz + r * Math.cos(polar),
-  ];
-}
-
-// The change in angle from a to b the short way around, in (-pi, pi].
-export function shortestTurn(a, b) {
-  let d = (b - a) % (2 * Math.PI);
-  if (d > Math.PI) d -= 2 * Math.PI;
-  if (d <= -Math.PI) d += 2 * Math.PI;
-  return d;
-}
-
-// Where to put the camera to look along an axis: `axis` is the unit vector
-// of the clicked axis label (e.g. [1, 0, 0] for +x), and the camera goes to
-// that side of the target, looking back at it.
+// The orientation to end on when the gizmo's `axis` head is clicked
+// (e.g. [-1, 0, 0] for -x): the camera sits on that side of its target,
+// looking back along -axis. Returned as { quaternion, up }, up being the
+// world direction that ends up at the top of the screen.
 //
-// For the x and y axes that pins down both angles. For +z and -z it pins
-// down only the polar angle, and the azimuth is the current one rounded to
-// the nearest multiple of 90 degrees: tipping straight over the top (or
-// under the bottom) keeps the picture's up direction continuous, and the
-// rounding then turns it at most 45 degrees so that +/-x and +/-y line up
-// with the screen's edges. From the default view, that's the familiar xy
-// plane: x to the right, y up.
-export function axisView(axis, current) {
-  const [ax, ay, az] = axis;
-  if (Math.abs(az) > 0.5) {
-    const quarter = Math.PI / 2;
-    return {
-      polar: az > 0 ? POLE_OFFSET : Math.PI - POLE_OFFSET,
-      azimuth: Math.round(current.azimuth / quarter) * quarter,
-    };
+// Only the looking direction is fixed by the click; the end's roll (which
+// way is up on screen) is chosen in two steps:
+//   1. Swing: the smallest rotation turning the current looking direction
+//      onto the new one is the rotation about the axis perpendicular to
+//      both (setFromUnitVectors). Applying it to the current screen-up
+//      gives where screen-up would land with no twist at all.
+//   2. Snap: of the four world axes perpendicular to the new looking
+//      direction, take the one closest to that. So every axis view comes
+//      out with the scene's axes along the screen's edges, after at most
+//      45 degrees of extra twist.
+export function axisViewOrientation(current, axis) {
+  const back = new Vector3(...axis).normalize(); // camera +z: from target toward camera
+  const forward = back.clone().negate();
+  const currentForward = new Vector3(0, 0, -1).applyQuaternion(current);
+  const currentUp = new Vector3(0, 1, 0).applyQuaternion(current);
+
+  const swing = new Quaternion().setFromUnitVectors(currentForward, forward);
+  const swungUp = currentUp.applyQuaternion(swing);
+
+  let up = null;
+  for (const candidate of WORLD_AXES) {
+    if (Math.abs(candidate.dot(forward)) > 0.5) continue; // along the view, not across it
+    if (!up || candidate.dot(swungUp) > up.dot(swungUp)) up = candidate;
   }
-  return { polar: Math.PI / 2, azimuth: Math.atan2(ay, ax) };
+  up = up.clone();
+
+  const right = new Vector3().crossVectors(up, back);
+  const quaternion = new Quaternion().setFromRotationMatrix(new Matrix4().makeBasis(right, up, back));
+  return { quaternion, up };
 }

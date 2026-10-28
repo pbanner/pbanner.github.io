@@ -1,14 +1,16 @@
 import { useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { CanvasTexture } from 'three';
-import { sphericalAround, positionAround, axisView, shortestTurn } from './cameraViews.js';
+import { CanvasTexture, Quaternion, Vector3 } from 'three';
+import { axisViewOrientation } from './cameraViews.js';
 
 // The orientation gizmo in the lower-left corner, and the camera move it
 // triggers. drei's GizmoHelper still draws it (in its own overlay, turned
 // to match the main camera every frame), but drei's own GizmoViewport is
-// replaced by AxisGizmo below, since its camera move (a straight rotation
-// between orientations) rolls the view through tilted poses and can end up
-// rolled at the poles; see cameraViews.js for the move used instead.
+// replaced by AxisGizmo below: its move's end orientation was built with
+// lookAt along the camera's own up axis for the top and bottom views, where
+// the roll is undefined, and OrbitControls then partly undid whatever roll
+// it ended with, so views could end up turned at odd angles. See
+// cameraViews.js for how the end orientation is chosen instead.
 
 const AXIS_COLORS = ['#ff2060', '#20df80', '#2080ff']; // drei's defaults
 const AXIS_LABELS = ['X', 'Y', 'Z'];
@@ -76,13 +78,16 @@ export function AxisGizmo({ onAxisClick }) {
   );
 }
 
-// Swings the camera to look along an axis (viewAlong) by orbiting it
-// around the OrbitControls target: the polar angle and azimuth (see
-// cameraViews.js) change together along a straight line, with the azimuth
-// going the short way around, eased in and out. Keeping the camera's up at
-// +z, like OrbitControls does, the camera's rate of turning is
-// sqrt(azimuth rate^2 + polar rate^2), so that straight line is the
-// smallest total turn that keeps the view upright.
+// Turns the camera to look along an axis (viewAlong) by the smallest
+// rotation from its current orientation to the chosen end orientation (see
+// cameraViews.js): a slerp, the rotation's shortest path, eased in and out,
+// with the camera kept at its distance from the target, behind the
+// direction it looks. The view may roll or flip on the way. Throughout, the
+// camera's `up` follows the screen's up: OrbitControls (drei's, from
+// three-stdlib) works out its orbit axis from `up` and re-aims the camera
+// with it on every update, so it then reproduces each frame's orientation
+// rather than levelling it, and after the move, dragging the view orbits
+// around whatever is up on screen.
 //
 // Grabbing the view mid-move (OrbitControls' 'start' event) cancels the
 // move, so the hand always wins. That's also why the gizmo starts moves on
@@ -96,15 +101,14 @@ export function CameraAnimator({ ref, controlsRef }) {
     viewAlong(axis) {
       const controls = controlsRef.current;
       if (!controls) return;
-      const target = controls.target.toArray();
-      const from = sphericalAround(controls.object.position.toArray(), target);
-      const to = axisView(axis, from);
-      const dPolar = to.polar - from.polar;
-      const dAzimuth = shortestTurn(from.azimuth, to.azimuth);
-      const angle = Math.hypot(dPolar, dAzimuth);
+      const camera = controls.object;
+      const from = camera.quaternion.clone();
+      const { quaternion: to } = axisViewOrientation(from, axis);
+      const angle = from.angleTo(to);
       if (angle < 1e-6) return;
       const duration = Math.min(MAX_DURATION, Math.max(MIN_DURATION, angle / TURN_RATE));
-      move.current = { from, dPolar, dAzimuth, target, duration, elapsed: 0 };
+      const distance = camera.position.distanceTo(controls.target);
+      move.current = { from, to, distance, duration, elapsed: 0 };
     },
     cancel() {
       move.current = null;
@@ -126,12 +130,11 @@ export function CameraAnimator({ ref, controlsRef }) {
     m.elapsed += delta;
     const t = Math.min(1, m.elapsed / m.duration);
     const eased = t * t * (3 - 2 * t); // smoothstep: starts and ends gently
-    const position = positionAround(
-      { r: m.from.r, polar: m.from.polar + eased * m.dPolar, azimuth: m.from.azimuth + eased * m.dAzimuth },
-      m.target,
-    );
-    controls.object.position.set(...position);
-    controls.update(); // re-aims the camera at the target, upright
+    const q = new Quaternion().slerpQuaternions(m.from, m.to, eased);
+    const camera = controls.object;
+    camera.quaternion.copy(q);
+    camera.position.copy(new Vector3(0, 0, 1).applyQuaternion(q).multiplyScalar(m.distance).add(controls.target));
+    camera.up.set(0, 1, 0).applyQuaternion(q);
     if (t >= 1) move.current = null;
   });
 

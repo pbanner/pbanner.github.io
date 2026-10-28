@@ -81,6 +81,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
     const controls = controlsRef.current;
     if (!controls) return;
     cameraAnimatorRef.current?.cancel(); // a gizmo move in progress would otherwise carry on from here
+    controls.object.up.set(0, 0, 1); // a gizmo move may have left another axis up
     controls.object.position.set(...INITIAL_CAMERA_POSITION);
     controls.target.set(...INITIAL_CAMERA_TARGET);
     controls.update();

@@ -52,6 +52,7 @@ export function CoordinateReadoutPanel({ panelRef, position }) {
 }
 
 const projected = new THREE.Vector3();
+const up = new THREE.Vector3();
 
 export function CoordinateReadoutTracker({ panelRef, position }) {
   useFrame(({ camera, size }) => {
@@ -64,9 +65,11 @@ export function CoordinateReadoutTracker({ panelRef, position }) {
       return [(projected.x + 1) / 2 * size.width, (1 - projected.y) / 2 * size.height];
     };
     const [px, py] = toPixels(position);
-    // The top of the sphere: the camera's up is +z and it never rolls, so
-    // the world point straight above the center is the top on screen too.
-    const [, topY] = toPixels([position[0], position[1], position[2] + CHARGE_RADIUS * HIGHLIGHT_SCALE]);
+    // The top of the sphere on screen: the point one (enlarged) radius from
+    // its center along the camera's screen-up direction, which needn't be
+    // world +z once the axis gizmo has turned the view.
+    const screenUp = up.set(0, 1, 0).applyQuaternion(camera.quaternion);
+    const [, topY] = toPixels(position.map((c, k) => c + screenUp.getComponent(k) * CHARGE_RADIUS * HIGHLIGHT_SCALE));
     const bottom = Math.min(topY, py) - PANEL_GAP_PX;
     panel.style.transform = `translate(${px}px, ${bottom}px) translate(-50%, -100%)`;
     panel.style.visibility = 'visible';
