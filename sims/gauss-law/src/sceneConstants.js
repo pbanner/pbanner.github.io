@@ -11,6 +11,13 @@
 // The floor grid spans the same range in x and y.
 export const WORLD_HALF_EXTENT = 5;
 
+export const CHARGE_RADIUS = 0.25;
+
 export const INITIAL_CAMERA_POSITION = [11, -14, 9];
 export const INITIAL_CAMERA_TARGET = [0, 0, 0];
 export const CAMERA_FOV = 35;
+
+// A pointerdown/pointerup pair counts as a "click" rather than a drag as
+// long as the pointer moved no more than this many pixels in between --
+// same threshold (and same idea) as the optics lab's CLICK_MOVE_THRESHOLD.
+export const CLICK_MOVE_THRESHOLD = 4; // px
