@@ -32,11 +32,20 @@ export default function App() {
   // floating label next to it.
   const [hoveredSidebarButton, setHoveredSidebarButton] = useState(null);
 
+  // The sidebar's delete tool: while on, clicking a charge deletes it.
+  const [removeMode, setRemoveMode] = useState(false);
+
   const viewerRef = useRef(null);
 
   const addCharge = (typeId, position) => {
     const id = nextChargeIdRef.current++;
     setCharges((prev) => [...prev, { id, type: typeId, position }]);
+  };
+  const moveCharge = (id, position) => {
+    setCharges((prev) => prev.map((c) => (c.id === id ? { ...c, position } : c)));
+  };
+  const deleteCharge = (id) => {
+    setCharges((prev) => prev.filter((c) => c.id !== id));
   };
 
   const disarm = () => {
@@ -64,6 +73,7 @@ export default function App() {
     // sidebar button. Release it so hit-testing over the canvas works
     // during the drag (same fix as the optics lab).
     try { e.target.releasePointerCapture(e.pointerId); } catch { /* nothing was captured (e.g. a mouse pointer) */ }
+    setRemoveMode(false); // arming a charge and deleting are mutually exclusive
     const wasAlreadyArmed = armedTypeId === typeId;
     buildDragRef.current = { typeId, startX: e.clientX, startY: e.clientY, moved: false, wasAlreadyArmed };
     if (!wasAlreadyArmed) {
@@ -115,10 +125,18 @@ export default function App() {
     return () => window.removeEventListener('pointermove', onMove);
   }, [armedTypeId]);
 
-  // Escape backs out of placement, same as the optics lab.
+  const toggleRemoveMode = () => {
+    disarm();
+    setRemoveMode((prev) => !prev);
+  };
+
+  // Escape backs out of placement or delete mode, same as the optics lab.
   useEffect(() => {
     const onKeyDown = (e) => {
-      if (e.key === 'Escape') disarm();
+      if (e.key === 'Escape') {
+        disarm();
+        setRemoveMode(false);
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -134,11 +152,16 @@ export default function App() {
         ghost={armedTypeId && ghostFloorPoint ? { type: armedTypeId, position: ghostFloorPoint } : null}
         armedTypeId={armedTypeId}
         onPlaceClick={handlePlaceClick}
+        removeMode={removeMode}
+        onMoveCharge={moveCharge}
+        onDeleteCharge={deleteCharge}
       />
 
       <ChargeSidebar
         armedTypeId={armedTypeId}
         onButtonPointerDown={handleSidebarPointerDown}
+        removeMode={removeMode}
+        onToggleRemoveMode={toggleRemoveMode}
         onHoverButton={setHoveredSidebarButton}
       />
 
@@ -151,6 +174,16 @@ export default function App() {
           }}
         >
           {hoveredSidebarButton.label}
+        </div>
+      )}
+
+      {/* How to manipulate placed charges -- nothing on screen otherwise
+          hints that Shift and Alt do anything. */}
+      {charges.length > 0 && (
+        <div className="interaction-hint">
+          {removeMode
+            ? 'Click a charge to delete it. Esc to stop deleting.'
+            : 'Drag a charge to move it · Shift+drag to raise or lower · Hold Alt to turn off snapping · Drag onto the trash to delete'}
         </div>
       )}
 
