@@ -1,11 +1,13 @@
-import { useImperativeHandle, useRef, useState } from 'react';
+import { useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
 import { ChargeDrag } from './chargeDrag.js';
 import ChargeMarker from './ChargeMarker.jsx';
 import Axes from './Axes.jsx';
+import FieldLines from './FieldLines.jsx';
 import { CoordinateReadoutPanel, CoordinateReadoutTracker } from './CoordinateReadout.jsx';
 import { getChargeType } from './chargeTypes.js';
+import { linesPerUnitChargeForDensity } from './fieldLines.js';
 import { rayFromClient, pickCharge, SNAP_STEP } from './geometry.js';
 import { WORLD_HALF_EXTENT, CHARGE_RADIUS, INITIAL_CAMERA_POSITION, INITIAL_CAMERA_TARGET, CAMERA_FOV, CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
 
@@ -45,8 +47,9 @@ function Floor() {
 // onPlaceClick(clientX, clientY, modifiers): that second click, on the canvas
 // removeMode: the sidebar's delete tool is on, so clicking a charge deletes it
 // onMoveCharge(id, position) / onDeleteCharge(id): edits to placed charges
-// showGrid / showAxes: the Display Options panel's checkboxes
-export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick, removeMode, onMoveCharge, onDeleteCharge, showGrid, showAxes }) {
+// showGrid / showAxes / showFieldLines / fieldLineDensity: the Display
+//   Options panel's settings
+export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick, removeMode, onMoveCharge, onDeleteCharge, showGrid, showAxes, showFieldLines, fieldLineDensity }) {
   const wrapperRef = useRef();
   const controlsRef = useRef();
   const placeClickStartRef = useRef(null);
@@ -59,6 +62,15 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   const [draggingId, setDraggingId] = useState(null);
   const dragRef = useRef(null);
   const readoutPanelRef = useRef(null);
+
+  // The placed charges as field sources. Memoized on `charges` so that a
+  // re-render for anything else (e.g. the hover highlight) hands
+  // FieldLines the same array, and the lines aren't re-traced for nothing.
+  // The placement ghost isn't a source: only placed charges make a field.
+  const fieldSources = useMemo(
+    () => charges.map((c) => ({ position: c.position, q: getChargeType(c.type).q })),
+    [charges],
+  );
 
   // Can't use controls.reset(): drei captures the controls' saved state
   // before applying the `target` prop, so reset() would aim at the wrong
@@ -229,6 +241,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
 
         {showGrid && <Floor />}
         {showAxes && <Axes />}
+        {showFieldLines && <FieldLines sources={fieldSources} linesPerUnitCharge={linesPerUnitChargeForDensity(fieldLineDensity)} />}
 
         {charges.map((charge) => (
           <ChargeMarker

@@ -39,11 +39,11 @@ export default function App() {
   // The sidebar's delete tool: while on, clicking a charge deletes it.
   const [removeMode, setRemoveMode] = useState(false);
 
-  // What the Display Options panel controls. fieldLineDensity isn't used
-  // yet; it's waiting for the field lines themselves.
+  // What the Display Options panel controls.
   const [displayOptions, setDisplayOptions] = useState({
     showGrid: true,
     showAxes: true,
+    showFieldLines: true,
     fieldLineDensity: 5,
   });
 
@@ -191,6 +191,8 @@ export default function App() {
         onDeleteCharge={deleteCharge}
         showGrid={displayOptions.showGrid}
         showAxes={displayOptions.showAxes}
+        showFieldLines={displayOptions.showFieldLines}
+        fieldLineDensity={displayOptions.fieldLineDensity}
       />
 
       <ChargeSidebar

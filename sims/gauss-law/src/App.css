@@ -256,6 +256,15 @@
   width: var(--display-panel-width);
 }
 
+.control-group.disabled {
+  opacity: 0.45;
+}
+
+.control-group.disabled label,
+.control-group.disabled input {
+  cursor: default;
+}
+
 /* Slider look from the optics lab: one dark track color on both sides of
    the thumb, and a blue round thumb. */
 input[type="range"] {

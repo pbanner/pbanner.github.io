@@ -3,10 +3,11 @@
 // Purely presentational: the options themselves live in App.jsx's
 // displayOptions state.
 //
-// The field line density slider isn't wired to anything yet; it's here
-// ahead of the field lines themselves. Its value is shown in the label
-// rather than in a separate number box (as the optics lab's
-// SliderPlusTextboxControl does) to keep the panel thin.
+// The field line density slider sets how many lines leave each unit of
+// charge (see linesPerUnitChargeForDensity in fieldLines.js). Its value is
+// shown in the label rather than in a separate number box (as the optics
+// lab's SliderPlusTextboxControl does) to keep the panel thin. It's dimmed
+// while field lines are hidden.
 const FIELD_LINE_DENSITY_RANGE = { min: 1, max: 10, step: 1 };
 
 export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions }) {
@@ -22,7 +23,11 @@ export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions 
         <input type="checkbox" checked={displayOptions.showAxes} onChange={(e) => setOption('showAxes', e.target.checked)} />
         Axes
       </label>
-      <div className="control-group">
+      <label>
+        <input type="checkbox" checked={displayOptions.showFieldLines} onChange={(e) => setOption('showFieldLines', e.target.checked)} />
+        Field lines
+      </label>
+      <div className={`control-group${displayOptions.showFieldLines ? '' : ' disabled'}`}>
         <label htmlFor="field-line-density">Field line density: {displayOptions.fieldLineDensity}</label>
         <input
           id="field-line-density"
@@ -30,6 +35,7 @@ export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions 
           {...FIELD_LINE_DENSITY_RANGE}
           value={displayOptions.fieldLineDensity}
           onChange={(e) => setOption('fieldLineDensity', Number(e.target.value))}
+          disabled={!displayOptions.showFieldLines}
         />
       </div>
     </div>
