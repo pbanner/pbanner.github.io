@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
 import * as THREE from 'three';
 import ChargeMarker from './ChargeMarker.jsx';
+import Axes from './Axes.jsx';
 import { getChargeType } from './chargeTypes.js';
 import { rayFromClient, intersectHorizontalPlane, intersectVerticalPlane, snapValue, isWithinFloor, clampToWorld, pickCharge } from './geometry.js';
 import { WORLD_HALF_EXTENT, CHARGE_RADIUS, INITIAL_CAMERA_POSITION, INITIAL_CAMERA_TARGET, CAMERA_FOV, CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
@@ -235,6 +236,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
         <CameraLight />
 
         <Floor />
+        <Axes />
 
         {charges.map((charge) => (
           <ChargeMarker
