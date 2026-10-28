@@ -1,9 +1,10 @@
 import { useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
+import { OrbitControls, GizmoHelper } from '@react-three/drei';
 import { ChargeDrag } from './chargeDrag.js';
 import ChargeMarker from './ChargeMarker.jsx';
 import Axes from './Axes.jsx';
+import { AxisGizmo, CameraAnimator } from './AxisGizmo.jsx';
 import FieldLines from './FieldLines.jsx';
 import { CoordinateReadoutPanel, CoordinateReadoutTracker } from './CoordinateReadout.jsx';
 import { getChargeType } from './chargeTypes.js';
@@ -51,6 +52,7 @@ function Floor() {
 export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick, removeMode, onMoveCharge, onDeleteCharge, showGrid, showAxes, showFieldLines, fieldLineDensity }) {
   const wrapperRef = useRef();
   const controlsRef = useRef();
+  const cameraAnimatorRef = useRef();
   const placeClickStartRef = useRef(null);
   // The ChargeDrag tracking the placement ghost while a charge is armed.
   const placementRef = useRef(null);
@@ -78,6 +80,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   const resetView = () => {
     const controls = controlsRef.current;
     if (!controls) return;
+    cameraAnimatorRef.current?.cancel(); // a gizmo move in progress would otherwise carry on from here
     controls.object.position.set(...INITIAL_CAMERA_POSITION);
     controls.target.set(...INITIAL_CAMERA_TARGET);
     controls.update();
@@ -254,18 +257,19 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
 
         {ghost && <ChargeMarker type={getChargeType(ghost.type)} position={ghost.position} ghost showGuides />}
 
-        {/* makeDefault registers these as the scene's controls, which the
-            axis gizmo needs in order to swing the camera when an axis is
-            clicked. Left-drag rotates, scroll/pinch zooms, and right-drag
-            (or two-finger drag) pans. */}
+        {/* makeDefault registers these as the scene's controls. Left-drag
+            rotates, scroll/pinch zooms, and right-drag (or two-finger drag)
+            pans. */}
         <OrbitControls ref={controlsRef} target={INITIAL_CAMERA_TARGET} makeDefault />
 
-        {/* Orientation widget in the lower-left corner. Clicking one of its
-            axis labels swings the camera to look down that axis. */}
         <CoordinateReadoutTracker panelRef={readoutPanelRef} position={readoutPosition} />
 
+        {/* Orientation widget in the lower-left corner. Clicking one of its
+            axis labels swings the camera around to look along that axis
+            (see AxisGizmo.jsx and cameraViews.js). */}
+        <CameraAnimator ref={cameraAnimatorRef} controlsRef={controlsRef} />
         <GizmoHelper alignment="bottom-left" margin={[70, 70]}>
-          <GizmoViewport labelColor="white" axisHeadScale={0.9} />
+          <AxisGizmo onAxisClick={(axis) => cameraAnimatorRef.current?.viewAlong(axis)} />
         </GizmoHelper>
       </Canvas>
 
