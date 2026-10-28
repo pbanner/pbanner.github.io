@@ -12,6 +12,3 @@ export const CHARGE_TYPES = [
 export function getChargeType(id) {
   return CHARGE_TYPES.find((t) => t.id === id);
 }
-
-// Shown under the cursor while a charge is armed for placement.
-export const PLACEMENT_MESSAGE = 'Click or release to place.\nPress Shift to raise or lower.\nEsc to cancel.';

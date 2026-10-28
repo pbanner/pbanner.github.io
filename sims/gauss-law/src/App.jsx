@@ -2,16 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import Viewer from './Viewer.jsx';
 import ChargeSidebar from './ChargeSidebar.jsx';
 import ChargeIcon from './ChargeIcon.jsx';
-import { getChargeType, PLACEMENT_MESSAGE } from './chargeTypes.js';
+import { getChargeType } from './chargeTypes.js';
 import { CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
 import './App.css';
 
 // Gap between a hovered sidebar icon's right edge and its floating label.
 const SIDEBAR_LABEL_GAP = 12;
-// Size of the 2D placement ghost, and the gap between it and the guidance
-// message below it.
+// Size of the 2D placement ghost.
 const GHOST_ICON_SIZE = 36;
-const PLACEMENT_MESSAGE_GAP = 8;
 
 export default function App() {
   // Every placed charge: { id, type, position: [x, y, z] }.
@@ -204,35 +202,22 @@ export default function App() {
         </div>
       )}
 
-      {/* How to manipulate placed charges -- nothing on screen otherwise
-          hints that Shift and Alt do anything. */}
-      {charges.length > 0 && (
-        <div className="interaction-hint">
-          {removeMode
-            ? 'Click a charge to delete it. Esc to stop deleting.'
-            : 'Drag a charge to move it · Shift+drag to raise or lower · Hold Alt to turn off snapping · Drag onto the trash to delete'}
-        </div>
-      )}
+      {/* How to place and manipulate charges, shown at all times --
+          nothing else on screen hints that Shift and Alt do anything. */}
+      <div className="interaction-hint">
+        {removeMode
+          ? 'Click a charge to delete it. Esc to stop deleting.'
+          : 'Drag a charge in from the sidebar · Drag a charge to move it · Shift+drag to raise or lower · Hold Alt to turn off snapping · Drag onto the trash to delete'}
+      </div>
 
       {/* While armed: a flat 2D icon follows the pointer whenever the charge
           can't be placed there (over the sidebar, off the edge of the
           grid, ...). Otherwise the 3D ghost in the scene takes its place,
-          sitting exactly where the charge would land. The guidance message
-          shows either way. */}
-      {armedType && ghostPos && (
-        <>
-          {!ghostPoint && (
-            <div className="placement-ghost" style={{ left: ghostPos.x, top: ghostPos.y }}>
-              <ChargeIcon type={armedType} size={GHOST_ICON_SIZE} />
-            </div>
-          )}
-          <div
-            className="placement-message"
-            style={{ left: ghostPos.x, top: ghostPos.y + GHOST_ICON_SIZE / 2 + PLACEMENT_MESSAGE_GAP }}
-          >
-            {PLACEMENT_MESSAGE}
-          </div>
-        </>
+          sitting exactly where the charge would land. */}
+      {armedType && ghostPos && !ghostPoint && (
+        <div className="placement-ghost" style={{ left: ghostPos.x, top: ghostPos.y }}>
+          <ChargeIcon type={armedType} size={GHOST_ICON_SIZE} />
+        </div>
       )}
     </div>
   );
