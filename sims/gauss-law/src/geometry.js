@@ -115,7 +115,7 @@ export function chargeGuideSegments([x, y, z]) {
   if (nonzero(z)) candidates.push([charge, foot]);
   if (nonzero(y)) candidates.push([foot, [x, 0, 0]]);
   if (nonzero(x)) candidates.push([foot, [0, y, 0]]);
-  if (nonzero(x) || nonzero(y)) candidates.push([charge, [0, 0, z]]);
+  //if (nonzero(x) || nonzero(y)) candidates.push([charge, [0, 0, z]]);
   const seen = new Set();
   return candidates.filter(([a, b]) => {
     const key = [String(a), String(b)].sort().join('|'); // same key either direction
