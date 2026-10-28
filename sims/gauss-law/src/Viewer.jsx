@@ -45,7 +45,8 @@ function Floor() {
 // onPlaceClick(clientX, clientY, modifiers): that second click, on the canvas
 // removeMode: the sidebar's delete tool is on, so clicking a charge deletes it
 // onMoveCharge(id, position) / onDeleteCharge(id): edits to placed charges
-export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick, removeMode, onMoveCharge, onDeleteCharge }) {
+// showGrid / showAxes: the Display Options panel's checkboxes
+export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick, removeMode, onMoveCharge, onDeleteCharge, showGrid, showAxes }) {
   const wrapperRef = useRef();
   const controlsRef = useRef();
   const placeClickStartRef = useRef(null);
@@ -113,7 +114,9 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
 
   const liftPlacement = () => placementRef.current?.liftOff() ?? false;
 
-  useImperativeHandle(ref, () => ({ startPlacement, placementAt, liftPlacement }));
+  // resetView is exposed too, for the Reset View button, which App.jsx
+  // renders alongside the Display Options panel.
+  useImperativeHandle(ref, () => ({ startPlacement, placementAt, liftPlacement, resetView }));
 
   // Moves a placed charge, following the same ChargeDrag rules as a
   // placement once it's been lifted: drag to slide it horizontally,
@@ -224,8 +227,8 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
         <ambientLight intensity={1.2} />
         <CameraLight />
 
-        <Floor />
-        <Axes />
+        {showGrid && <Floor />}
+        {showAxes && <Axes />}
 
         {charges.map((charge) => (
           <ChargeMarker
@@ -255,10 +258,6 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
       </Canvas>
 
       {readoutPosition && <CoordinateReadoutPanel panelRef={readoutPanelRef} position={readoutPosition} />}
-
-      <button className="control-button reset-view-button" onClick={resetView}>
-        Reset View
-      </button>
     </div>
   );
 }

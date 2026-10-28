@@ -2,6 +2,7 @@
    an absolutely positioned overlay, rather than sharing the screen with a
    fixed sidebar the way the Bloch sphere sim does. */
 .app-layout {
+  --display-panel-width: 180px; /* shared by .display-options-panel and .interaction-hint */
   position: relative;
   height: 100vh; /* fallback for browsers that don't support dvh below */
   height: 100dvh; /* the *actual* visible viewport height -- see the Bloch sphere sim's .app-layout for why plain 100vh misbehaves on mobile Safari */
@@ -34,11 +35,9 @@
   border-color: #bbb;
 }
 
-/* Same square corner button as the Bloch sphere sim's own Reset View. */
+/* Same square button as the Bloch sphere sim's own Reset View; it sits
+   on top of the Display Options panel (see .lower-right-stack). */
 .reset-view-button {
-  position: absolute;
-  bottom: 16px;
-  right: 16px;
   width: 60px;
   height: 60px;
   padding: 2px;
@@ -48,7 +47,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10;
 }
 
 /* Left-edge toolbar -- a single thin column of icon buttons floating over
@@ -146,15 +144,18 @@
   margin: 4px 0;
 }
 
-/* One line of usage help along the bottom edge, between the axis gizmo and
-   the Reset View button. */
+/* One line of usage help along the bottom edge, centered in the space
+   between the axis gizmo (lower left) and the Display Options panel (lower
+   right). With left, right and width all set, auto side margins center it
+   within that space; width: fit-content lets it shrink to its text, and
+   wrap only once the text is wider than the space. */
 .interaction-hint {
   position: absolute;
-  left: 50%;
+  left: 150px;
+  right: calc(16px + var(--display-panel-width) + 16px);
   bottom: 16px;
-  transform: translateX(-50%);
-  width: max-content; /* otherwise left: 50% caps its width at half the screen, wrapping it early */
-  max-width: calc(100% - 320px);
+  width: fit-content;
+  margin: 0 auto;
   pointer-events: none;
   background: rgba(255, 255, 255, 0.85);
   border-radius: 6px;
@@ -194,4 +195,100 @@
   white-space: nowrap;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   z-index: 6;
+}
+
+/* Lower-right corner: Reset View on top of the Display Options panel,
+   both right-aligned. */
+.lower-right-stack {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  z-index: 10;
+}
+
+/* On-canvas overlay panel look, copied from the optics lab's
+   .overlay-controls (which itself matches the Stern-Gerlach and Bloch
+   sphere sims' on-canvas panels). */
+.overlay-controls {
+  border: 2px solid #333;
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  line-height: 1.6;
+}
+
+.overlay-controls h3 {
+  margin: 0 0 2px 0;
+  font-size: 16px;
+  font-weight: bold;
+  color: #333;
+}
+
+.overlay-controls label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+}
+
+.overlay-controls input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.display-options-panel {
+  width: var(--display-panel-width);
+}
+
+/* Slider look from the optics lab: one dark track color on both sides of
+   the thumb, and a blue round thumb. */
+input[type="range"] {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #404040;
+  outline: none;
+  appearance: none;
+  cursor: pointer;
+}
+/* Webkit browsers (Chrome, Safari) */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #3498db;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+/* Firefox */
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #3498db;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+input[type="range"]::-moz-range-track {
+  background: transparent;
+  border: none;
 }

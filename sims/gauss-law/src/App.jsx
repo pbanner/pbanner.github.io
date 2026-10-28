@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import Viewer from './Viewer.jsx';
 import ChargeSidebar from './ChargeSidebar.jsx';
 import ChargeIcon from './ChargeIcon.jsx';
+import DisplayOptionsPanel from './DisplayOptionsPanel.jsx';
 import { getChargeType } from './chargeTypes.js';
 import { CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
 import './App.css';
@@ -37,6 +38,14 @@ export default function App() {
 
   // The sidebar's delete tool: while on, clicking a charge deletes it.
   const [removeMode, setRemoveMode] = useState(false);
+
+  // What the Display Options panel controls. fieldLineDensity isn't used
+  // yet; it's waiting for the field lines themselves.
+  const [displayOptions, setDisplayOptions] = useState({
+    showGrid: true,
+    showAxes: true,
+    fieldLineDensity: 5,
+  });
 
   const viewerRef = useRef(null);
 
@@ -180,6 +189,8 @@ export default function App() {
         removeMode={removeMode}
         onMoveCharge={moveCharge}
         onDeleteCharge={deleteCharge}
+        showGrid={displayOptions.showGrid}
+        showAxes={displayOptions.showAxes}
       />
 
       <ChargeSidebar
@@ -201,6 +212,15 @@ export default function App() {
           {hoveredSidebarButton.label}
         </div>
       )}
+
+      {/* Lower-right corner: Reset View stacked on top of the Display
+          Options panel. */}
+      <div className="lower-right-stack">
+        <button className="control-button reset-view-button" onClick={() => viewerRef.current?.resetView()}>
+          Reset View
+        </button>
+        <DisplayOptionsPanel displayOptions={displayOptions} setDisplayOptions={setDisplayOptions} />
+      </div>
 
       {/* How to place and manipulate charges, shown at all times --
           nothing else on screen hints that Shift and Alt do anything. */}
