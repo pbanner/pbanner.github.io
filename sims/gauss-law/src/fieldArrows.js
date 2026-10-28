@@ -2,13 +2,15 @@
 // lines. Plain JS, no React (FieldArrows.jsx draws them).
 //
 // The field is sampled at the centers of an n x n x n grid of cells filling
-// the world cube, and each sample gets an arrow pointing along E. All the
-// arrows are the same length: the field's strength falls off as 1/r^2, so
-// lengths proportional to it would make a few huge arrows next to the
-// charges and leave the rest too small to see. Instead strength is shown by
-// shade, on a logarithmic scale between fixed limits (FAINTEST_FIELD and
-// STRONGEST_FIELD), so a given strength always gets the same shade and the
-// picture doesn't rescale itself as charges are dragged around.
+// the world cube, and each sample gets an arrow pointing along E. Its
+// length and shade both show the field's strength, but not in proportion
+// to it: the strength falls off as 1/r^2, so proportional lengths would
+// make a few huge arrows next to the charges and leave the rest too small
+// to see. Instead both follow a logarithmic scale between fixed limits
+// (FAINTEST_FIELD and STRONGEST_FIELD), so each doubling of the field adds
+// the same amount of length and darkness, a given strength always looks
+// the same, and the picture doesn't rescale itself as charges are dragged
+// around.
 import { fieldAt } from './fieldLines.js';
 
 // Arrows per axis at each density setting (1-5): 27 to 1331 arrows. Always
