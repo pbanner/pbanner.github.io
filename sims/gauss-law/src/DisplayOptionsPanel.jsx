@@ -3,13 +3,20 @@
 // Purely presentational: the options themselves live in App.jsx's
 // displayOptions state.
 import { FIELD_LINE_DENSITY_LEVELS } from './fieldLines.js';
+import { FIELD_ARROW_DENSITY_LEVELS } from './fieldArrows.js';
 
-// The field line density slider (1-5) steps through the starting-direction
-// sets in fieldLines.js (SEED_SETS), from 6 to 50 lines per charge. The
-// value is shown in the label rather than in a separate number box (as
-// the optics lab's SliderPlusTextboxControl does) to keep the panel thin.
-// It's dimmed while field lines are hidden.
-const FIELD_LINE_DENSITY_RANGE = { min: 1, max: FIELD_LINE_DENSITY_LEVELS, step: 1 };
+// The electric field is shown as field lines or as a grid of arrows, with
+// one density slider (1-5) for both: it steps through the field lines'
+// starting-direction sets in fieldLines.js (SEED_SETS, 6 to 50 lines per
+// charge), or the arrow grids in fieldArrows.js (3 to 11 arrows along each
+// axis). The value is shown in the label rather than in a separate number
+// box (as the optics lab's SliderPlusTextboxControl does) to keep the panel
+// thin. The style choice and the slider are dimmed while the field is
+// hidden.
+if (FIELD_LINE_DENSITY_LEVELS !== FIELD_ARROW_DENSITY_LEVELS) {
+  throw new Error('Field lines and arrows must have the same number of density levels');
+}
+const FIELD_DENSITY_RANGE = { min: 1, max: FIELD_LINE_DENSITY_LEVELS, step: 1 };
 
 export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions }) {
   const setOption = (key, value) => setDisplayOptions((prev) => ({ ...prev, [key]: value }));
@@ -25,18 +32,32 @@ export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions 
         Axes
       </label>
       <label>
-        <input type="checkbox" checked={displayOptions.showFieldLines} onChange={(e) => setOption('showFieldLines', e.target.checked)} />
-        Field lines
+        <input type="checkbox" checked={displayOptions.showField} onChange={(e) => setOption('showField', e.target.checked)} />
+        Electric field
       </label>
-      <div className={`control-group${displayOptions.showFieldLines ? '' : ' disabled'}`}>
-        <label htmlFor="field-line-density">Field line density: {displayOptions.fieldLineDensity}</label>
+      <div className={`control-group field-style${displayOptions.showField ? '' : ' disabled'}`}>
+        {[['lines', 'Lines'], ['arrows', 'Arrows']].map(([style, label]) => (
+          <label key={style}>
+            <input
+              type="radio"
+              name="field-style"
+              checked={displayOptions.fieldStyle === style}
+              onChange={() => setOption('fieldStyle', style)}
+              disabled={!displayOptions.showField}
+            />
+            {label}
+          </label>
+        ))}
+      </div>
+      <div className={`control-group${displayOptions.showField ? '' : ' disabled'}`}>
+        <label htmlFor="field-density">Density: {displayOptions.fieldDensity}</label>
         <input
-          id="field-line-density"
+          id="field-density"
           type="range"
-          {...FIELD_LINE_DENSITY_RANGE}
-          value={displayOptions.fieldLineDensity}
-          onChange={(e) => setOption('fieldLineDensity', Number(e.target.value))}
-          disabled={!displayOptions.showFieldLines}
+          {...FIELD_DENSITY_RANGE}
+          value={displayOptions.fieldDensity}
+          onChange={(e) => setOption('fieldDensity', Number(e.target.value))}
+          disabled={!displayOptions.showField}
         />
       </div>
     </div>

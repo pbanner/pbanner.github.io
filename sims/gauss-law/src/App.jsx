@@ -43,8 +43,9 @@ export default function App() {
   const [displayOptions, setDisplayOptions] = useState({
     showGrid: true,
     showAxes: true,
-    showFieldLines: true,
-    fieldLineDensity: 3, // 26 lines per charge; see SEED_SETS in fieldLines.js
+    showField: true,
+    fieldStyle: 'lines', // or 'arrows'
+    fieldDensity: 3, // 26 lines per charge (SEED_SETS in fieldLines.js), or 7 x 7 x 7 arrows (fieldArrows.js)
   });
 
   const viewerRef = useRef(null);
@@ -191,8 +192,9 @@ export default function App() {
         onDeleteCharge={deleteCharge}
         showGrid={displayOptions.showGrid}
         showAxes={displayOptions.showAxes}
-        showFieldLines={displayOptions.showFieldLines}
-        fieldLineDensity={displayOptions.fieldLineDensity}
+        showField={displayOptions.showField}
+        fieldStyle={displayOptions.fieldStyle}
+        fieldDensity={displayOptions.fieldDensity}
       />
 
       <ChargeSidebar

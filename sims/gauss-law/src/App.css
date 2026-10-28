@@ -242,7 +242,8 @@
   cursor: pointer;
 }
 
-.overlay-controls input[type="checkbox"] {
+.overlay-controls input[type="checkbox"],
+.overlay-controls input[type="radio"] {
   cursor: pointer;
 }
 
@@ -254,6 +255,14 @@
 
 .display-options-panel {
   width: var(--display-panel-width);
+}
+
+/* The Lines / Arrows choice: side by side, indented under the "Electric
+   field" checkbox it belongs to. */
+.control-group.field-style {
+  flex-direction: row;
+  gap: 14px;
+  padding-left: 21px;
 }
 
 .control-group.disabled {

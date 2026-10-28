@@ -6,6 +6,7 @@ import ChargeMarker from './ChargeMarker.jsx';
 import Axes from './Axes.jsx';
 import { AxisGizmo, CameraAnimator } from './AxisGizmo.jsx';
 import FieldLines from './FieldLines.jsx';
+import FieldArrows from './FieldArrows.jsx';
 import { CoordinateReadoutPanel, CoordinateReadoutTracker } from './CoordinateReadout.jsx';
 import { getChargeType } from './chargeTypes.js';
 import { rayFromClient, pickCharge, SNAP_STEP } from './geometry.js';
@@ -47,9 +48,9 @@ function Floor() {
 // onPlaceClick(clientX, clientY, modifiers): that second click, on the canvas
 // removeMode: the sidebar's delete tool is on, so clicking a charge deletes it
 // onMoveCharge(id, position) / onDeleteCharge(id): edits to placed charges
-// showGrid / showAxes / showFieldLines / fieldLineDensity: the Display
-//   Options panel's settings
-export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick, removeMode, onMoveCharge, onDeleteCharge, showGrid, showAxes, showFieldLines, fieldLineDensity }) {
+// showGrid / showAxes / showField / fieldStyle ('lines' or 'arrows') /
+//   fieldDensity: the Display Options panel's settings
+export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick, removeMode, onMoveCharge, onDeleteCharge, showGrid, showAxes, showField, fieldStyle, fieldDensity }) {
   const wrapperRef = useRef();
   const controlsRef = useRef();
   const cameraAnimatorRef = useRef();
@@ -66,7 +67,8 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
 
   // The placed charges as field sources. Memoized on `charges` so that a
   // re-render for anything else (e.g. the hover highlight) hands
-  // FieldLines the same array, and the lines aren't re-traced for nothing.
+  // FieldLines/FieldArrows the same array, and the field isn't recomputed
+  // for nothing.
   // The placement ghost isn't a source: only placed charges make a field.
   const fieldSources = useMemo(
     () => charges.map((c) => ({ position: c.position, q: getChargeType(c.type).q })),
@@ -244,7 +246,8 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
 
         {showGrid && <Floor />}
         {showAxes && <Axes />}
-        {showFieldLines && <FieldLines sources={fieldSources} density={fieldLineDensity} />}
+        {showField && fieldStyle === 'lines' && <FieldLines sources={fieldSources} density={fieldDensity} />}
+        {showField && fieldStyle === 'arrows' && <FieldArrows sources={fieldSources} density={fieldDensity} />}
 
         {charges.map((charge) => (
           <ChargeMarker

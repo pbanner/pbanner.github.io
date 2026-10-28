@@ -114,8 +114,9 @@ const SEED_SETS = [
 ];
 export const FIELD_LINE_DENSITY_LEVELS = SEED_SETS.length;
 
-// sources: [{ position: [x, y, z], q }]
-function fieldAt([x, y, z], sources) {
+// The electric field at a point. sources: [{ position: [x, y, z], q }]
+// (Also used by fieldArrows.js.)
+export function fieldAt([x, y, z], sources) {
   let ex = 0;
   let ey = 0;
   let ez = 0;
