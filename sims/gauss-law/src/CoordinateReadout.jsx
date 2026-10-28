@@ -23,7 +23,7 @@ const READOUT_UNITS_PER_WORLD_UNIT = 1 / SNAP_STEP;
 function formatCoordinate(worldValue) {
   const v = worldValue * READOUT_UNITS_PER_WORLD_UNIT;
   const rounded = Math.round(v);
-  const text = Math.abs(v - rounded) < 1e-6 ? String(rounded) : v.toFixed(1);
+  const text = Math.abs(v - rounded) < 1e-6 ? String(rounded) : v.toFixed(2);
   return text.replace(/^-/, '−').replace(/^−0(\.0)?$/, '0');
 }
 
