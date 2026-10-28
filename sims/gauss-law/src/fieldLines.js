@@ -18,10 +18,13 @@
 //     cube's face), runs into another charge, reaches a point where the
 //     field vanishes, or gets implausibly long.
 //   - Lines connecting a positive charge to a negative one would otherwise
-//     be drawn twice, once from each end. So a line traced from a negative
-//     charge is dropped if it ends on a positive charge -- the positive
-//     charge's own lines already cover those connections -- and negative
-//     charges keep only their lines that run off to the cube's edge.
+//     be drawn twice, once from each end. So they're drawn only from the
+//     positive end, and each negative charge adds just enough lines of its
+//     own (from the cube's edge, or from a point where the field vanishes)
+//     to bring it to the same count as every other unit charge -- see
+//     computeFieldLines. Equal counts matter here: lines only begin and end
+//     at charges, so the net number crossing any closed surface then counts
+//     the charge inside it, which is Gauss's law.
 
 // Step size bounds, in world units. Steps shrink near charges (where lines
 // curve sharply) down to MIN_STEP, and grow to MAX_STEP far from them.
@@ -158,6 +161,7 @@ function directionAt(p, sources, sign) {
   return [sign * ex / mag, sign * ey / mag, sign * ez / mag];
 }
 
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const add = (p, d, h) => [p[0] + h * d[0], p[1] + h * d[1], p[2] + h * d[2]];
 
@@ -269,31 +273,145 @@ function traceLine(start, startIndex, sources, sign, { halfExtent, chargeRadius 
   return { points, endsAt: null };
 }
 
+// n points spread almost evenly over the unit sphere: a "Fibonacci
+// sphere", which steps evenly in height while turning by the golden angle
+// each time. Only used for extra starting directions at a negative charge
+// that's short of lines (see computeFieldLines), which happens only when
+// the arrangement has no symmetry to preserve.
+function fibonacciSphere(n) {
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  const dirs = [];
+  for (let i = 0; i < n; i++) {
+    const z = 1 - (2 * (i + 0.5)) / n;
+    const r = Math.sqrt(1 - z * z);
+    dirs.push([r * Math.cos(golden * i), r * Math.sin(golden * i), z]);
+  }
+  return dirs;
+}
+const EXTRA_DIRECTIONS = fibonacciSphere(400);
+// How many extra directions a short negative charge tries before giving
+// up. When none of that many well-spread directions escapes, the charge's
+// field comes (almost) entirely from positive charges, and more tries
+// would just be slow.
+const MAX_EXTRA_TRIES = 60;
+
+const unit = (v) => {
+  const n = Math.hypot(v[0], v[1], v[2]);
+  return [v[0] / n, v[1] / n, v[2] / n];
+};
+
+// Of `candidates` (each with a unit .dir), the index of the one whose
+// direction is farthest, by angle, from every direction in `taken` -- the
+// largest dot product with any of them being the smallest. Repeatedly
+// taking that one ("farthest-point selection") spreads the picks out as
+// evenly as the candidates allow.
+function farthestFrom(candidates, taken) {
+  let best = -1;
+  let bestClosest = Infinity;
+  candidates.forEach((c, i) => {
+    let closest = -Infinity;
+    for (const t of taken) closest = Math.max(closest, dot(c.dir, t));
+    if (closest < bestClosest) {
+      bestClosest = closest;
+      best = i;
+    }
+  });
+  return best;
+}
+
 // sources: [{ position: [x, y, z], q }], with q = +/-1 (the only charges
 // the sim has; a charge of any other size would need its own starting set
 // with |q| times as many lines). Returns an array of lines, each an array
 // of [x, y, z] points ordered in the direction of the field.
+//
+// Every unit charge gets the same number of lines, N (the size of the
+// starting set):
+//   1. Each positive charge starts a line in every starting direction.
+//      Where one ends on a negative charge, the direction it arrived from
+//      is recorded.
+//   2. A negative charge that k of those lines arrived at then needs N - k
+//      lines of its own. Its own lines are traced backward from its
+//      starting directions, and any that end on a positive charge are
+//      discarded (they duplicate step 1's). If more remain than it needs,
+//      it keeps the ones spread out best among the lines already touching
+//      it (farthestFrom). If too few remain, it tries extra directions,
+//      farthest-first, until it has enough.
+// This can't always come out exact. A negative charge surrounded by
+// positive ones can receive more than N lines, since each positive charge
+// sends it a whole number of lines -- about N times the fraction of its
+// flux that ends there -- and those roundings add up; or it can fall short
+// with no line of its own able to escape. Lines are whole numbers and flux
+// isn't, so with every line a true field line from evenly spread starting
+// directions, a few such charges are off by a line or two.
+// When an arrangement is symmetric, exactly N - k of a negative charge's
+// own lines remain (they're mirror images of the positive charges' lines;
+// see the note on mirror planes above), so there's nothing to choose and
+// the symmetry is kept.
 export function computeFieldLines(sources, { density, halfExtent, chargeRadius }) {
   const seeds = SEED_SETS[density - 1];
+  const options = { halfExtent, chargeRadius };
   const lines = [];
+  // For each charge, the directions (from its center) of the lines arriving
+  // at it from positive charges.
+  const arrivals = sources.map(() => []);
+
+  // Starts a line `dir` away from charge i, traced along E (sign +1) or
+  // against it (-1). Each line starts at its charge's center, as lines that
+  // run into a charge do at their other end; the charge's sphere hides
+  // that first stretch either way.
+  const trace = (i, dir, sign) => {
+    const source = sources[i];
+    const start = add(source.position, dir, chargeRadius);
+    if (!inside(start, halfExtent)) return null;
+    const { points, endsAt } = traceLine(start, i, sources, sign, options);
+    if (points.length < 2) return null;
+    points.unshift(source.position);
+    return { points, endsAt };
+  };
+
   sources.forEach((source, i) => {
-    if (source.q === 0) return;
-    const sign = Math.sign(source.q);
+    if (!(source.q > 0)) return;
     for (const dir of seeds) {
-      const start = add(source.position, dir, chargeRadius);
-      if (!inside(start, halfExtent)) continue;
-      const { points, endsAt } = traceLine(start, i, sources, sign, { halfExtent, chargeRadius });
-      if (points.length < 2) continue;
-      // Start (or, reversed below, finish) at the charge's center, as lines
-      // that run into a charge do at their other end. The charge's sphere
-      // hides that first stretch either way.
-      points.unshift(source.position);
-      if (sign < 0) {
-        if (endsAt !== null && sources[endsAt].q > 0) continue; // already drawn from the positive end
-        points.reverse();
-      }
+      const traced = trace(i, dir, +1);
+      if (!traced) continue;
+      const { points, endsAt } = traced;
       lines.push(points);
+      if (endsAt !== null) {
+        arrivals[endsAt].push(unit(sub(points[points.length - 2], sources[endsAt].position)));
+      }
     }
+  });
+
+  sources.forEach((source, i) => {
+    if (!(source.q < 0)) return;
+    const needed = seeds.length - arrivals[i].length;
+    if (needed <= 0) return;
+    // Backward-traced lines that don't end on a positive charge.
+    const ownLine = (dir) => {
+      const traced = trace(i, dir, -1);
+      if (!traced || (traced.endsAt !== null && sources[traced.endsAt].q > 0)) return null;
+      return { dir, points: traced.points };
+    };
+    let candidates = seeds.map(ownLine).filter(Boolean);
+    const chosen = [];
+    const taken = [...arrivals[i]];
+    const take = (c) => {
+      chosen.push(c);
+      taken.push(c.dir);
+    };
+    if (candidates.length <= needed) {
+      candidates.forEach(take);
+    } else {
+      while (chosen.length < needed) take(candidates.splice(farthestFrom(candidates, taken), 1)[0]);
+    }
+    // Still short: try extra directions, farthest from everything first.
+    const extra = EXTRA_DIRECTIONS.map((dir) => ({ dir }));
+    for (let tries = 0; chosen.length < needed && tries < MAX_EXTRA_TRIES; tries++) {
+      const { dir } = extra.splice(farthestFrom(extra, taken), 1)[0];
+      const c = ownLine(dir);
+      if (c) take(c);
+    }
+    for (const c of chosen) lines.push(c.points.reverse());
   });
   return lines;
 }
