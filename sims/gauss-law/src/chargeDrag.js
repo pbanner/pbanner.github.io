@@ -14,6 +14,15 @@
 //     since the current mode began (rather than jumping so its center sits
 //     under the pointer), and pressing or releasing Shift re-anchors at
 //     the charge's current position, so switching never makes it jump.
+//
+// In the free phase it keeps two positions. `rawPosition` is where the
+// pointer's motion puts the charge, before snapping and before clamping to
+// the world's bounds, so it can be past the edge when the pointer is.
+// `position`, what's drawn, is that snapped and clamped. Re-anchoring
+// starts from rawPosition, not position: otherwise a Shift press while the
+// pointer is past the edge (and the charge is clamped at it) would bake
+// the gap between them into the new anchor, and the charge would follow
+// the pointer at that offset from then on.
 import * as THREE from 'three';
 import { intersectHorizontalPlane, intersectVerticalPlane, snapValue, isWithinFloor, clampToWorld } from './geometry.js';
 
@@ -22,6 +31,7 @@ export class ChargeDrag {
   constructor(startPos = null) {
     this.phase = startPos ? 'free' : 'floor';
     this.position = startPos;
+    this.rawPosition = startPos;
     this.mode = null; // 'horizontal' | 'vertical', in the free phase
     this.modeStartPos = startPos;
     this.anchorHit = null;
@@ -36,6 +46,7 @@ export class ChargeDrag {
   liftOff() {
     if (this.phase !== 'floor' || !this.position) return false;
     this.phase = 'free';
+    this.rawPosition = this.position;
     this.mode = null;
     return true;
   }
@@ -65,7 +76,7 @@ export class ChargeDrag {
     const mode = shiftKey ? 'vertical' : 'horizontal';
     if (mode !== this.mode) {
       this.mode = mode;
-      this.modeStartPos = this.position;
+      this.modeStartPos = this.rawPosition;
       this.anchorHit = null;
     }
     const start = this.modeStartPos;
@@ -77,13 +88,15 @@ export class ChargeDrag {
       this.anchorHit = hit;
       return this.position;
     }
-    let [x, y, z] = start;
+    const raw = [...start];
     if (mode === 'horizontal') {
-      x = clampToWorld(snap(x + hit.x - this.anchorHit.x));
-      y = clampToWorld(snap(y + hit.y - this.anchorHit.y));
+      raw[0] += hit.x - this.anchorHit.x;
+      raw[1] += hit.y - this.anchorHit.y;
     } else {
-      z = clampToWorld(snap(z + hit.z - this.anchorHit.z));
+      raw[2] += hit.z - this.anchorHit.z;
     }
+    this.rawPosition = raw;
+    const [x, y, z] = raw.map((v) => clampToWorld(snap(v)));
     const [cx, cy, cz] = this.position;
     if (x !== cx || y !== cy || z !== cz) this.position = [x, y, z];
     return this.position;
