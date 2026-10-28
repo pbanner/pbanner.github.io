@@ -4,6 +4,7 @@ import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
 import { ChargeDrag } from './chargeDrag.js';
 import ChargeMarker from './ChargeMarker.jsx';
 import Axes from './Axes.jsx';
+import { CoordinateReadoutPanel, CoordinateReadoutTracker } from './CoordinateReadout.jsx';
 import { getChargeType } from './chargeTypes.js';
 import { rayFromClient, pickCharge, SNAP_STEP } from './geometry.js';
 import { WORLD_HALF_EXTENT, CHARGE_RADIUS, INITIAL_CAMERA_POSITION, INITIAL_CAMERA_TARGET, CAMERA_FOV, CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
@@ -56,6 +57,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   const [hoveredId, setHoveredId] = useState(null);
   const [draggingId, setDraggingId] = useState(null);
   const dragRef = useRef(null);
+  const readoutPanelRef = useRef(null);
 
   // Can't use controls.reset(): drei captures the controls' saved state
   // before applying the `target` prop, so reset() would aim at the wrong
@@ -188,6 +190,10 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
     if (id !== hoveredId) setHoveredId(id);
   };
 
+  // The charge whose coordinates the readout shows: the one being dragged,
+  // or else the placement ghost.
+  const readoutPosition = charges.find((c) => c.id === draggingId)?.position ?? ghost?.position ?? null;
+
   let cursor;
   if (draggingId != null) cursor = 'grabbing';
   else if (hoveredId != null && !armedTypeId) cursor = removeMode ? 'pointer' : 'grab';
@@ -241,10 +247,14 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
 
         {/* Orientation widget in the lower-left corner. Clicking one of its
             axis labels swings the camera to look down that axis. */}
+        <CoordinateReadoutTracker panelRef={readoutPanelRef} position={readoutPosition} />
+
         <GizmoHelper alignment="bottom-left" margin={[70, 70]}>
           <GizmoViewport labelColor="white" axisHeadScale={0.9} />
         </GizmoHelper>
       </Canvas>
+
+      {readoutPosition && <CoordinateReadoutPanel panelRef={readoutPanelRef} position={readoutPosition} />}
 
       <button className="control-button reset-view-button" onClick={resetView}>
         Reset View

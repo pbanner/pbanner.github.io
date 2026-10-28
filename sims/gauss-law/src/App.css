@@ -189,3 +189,26 @@
 .sidebar-icon-button:focus {
   outline: none;
 }
+
+/* The (x, y, z) readout floating above a charge while it's placed or
+   dragged (CoordinateReadout.jsx). It's placed by setting its transform
+   every frame, starting from the viewer's top-left corner, and stays
+   hidden until that has happened once. Tabular digits keep the numbers
+   from shifting sideways as they change. */
+.coordinate-readout {
+  position: absolute;
+  left: 0;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #999;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: #222;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 6;
+}
