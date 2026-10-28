@@ -2,10 +2,11 @@ import { useImperativeHandle, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
 import * as THREE from 'three';
+import { ChargeDrag } from './chargeDrag.js';
 import ChargeMarker from './ChargeMarker.jsx';
 import Axes from './Axes.jsx';
 import { getChargeType } from './chargeTypes.js';
-import { rayFromClient, intersectHorizontalPlane, intersectVerticalPlane, snapValue, isWithinFloor, clampToWorld, pickCharge } from './geometry.js';
+import { rayFromClient, pickCharge } from './geometry.js';
 import { WORLD_HALF_EXTENT, CHARGE_RADIUS, INITIAL_CAMERA_POSITION, INITIAL_CAMERA_TARGET, CAMERA_FOV, CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
 
 // A directional light that rides along with the camera, so whatever side of
@@ -41,13 +42,15 @@ function Floor() {
 // charges: [{ id, type, position: [x, y, z] }]
 // ghost: { type, position } for the translucent placement preview, or null
 // armedTypeId: the charge type waiting for click-to-place's second click
-// onPlaceClick(clientX, clientY): that second click, on the canvas
+// onPlaceClick(clientX, clientY, modifiers): that second click, on the canvas
 // removeMode: the sidebar's delete tool is on, so clicking a charge deletes it
 // onMoveCharge(id, position) / onDeleteCharge(id): edits to placed charges
 export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick, removeMode, onMoveCharge, onDeleteCharge }) {
   const wrapperRef = useRef();
   const controlsRef = useRef();
   const placeClickStartRef = useRef(null);
+  // The ChargeDrag tracking the placement ghost while a charge is armed.
+  const placementRef = useRef(null);
 
   // The charge under the pointer (highlighted, and sets the cursor), and the
   // one being dragged, if any.
@@ -81,77 +84,56 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
     return rayFromClient(controls.object, under.getBoundingClientRect(), clientX, clientY);
   };
 
-  // Where on the floor grid a new charge dropped at this viewport point
-  // would land -- snapped to the grid unless `free` -- or null if the
-  // point isn't over the grid. This is the one function that answers
-  // "where in 3D does a 2D drop go?"; App.jsx calls it (through the ref)
-  // both to position the 3D ghost and to actually place the charge.
-  const floorPointAt = (clientX, clientY, free = false) => {
+  // Placement goes through a ChargeDrag (see chargeDrag.js) so that, as
+  // with moving a placed charge, Shift can raise or lower the ghost. App.jsx
+  // drives it through the ref: startPlacement() when a charge is armed,
+  // placementAt() on every pointer move (and on release, to place it), and
+  // liftPlacement() when Shift is pressed.
+  const startPlacement = () => {
+    placementRef.current = new ChargeDrag();
+  };
+
+  // Where a new charge dropped at this viewport point would land, or null
+  // if it can't go there (off the canvas, or off the floor grid before
+  // it's been lifted). This is the one function that answers "where in 3D
+  // does a 2D drop go?" -- App.jsx uses it both to position the 3D ghost
+  // and to actually place the charge. `modifiers` is the event's
+  // { shiftKey, altKey }.
+  const placementAt = (clientX, clientY, modifiers) => {
     const ray = rayAt(clientX, clientY);
-    if (!ray) return null;
-    const hit = intersectHorizontalPlane(ray, 0);
-    if (!hit) return null;
-    const x = free ? hit.x : snapValue(hit.x);
-    const y = free ? hit.y : snapValue(hit.y);
-    if (!isWithinFloor(x, y)) return null;
-    return [x, y, 0];
+    const placement = placementRef.current;
+    if (!placement) return null;
+    if (!ray) {
+      placement.pointerLeft();
+      return null;
+    }
+    return placement.update({ ray, camera: controlsRef.current.object, shiftKey: modifiers.shiftKey, altKey: modifiers.altKey });
   };
 
-  useImperativeHandle(ref, () => ({ floorPointAt }));
+  const liftPlacement = () => placementRef.current?.liftOff() ?? false;
 
-  // Where a dragged charge's ray meets the surface it's being dragged
-  // along (see the top of geometry.js): a horizontal plane at the charge's
-  // height for a plain drag, or a camera-facing vertical plane through it
-  // for a Shift+drag.
-  const dragSurfaceHit = (mode, ray, through) => {
-    if (mode === 'vertical') return intersectVerticalPlane(ray, controlsRef.current.object, new THREE.Vector3(...through));
-    return intersectHorizontalPlane(ray, through[2]);
-  };
+  useImperativeHandle(ref, () => ({ startPlacement, placementAt, liftPlacement }));
 
-  // Moves a placed charge. The charge moves by however far the pointer's
-  // hit point on the drag surface has moved since the drag began (rather
-  // than jumping so its center sits under the pointer), so it doesn't
-  // lurch when grabbed off-center. Pressing or releasing Shift mid-drag
-  // switches surfaces; the drag re-anchors at the charge's current
-  // position so that switch doesn't make it jump either.
-  const startDrag = (charge) => {
-    dragRef.current = { id: charge.id, mode: null, startPos: charge.position, currentPos: charge.position, anchorHit: null };
+  // Moves a placed charge, following the same ChargeDrag rules as a
+  // placement once it's been lifted: drag to slide it horizontally,
+  // Shift+drag to raise or lower it.
+  const startDrag = (charge, downEvent) => {
+    const drag = new ChargeDrag(charge.position);
+    dragRef.current = { id: charge.id, drag };
     setDraggingId(charge.id);
 
-    const onMove = (ev) => {
-      const d = dragRef.current;
+    const update = (ev) => {
       const controls = controlsRef.current;
-      if (!d || !controls) return;
+      if (!dragRef.current || !controls) return;
       // Deliberately not rayAt(): the drag should keep working even while
       // the pointer passes over an overlay (e.g. on its way to the trash).
       const ray = rayFromClient(controls.object, wrapperRef.current.getBoundingClientRect(), ev.clientX, ev.clientY);
-      const mode = ev.shiftKey ? 'vertical' : 'horizontal';
-      if (mode !== d.mode) {
-        d.mode = mode;
-        d.startPos = d.currentPos;
-        d.anchorHit = null;
-      }
-      const hit = dragSurfaceHit(mode, ray, d.startPos);
-      if (!hit) return; // e.g. the ray runs parallel to the drag surface
-      if (!d.anchorHit) {
-        d.anchorHit = hit;
-        return;
-      }
-      const snap = ev.altKey ? (v) => v : snapValue;
-      let [x, y, z] = d.startPos;
-      if (mode === 'horizontal') {
-        x = clampToWorld(snap(x + hit.x - d.anchorHit.x));
-        y = clampToWorld(snap(y + hit.y - d.anchorHit.y));
-      } else {
-        z = clampToWorld(snap(z + hit.z - d.anchorHit.z));
-      }
-      const [cx, cy, cz] = d.currentPos;
-      if (x === cx && y === cy && z === cz) return;
-      d.currentPos = [x, y, z];
-      onMoveCharge(d.id, d.currentPos);
+      const before = drag.position;
+      const after = drag.update({ ray, camera: controls.object, shiftKey: ev.shiftKey, altKey: ev.altKey });
+      if (after !== before) onMoveCharge(charge.id, after);
     };
     const onUp = (ev) => {
-      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointermove', update);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
       const d = dragRef.current;
@@ -162,9 +144,11 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
         onDeleteCharge(d.id);
       }
     };
-    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointermove', update);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
+    // Anchor at the press itself, so the very first pixels of movement count.
+    update(downEvent);
   };
 
   // Runs in the *capture* phase -- on the way down from the outer page
@@ -194,7 +178,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
       onDeleteCharge(charge.id);
       setHoveredId(null);
     } else {
-      startDrag(charge);
+      startDrag(charge, e);
     }
   };
 
@@ -214,7 +198,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
     placeClickStartRef.current = null;
     if (!start || !armedTypeId) return;
     if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > CLICK_MOVE_THRESHOLD) return;
-    onPlaceClick(e.clientX, e.clientY);
+    onPlaceClick(e.clientX, e.clientY, { shiftKey: e.shiftKey, altKey: e.altKey });
   };
 
   return (

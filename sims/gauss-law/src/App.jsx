@@ -23,10 +23,15 @@ export default function App() {
   const [armedTypeId, setArmedTypeId] = useState(null);
   // Where the pointer is while armed, in viewport (client) coordinates...
   const [ghostPos, setGhostPos] = useState(null);
-  // ...and where on the floor grid that would place the charge, or null
-  // when the pointer isn't over the grid. Drives which ghost is drawn: the
-  // 3D one in the scene when this is set, the flat 2D icon otherwise.
-  const [ghostFloorPoint, setGhostFloorPoint] = useState(null);
+  // ...and where in 3D that would place the charge (see Viewer's
+  // placementAt), or null when it can't go there. Drives which ghost is
+  // drawn: the 3D one in the scene when this is set, the flat 2D icon
+  // otherwise.
+  const [ghostPoint, setGhostPoint] = useState(null);
+  // The last pointer position seen while armed, so pressing or releasing a
+  // modifier key can recompute the ghost without waiting for the pointer
+  // to move.
+  const lastPointerRef = useRef(null);
 
   // Which sidebar icon (if any) is hovered -- { label, rect } -- for the
   // floating label next to it.
@@ -50,13 +55,16 @@ export default function App() {
 
   const disarm = () => {
     setArmedTypeId(null);
-    setGhostFloorPoint(null);
+    setGhostPoint(null);
   };
 
-  // Recomputes both ghosts for a pointer position. Alt skips grid snapping.
-  const updateGhost = (clientX, clientY, altKey) => {
+  // Recomputes both ghosts for a pointer position. `modifiers` is the
+  // event's { shiftKey, altKey }: Shift raises or lowers a lifted ghost,
+  // Alt skips grid snapping.
+  const updateGhost = (clientX, clientY, modifiers) => {
+    lastPointerRef.current = { x: clientX, y: clientY };
     setGhostPos({ x: clientX, y: clientY });
-    setGhostFloorPoint(viewerRef.current?.floorPointAt(clientX, clientY, altKey) ?? null);
+    setGhostPoint(viewerRef.current?.placementAt(clientX, clientY, modifiers) ?? null);
   };
 
   // A pointerdown on a sidebar charge starts a gesture that isn't yet
@@ -78,7 +86,8 @@ export default function App() {
     buildDragRef.current = { typeId, startX: e.clientX, startY: e.clientY, moved: false, wasAlreadyArmed };
     if (!wasAlreadyArmed) {
       setArmedTypeId(typeId);
-      updateGhost(e.clientX, e.clientY, e.altKey);
+      viewerRef.current?.startPlacement();
+      updateGhost(e.clientX, e.clientY, e);
     }
 
     const onMove = (ev) => {
@@ -93,7 +102,7 @@ export default function App() {
       buildDragRef.current = null;
       if (!d) return;
       if (d.moved) {
-        const point = viewerRef.current?.floorPointAt(ev.clientX, ev.clientY, ev.altKey);
+        const point = viewerRef.current?.placementAt(ev.clientX, ev.clientY, ev);
         if (point) addCharge(d.typeId, point);
         disarm();
       } else if (d.wasAlreadyArmed) {
@@ -108,9 +117,9 @@ export default function App() {
 
   // Click-to-place's second click, on the canvas. An invalid click (off
   // the grid) leaves the charge armed to try again, same as the optics lab.
-  const handlePlaceClick = (clientX, clientY) => {
+  const handlePlaceClick = (clientX, clientY, modifiers) => {
     if (!armedTypeId) return;
-    const point = viewerRef.current?.floorPointAt(clientX, clientY);
+    const point = viewerRef.current?.placementAt(clientX, clientY, modifiers);
     if (!point) return;
     addCharge(armedTypeId, point);
     disarm();
@@ -118,11 +127,29 @@ export default function App() {
 
   // While armed, the ghosts track the pointer across the whole window --
   // including over the overlay controls -- so this listens on window.
+  //
+  // Shift and Alt are watched on their own as well, so they take effect
+  // without waiting for the pointer to move. A Shift *press* (not a held
+  // Shift, and not the key's auto-repeat) is what lifts the ghost off the
+  // floor; Viewer's liftPlacement ignores it unless the ghost has a floor
+  // point to lift from.
   useEffect(() => {
     if (!armedTypeId) return;
-    const onMove = (e) => updateGhost(e.clientX, e.clientY, e.altKey);
+    const onMove = (e) => updateGhost(e.clientX, e.clientY, e);
+    const onKey = (e) => {
+      const last = lastPointerRef.current;
+      if (!last || (e.key !== 'Shift' && e.key !== 'Alt')) return;
+      if (e.type === 'keydown' && e.key === 'Shift' && !e.repeat) viewerRef.current?.liftPlacement();
+      updateGhost(last.x, last.y, e);
+    };
     window.addEventListener('pointermove', onMove);
-    return () => window.removeEventListener('pointermove', onMove);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('keyup', onKey);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKey);
+    };
   }, [armedTypeId]);
 
   const toggleRemoveMode = () => {
@@ -149,7 +176,7 @@ export default function App() {
       <Viewer
         ref={viewerRef}
         charges={charges}
-        ghost={armedTypeId && ghostFloorPoint ? { type: armedTypeId, position: ghostFloorPoint } : null}
+        ghost={armedTypeId && ghostPoint ? { type: armedTypeId, position: ghostPoint } : null}
         armedTypeId={armedTypeId}
         onPlaceClick={handlePlaceClick}
         removeMode={removeMode}
@@ -187,14 +214,14 @@ export default function App() {
         </div>
       )}
 
-      {/* While armed: a flat 2D icon follows the pointer whenever it's off
-          the floor grid (over the sidebar, off the edge of the grid, ...).
-          Over the grid the 3D ghost in the scene takes its place, sitting
-          exactly where the charge would land. The guidance message shows
-          either way. */}
+      {/* While armed: a flat 2D icon follows the pointer whenever the charge
+          can't be placed there (over the sidebar, off the edge of the
+          grid, ...). Otherwise the 3D ghost in the scene takes its place,
+          sitting exactly where the charge would land. The guidance message
+          shows either way. */}
       {armedType && ghostPos && (
         <>
-          {!ghostFloorPoint && (
+          {!ghostPoint && (
             <div className="placement-ghost" style={{ left: ghostPos.x, top: ghostPos.y }}>
               <ChargeIcon type={armedType} size={GHOST_ICON_SIZE} />
             </div>

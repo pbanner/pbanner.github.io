@@ -182,3 +182,10 @@
   line-height: 1.3;
   z-index: 5;
 }
+
+/* These buttons are pointer-driven, and the Shift/Alt modifier keys would
+   otherwise make the browser draw its keyboard-focus ring on whichever
+   one was last clicked. */
+.sidebar-icon-button:focus {
+  outline: none;
+}

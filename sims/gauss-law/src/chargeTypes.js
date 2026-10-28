@@ -14,4 +14,4 @@ export function getChargeType(id) {
 }
 
 // Shown under the cursor while a charge is armed for placement.
-export const PLACEMENT_MESSAGE = 'Click or release over the grid to place.\nEsc to cancel.';
+export const PLACEMENT_MESSAGE = 'Click or release to place.\nPress Shift to raise or lower.\nEsc to cancel.';
