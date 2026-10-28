@@ -50,6 +50,11 @@ const MIN_FIELD = 1e-9;
 // so two mirror-image lines could end up in different places.
 const NULL_RATIO = 0.01;
 const NULL_STEP_FACTOR = 0.8;
+// A line that stops near a point where the field vanishes is finished at
+// that point (see nullPointAhead), found by searching this far straight
+// ahead in steps of NULL_SEARCH_STEP.
+const NULL_SEARCH_DISTANCE = 0.2;
+const NULL_SEARCH_STEP = 0.002;
 
 // ---------------------------------------------------------------------
 // Starting directions
@@ -173,6 +178,32 @@ function rk4Step(p, sources, sign, h) {
   return [0, 1, 2].map((i) => p[i] + (h / 6) * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]));
 }
 
+// The point straight ahead of p, along the unit direction d, where the
+// field stops pointing forward along d (E . d changes sign) -- the point
+// where the field vanishes that a line stopping at p was heading into --
+// or null if there's none within NULL_SEARCH_DISTANCE. Found by stepping
+// ahead until the sign changes, then bisecting.
+//
+// Finishing lines there, instead of where they stopped just short of it,
+// makes lines that run into the same point from different sides actually
+// meet: e.g. at the center of a square of alternating charges, or along
+// the line above and below it where the field also vanishes.
+function nullPointAhead(p, d, sources, sign) {
+  const forward = (t) => sign * dot(fieldAt(add(p, d, t), sources), d);
+  if (!(forward(0) > 0)) return null;
+  for (let t = NULL_SEARCH_STEP; t <= NULL_SEARCH_DISTANCE; t += NULL_SEARCH_STEP) {
+    if (forward(t) > 0) continue;
+    let [a, b] = [t - NULL_SEARCH_STEP, t];
+    for (let i = 0; i < 40; i++) {
+      const mid = (a + b) / 2;
+      if (forward(mid) > 0) a = mid;
+      else b = mid;
+    }
+    return add(p, d, (a + b) / 2);
+  }
+  return null;
+}
+
 const inside = (p, half) => p.every((v) => Math.abs(v) <= half);
 
 // Where the segment from a (inside the cube) to b (outside it) crosses
@@ -198,7 +229,15 @@ function traceLine(start, startIndex, sources, sign, { halfExtent, chargeRadius 
   let previousDirection = null;
   while (length < MAX_LINE_LENGTH) {
     const { ratio, nearest } = cancellationAndNearest(p, sources);
-    if (!(ratio >= NULL_RATIO)) break; // at (or about to reach) a point where the field vanishes
+    if (!(ratio >= NULL_RATIO)) {
+      // About to reach a point where the field vanishes: finish there.
+      if (previousDirection) {
+        const n = Math.hypot(...previousDirection);
+        const nullPoint = nullPointAhead(p, previousDirection.map((c) => c / n), sources, sign);
+        if (nullPoint) points.push(nullPoint);
+      }
+      break;
+    }
     const h = Math.max(MIN_STEP, Math.min(MAX_STEP, STEP_PER_DISTANCE * nearest, NULL_STEP_FACTOR * ratio));
     const next = rk4Step(p, sources, sign, h);
     if (!next) break; // the field vanished
