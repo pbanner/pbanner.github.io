@@ -114,11 +114,6 @@ const SEED_SETS = [
 ];
 export const FIELD_LINE_DENSITY_LEVELS = SEED_SETS.length;
 
-// Lines per unit charge at a density setting (for the slider's label).
-export function linesPerUnitCharge(density) {
-  return SEED_SETS[density - 1].length;
-}
-
 // sources: [{ position: [x, y, z], q }]
 function fieldAt([x, y, z], sources) {
   let ex = 0;
