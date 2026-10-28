@@ -1,12 +1,11 @@
 import { useImperativeHandle, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
-import * as THREE from 'three';
 import { ChargeDrag } from './chargeDrag.js';
 import ChargeMarker from './ChargeMarker.jsx';
 import Axes from './Axes.jsx';
 import { getChargeType } from './chargeTypes.js';
-import { rayFromClient, pickCharge } from './geometry.js';
+import { rayFromClient, pickCharge, SNAP_STEP } from './geometry.js';
 import { WORLD_HALF_EXTENT, CHARGE_RADIUS, INITIAL_CAMERA_POSITION, INITIAL_CAMERA_TARGET, CAMERA_FOV, CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
 
 // A directional light that rides along with the camera, so whatever side of
@@ -21,21 +20,17 @@ function CameraLight() {
   return <directionalLight ref={lightRef} intensity={2.2} />;
 }
 
-// The z = 0 reference plane: a faintly tinted translucent sheet plus two
-// grid layers (fine lines every 0.5, darker ones every 1). gridHelper is
-// built lying in three's default XZ plane, so it's rotated a quarter turn
-// about x to lie in XY instead (our floor, since z is up).
+// The z = 0 reference plane, drawn as a single light-gray grid with a line
+// every SNAP_STEP, so every grid crossing is a point a charge can snap to.
+// gridHelper takes (size, divisions, center-line color, line color); both
+// colors are the same so the lines through the origin don't stand out
+// either. It's built lying in three's default XZ plane, so it's rotated a
+// quarter turn about x to lie in XY instead (our floor, since z is up).
+const GRID_COLOR = '#d3d7dc';
 function Floor() {
   const size = 2 * WORLD_HALF_EXTENT;
   return (
-    <group>
-      <mesh renderOrder={-1}>
-        <planeGeometry args={[size, size]} />
-        <meshBasicMaterial color="#b9c7d6" transparent opacity={0.18} side={THREE.DoubleSide} depthWrite={false} />
-      </mesh>
-      <gridHelper args={[size, size * 2, '#c4c9cf', '#c4c9cf']} rotation={[Math.PI / 2, 0, 0]} />
-      <gridHelper args={[size, size, '#7d8590', '#8f97a1']} rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.001]} />
-    </group>
+    <gridHelper args={[size, Math.round(size / SNAP_STEP), GRID_COLOR, GRID_COLOR]} rotation={[Math.PI / 2, 0, 0]} />
   );
 }
 
