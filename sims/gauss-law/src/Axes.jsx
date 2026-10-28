@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { Line } from '@react-three/drei';
 import * as THREE from 'three';
+import { SNAP_STEP } from './geometry.js';
 import { WORLD_HALF_EXTENT } from './sceneConstants.js';
 
 const AXIS_DIRECTIONS = [
@@ -12,6 +13,7 @@ const AXIS_DIRECTIONS = [
 const AXIS_COLORS = ['#ff2060', '#20b870', '#2080ff'];
 const AXIS_NAMES = ['x', 'y', 'z'];
 const ORIGIN_RADIUS = 0.08;
+const TICK_RADIUS = 0.04;
 const LABEL_OFFSET = 0.45;
 const LABEL_SIZE = 0.6; // world units
 
@@ -47,7 +49,16 @@ function AxisLabel({ text, color, position }) {
 // x, y and z axes through the origin, spanning the world cube, each with a
 // label at its positive end, plus a small dark dot marking the origin
 // itself.
+//
+// Each axis also gets a tick dot every SNAP_STEP -- the same spacing as the
+// floor grid's lines, so on x and y the ticks sit exactly where grid lines
+// cross the axis, and on z they mark the heights a raised charge snaps to.
 export default function Axes() {
+  const tickValues = [];
+  const steps = Math.round(WORLD_HALF_EXTENT / SNAP_STEP);
+  for (let i = -steps; i <= steps; i++) {
+    if (i !== 0) tickValues.push(i * SNAP_STEP); // the origin dot already marks 0
+  }
   return (
     <group>
       {AXIS_DIRECTIONS.map((u, axis) => {
@@ -57,6 +68,12 @@ export default function Axes() {
         return (
           <group key={axis}>
             <Line points={[start, end]} color={color} lineWidth={2} transparent opacity={0.8} />
+            {tickValues.map((s) => (
+              <mesh key={s} position={u.clone().multiplyScalar(s).toArray()}>
+                <sphereGeometry args={[TICK_RADIUS, 12, 12]} />
+                <meshBasicMaterial color={color} />
+              </mesh>
+            ))}
             <AxisLabel text={AXIS_NAMES[axis]} color={color} position={u.clone().multiplyScalar(WORLD_HALF_EXTENT + LABEL_OFFSET).toArray()} />
           </group>
         );
