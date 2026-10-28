@@ -204,7 +204,7 @@
   right: 16px;
   bottom: 16px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: flex-end;
   gap: 10px;
   z-index: 10;
