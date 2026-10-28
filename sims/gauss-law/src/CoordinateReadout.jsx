@@ -1,6 +1,7 @@
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { CHARGE_RADIUS } from './sceneConstants.js';
+import { SNAP_STEP } from './geometry.js';
 
 // Gap between the top of the charge (as drawn on screen) and the bottom
 // of the readout panel.
@@ -9,12 +10,21 @@ const PANEL_GAP_PX = 10;
 // measure its top from that size.
 const HIGHLIGHT_SCALE = 1.15;
 
-// Snapped coordinates are multiples of 0.5, so one decimal shows them
-// exactly; a coordinate placed freely (Alt) gets two. A true minus sign
-// reads better than a hyphen.
-function formatCoordinate(v) {
-  const text = Number.isInteger(Math.round(v * 1e6) / 1e5) ? v.toFixed(1) : v.toFixed(2);
-  return text.replace(/^-/, '−').replace(/^−0\.0+$/, '0.0');
+// The readout counts in ticks: one readout unit is one SNAP_STEP of world
+// distance, i.e. the spacing of the grid lines and the axis tick dots. So
+// a snapped charge always reads as whole numbers, and the world's edges
+// (at +/-5 world units) read as +/-10. Only the readout uses this scale;
+// positions in state stay in world units.
+const READOUT_UNITS_PER_WORLD_UNIT = 1 / SNAP_STEP;
+
+// Snapped coordinates are whole numbers on the readout's scale, so they're
+// shown without decimals; a coordinate placed freely (Alt) gets one. A
+// true minus sign reads better than a hyphen.
+function formatCoordinate(worldValue) {
+  const v = worldValue * READOUT_UNITS_PER_WORLD_UNIT;
+  const rounded = Math.round(v);
+  const text = Math.abs(v - rounded) < 1e-6 ? String(rounded) : v.toFixed(1);
+  return text.replace(/^-/, '−').replace(/^−0(\.0)?$/, '0');
 }
 
 // The (x, y, z) readout floating above a charge being placed or dragged.
