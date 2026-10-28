@@ -11,7 +11,7 @@
 // The floor grid spans the same range in x and y.
 export const WORLD_HALF_EXTENT = 5;
 
-export const CHARGE_RADIUS = 0.25;
+export const CHARGE_RADIUS = 0.15;
 
 export const INITIAL_CAMERA_POSITION = [11, -14, 9];
 export const INITIAL_CAMERA_TARGET = [0, 0, 0];
