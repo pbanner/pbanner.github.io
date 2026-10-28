@@ -7,7 +7,6 @@ import Axes from './Axes.jsx';
 import FieldLines from './FieldLines.jsx';
 import { CoordinateReadoutPanel, CoordinateReadoutTracker } from './CoordinateReadout.jsx';
 import { getChargeType } from './chargeTypes.js';
-import { linesPerUnitChargeForDensity } from './fieldLines.js';
 import { rayFromClient, pickCharge, SNAP_STEP } from './geometry.js';
 import { WORLD_HALF_EXTENT, CHARGE_RADIUS, INITIAL_CAMERA_POSITION, INITIAL_CAMERA_TARGET, CAMERA_FOV, CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
 
@@ -241,7 +240,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
 
         {showGrid && <Floor />}
         {showAxes && <Axes />}
-        {showFieldLines && <FieldLines sources={fieldSources} linesPerUnitCharge={linesPerUnitChargeForDensity(fieldLineDensity)} />}
+        {showFieldLines && <FieldLines sources={fieldSources} density={fieldLineDensity} />}
 
         {charges.map((charge) => (
           <ChargeMarker

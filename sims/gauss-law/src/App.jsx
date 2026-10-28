@@ -44,7 +44,7 @@ export default function App() {
     showGrid: true,
     showAxes: true,
     showFieldLines: true,
-    fieldLineDensity: 5,
+    fieldLineDensity: 3, // 26 lines per charge; see SEED_SETS in fieldLines.js
   });
 
   const viewerRef = useRef(null);

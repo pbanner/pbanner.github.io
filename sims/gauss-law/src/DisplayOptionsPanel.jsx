@@ -3,12 +3,14 @@
 // Purely presentational: the options themselves live in App.jsx's
 // displayOptions state.
 //
-// The field line density slider sets how many lines leave each unit of
-// charge (see linesPerUnitChargeForDensity in fieldLines.js). Its value is
-// shown in the label rather than in a separate number box (as the optics
-// lab's SliderPlusTextboxControl does) to keep the panel thin. It's dimmed
-// while field lines are hidden.
-const FIELD_LINE_DENSITY_RANGE = { min: 1, max: 10, step: 1 };
+import { FIELD_LINE_DENSITY_LEVELS, linesPerUnitCharge } from './fieldLines.js';
+
+// The field line density slider steps through the starting-direction sets
+// in fieldLines.js (SEED_SETS), and its label shows how many lines each
+// charge gets. The value is shown in the label rather than in a separate
+// number box (as the optics lab's SliderPlusTextboxControl does) to keep
+// the panel thin. It's dimmed while field lines are hidden.
+const FIELD_LINE_DENSITY_RANGE = { min: 1, max: FIELD_LINE_DENSITY_LEVELS, step: 1 };
 
 export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions }) {
   const setOption = (key, value) => setDisplayOptions((prev) => ({ ...prev, [key]: value }));
@@ -28,7 +30,7 @@ export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions 
         Field lines
       </label>
       <div className={`control-group${displayOptions.showFieldLines ? '' : ' disabled'}`}>
-        <label htmlFor="field-line-density">Field line density: {displayOptions.fieldLineDensity}</label>
+        <label htmlFor="field-line-density">Lines per charge: {linesPerUnitCharge(displayOptions.fieldLineDensity)}</label>
         <input
           id="field-line-density"
           type="range"

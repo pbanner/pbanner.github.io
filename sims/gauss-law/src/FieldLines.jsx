@@ -52,11 +52,11 @@ function Arrowheads({ arrows }) {
 // The electric field lines of the placed charges (see fieldLines.js for
 // how they're traced), with arrowheads showing the field's direction.
 // sources: [{ position, q }]; recomputed only when they or the density
-// change, which includes every step of dragging a charge.
-export default function FieldLines({ sources, linesPerUnitCharge }) {
+// setting change, which includes every step of dragging a charge.
+export default function FieldLines({ sources, density }) {
   const lines = useMemo(
-    () => computeFieldLines(sources, { linesPerUnitCharge, halfExtent: WORLD_HALF_EXTENT, chargeRadius: CHARGE_RADIUS }),
-    [sources, linesPerUnitCharge],
+    () => computeFieldLines(sources, { density, halfExtent: WORLD_HALF_EXTENT, chargeRadius: CHARGE_RADIUS }),
+    [sources, density],
   );
   // `segments` mode draws each consecutive pair of points as its own line
   // segment, so every line's consecutive points become pairs: all the
