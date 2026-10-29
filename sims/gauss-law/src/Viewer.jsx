@@ -1,15 +1,18 @@
 import { useImperativeHandle, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import * as THREE from 'three';
 import { OrbitControls, GizmoHelper } from '@react-three/drei';
 import { ChargeDrag } from './chargeDrag.js';
 import ChargeMarker from './ChargeMarker.jsx';
 import ChargedObject from './ChargedObject.jsx';
+import ObjectHandles from './ObjectHandles.jsx';
+import { objectHandles, LineDrag } from './handles.js';
 import Axes from './Axes.jsx';
 import { AxisGizmo, CameraAnimator } from './AxisGizmo.jsx';
 import FieldLines from './FieldLines.jsx';
 import FieldArrows from './FieldArrows.jsx';
 import { CoordinateReadoutPanel, CoordinateReadoutTracker } from './CoordinateReadout.jsx';
-import { rayFromClient, pickCharge, pickObject, SNAP_STEP } from './geometry.js';
+import { rayFromClient, pickCharge, pickObject, snapValue, clampToWorld, SNAP_STEP } from './geometry.js';
 import { WORLD_HALF_EXTENT, CHARGE_RADIUS, INITIAL_CAMERA_POSITION, INITIAL_CAMERA_TARGET, CAMERA_FOV, CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
 
 // A directional light that rides along with the camera, so whatever side of
@@ -55,10 +58,11 @@ function Floor() {
 // removeMode: the sidebar's delete tool is on, so clicking a charge deletes it
 // selectedId / onSelect(id or null): the charge selected for the properties
 //   panel. Pressing on a charge selects it; clicking empty space deselects.
-// onMoveCharge(id, position) / onDeleteCharge(id): edits to placed charges
+// onMoveCharge(id, position) / onUpdateCharge(id, changes) /
+//   onDeleteCharge(id): edits to placed charges
 // showGrid / showAxes / showField / fieldStyle ('lines' or 'arrows') /
 //   fieldDensity: the Display Options panel's settings
-export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onDeleteCharge, showGrid, showAxes, showField, fieldStyle, fieldDensity }) {
+export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, showGrid, showAxes, showField, fieldStyle, fieldDensity }) {
   const wrapperRef = useRef();
   const controlsRef = useRef();
   const cameraAnimatorRef = useRef();
@@ -191,6 +195,106 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
     return obj ? { charge: obj, isPoint: false } : null;
   };
 
+  // The selected sphere, rod or plane, whose handles (handles.js) are
+  // shown -- except while placing something or deleting.
+  const selectedObject = !armedTypeId && !removeMode ? objects.find((c) => c.id === selectedId) ?? null : null;
+  // The handle under the pointer, and the one being dragged, if any: { id,
+  // label, value, position } -- the readout shows label = value, floating
+  // above the handle's position.
+  const [hoveredHandleId, setHoveredHandleId] = useState(null);
+  const [handleDrag, setHandleDrag] = useState(null);
+
+  // The selected object's handle under a viewport point, if any. Handles
+  // are drawn the same size on screen however far away they are, so
+  // they're picked by on-screen distance: within HANDLE_HIT_PX of the
+  // pointer, the closest one.
+  const HANDLE_HIT_PX = 18;
+  const pickHandle = (clientX, clientY) => {
+    const controls = controlsRef.current;
+    if (!selectedObject || !controls || !rayAt(clientX, clientY)) return null;
+    const camera = controls.object;
+    const rect = wrapperRef.current.getBoundingClientRect();
+    let best = null;
+    let bestDist = HANDLE_HIT_PX;
+    for (const h of objectHandles(selectedObject, camera)) {
+      const ndc = new THREE.Vector3(...h.position).project(camera);
+      const x = rect.left + ((ndc.x + 1) / 2) * rect.width;
+      const y = rect.top + ((1 - ndc.y) / 2) * rect.height;
+      const dist = Math.hypot(x - clientX, y - clientY);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = h;
+      }
+    }
+    return best;
+  };
+
+  // Drags one of the selected object's handles. The move handle drags the
+  // object like a point charge (startDrag: sideways, or with Shift up and
+  // down, and onto the trash to delete it); the others drag a single value
+  // along their line (LineDrag), kept within the box and at least
+  // MIN_SIZE for a radius or thickness.
+  const MIN_SIZE = SNAP_STEP / 2;
+  const startHandleDrag = (obj, handle, downEvent) => {
+    if (handle.id === 'move') {
+      startDrag(obj, downEvent);
+      return;
+    }
+    const axis = obj.axis;
+    const size = (v) => Math.min(2 * WORLD_HALF_EXTENT, Math.max(MIN_SIZE, v));
+    // For each handle: where its line starts from and the value it drags,
+    // how a new value changes the object, and the readout's label and
+    // value.
+    let drag;
+    let apply;
+    let label;
+    let valueOf;
+    if (handle.id === 'lift') {
+      drag = new LineDrag(handle.position, handle.direction, obj.position[2]);
+      apply = (v) => ({ position: [obj.position[0], obj.position[1], clampToWorld(v)] });
+      [label, valueOf] = ['z', (o) => o.position[2]];
+    } else if (handle.id === 'radius') {
+      drag = new LineDrag(handle.position, handle.direction, obj.radius);
+      apply = (v) => ({ radius: size(v) });
+      [label, valueOf] = ['r', (o) => o.radius];
+    } else if (handle.id === 'position') {
+      drag = new LineDrag(handle.position, handle.direction, obj.position[axis]);
+      apply = (v) => {
+        const position = [0, 0, 0];
+        position[axis] = clampToWorld(v);
+        return { position };
+      };
+      [label, valueOf] = [['x', 'y', 'z'][axis], (o) => o.position[axis]];
+    } else {
+      // Thickness: the face moves half as far as the thickness changes, so
+      // the thickness is snapped rather than the face's position.
+      drag = new LineDrag(handle.position, handle.direction, obj.thickness / 2, (v) => v);
+      apply = (v, altKey) => ({ thickness: size(altKey ? 2 * v : snapValue(2 * v)) });
+      [label, valueOf] = ['thickness', (o) => o.thickness];
+    }
+
+    const update = (ev) => {
+      const controls = controlsRef.current;
+      if (!controls) return;
+      const ray = rayFromClient(controls.object, wrapperRef.current.getBoundingClientRect(), ev.clientX, ev.clientY);
+      const changes = apply(drag.update(ray, ev.altKey), ev.altKey);
+      onUpdateCharge(obj.id, changes);
+      const moved = { ...obj, ...changes };
+      const h = objectHandles(moved, controls.object).find((x) => x.id === handle.id);
+      setHandleDrag({ id: handle.id, label, value: valueOf(moved), position: h.position });
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', update);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      setHandleDrag(null);
+    };
+    window.addEventListener('pointermove', update);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    update(downEvent);
+  };
+
   // Runs in the *capture* phase -- on the way down from the outer page
   // to the canvas, before the event reaches OrbitControls, which listens
   // on an element inside this wrapper. That ordering is what lets one
@@ -205,6 +309,10 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   // selected (or, in delete mode, deleted) if the press turns out to be a
   // click -- see handlePointerUp.
   //
+  // Instead, a selected object has handles, which come first: a press on
+  // one is kept from OrbitControls, like a press on a point charge, and
+  // drags it.
+  //
   // While a charge is armed, this just records the press for
   // click-to-place's second click, which is likewise acted on at pointerup
   // only if the pointer barely moved -- so a real drag still orbits the
@@ -215,6 +323,13 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
     const at = { x: e.clientX, y: e.clientY };
     if (armedTypeId) {
       pressRef.current = { target: 'armed', ...at };
+      return;
+    }
+    const handle = pickHandle(e.clientX, e.clientY);
+    if (handle) {
+      pressRef.current = { target: 'handle', ...at };
+      e.stopPropagation();
+      startHandleDrag(selectedObject, handle, e);
       return;
     }
     const picked = pickAt(e.clientX, e.clientY);
@@ -249,19 +364,29 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   };
 
   const handlePointerMove = (e) => {
-    if (dragRef.current || armedTypeId) return;
-    const id = pickAt(e.clientX, e.clientY)?.charge.id ?? null;
+    if (dragRef.current || handleDrag || armedTypeId) return;
+    const handleId = pickHandle(e.clientX, e.clientY)?.id ?? null;
+    if (handleId !== hoveredHandleId) setHoveredHandleId(handleId);
+    const id = handleId ? null : pickAt(e.clientX, e.clientY)?.charge.id ?? null;
     if (id !== hoveredId) setHoveredId(id);
   };
 
-  // The charge whose coordinates the readout shows: the one being dragged,
-  // or else the placement ghost.
-  const readoutPosition = charges.find((c) => c.id === draggingId)?.position ?? ghost?.position ?? null;
+  // The readout: while a handle drags a single value, that value (e.g.
+  // "r = 3"), floating above the handle; otherwise the coordinates of the
+  // charge or object being dragged, or else of the placement ghost.
+  let readout = null;
+  if (handleDrag) {
+    readout = handleDrag;
+  } else {
+    const position = charges.find((c) => c.id === draggingId)?.position ?? ghost?.position ?? null;
+    if (position) readout = { position };
+  }
 
-  // Over a point charge: grab (it can be dragged). Over an object: a
-  // pointing hand (it can be clicked).
+  // Over a point charge or a handle: grab (it can be dragged). Over an
+  // object: a pointing hand (it can be clicked).
   let cursor;
-  if (draggingId != null) cursor = 'grabbing';
+  if (draggingId != null || handleDrag) cursor = 'grabbing';
+  else if (hoveredHandleId) cursor = 'grab';
   else if (hoveredId != null && !armedTypeId) {
     const isPoint = pointCharges.some((c) => c.id === hoveredId);
     cursor = removeMode || !isPoint ? 'pointer' : 'grab';
@@ -290,7 +415,10 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
       onPointerDownCapture={handlePointerDownCapture}
       onPointerUp={handlePointerUp}
       onPointerMove={handlePointerMove}
-      onPointerLeave={() => setHoveredId(null)}
+      onPointerLeave={() => {
+        setHoveredId(null);
+        setHoveredHandleId(null);
+      }}
     >
       <Canvas
         camera={{ position: INITIAL_CAMERA_POSITION, up: [0, 0, 1], fov: CAMERA_FOV }}
@@ -321,6 +449,8 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
           <ChargedObject key={obj.id} charge={obj} selected={obj.id === selectedId} />
         ))}
 
+        {selectedObject && <ObjectHandles charge={selectedObject} hoveredId={hoveredHandleId} activeId={handleDrag?.id} />}
+
         {ghost && (ghost.kind === 'point'
           ? <ChargeMarker q={ghost.q} position={ghost.position} ghost showGuides />
           : <ChargedObject charge={ghost} ghost />)}
@@ -330,7 +460,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
             pans. */}
         <OrbitControls ref={controlsRef} target={INITIAL_CAMERA_TARGET} makeDefault />
 
-        <CoordinateReadoutTracker panelRef={readoutPanelRef} position={readoutPosition} />
+        <CoordinateReadoutTracker panelRef={readoutPanelRef} position={readout?.position ?? null} />
 
         {/* Orientation widget in the lower-left corner. Clicking one of its
             axis labels swings the camera around to look along that axis
@@ -341,7 +471,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
         </GizmoHelper>
       </Canvas>
 
-      {readoutPosition && <CoordinateReadoutPanel panelRef={readoutPanelRef} position={readoutPosition} />}
+      {readout && <CoordinateReadoutPanel panelRef={readoutPanelRef} position={readout.position} label={readout.label} value={readout.value} />}
     </div>
   );
 }

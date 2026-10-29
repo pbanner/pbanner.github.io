@@ -208,6 +208,7 @@ export default function App() {
         selectedId={selectedId}
         onSelect={setSelectedId}
         onMoveCharge={moveCharge}
+        onUpdateCharge={updateCharge}
         onDeleteCharge={deleteCharge}
         showGrid={displayOptions.showGrid}
         showAxes={displayOptions.showAxes}

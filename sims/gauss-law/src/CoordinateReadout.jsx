@@ -42,11 +42,15 @@ function formatCoordinate(worldValue) {
 // The panel starts hidden (see .coordinate-readout in App.css) and the
 // tracker reveals it once it has been positioned, so it never flashes at
 // the corner of the screen for a frame.
-export function CoordinateReadoutPanel({ panelRef, position }) {
+//
+// The panel shows `position` as (x, y, z) -- or, given a `label`, that
+// label and a single length `value` instead (e.g. "r = 3", while a handle
+// drags a sphere's radius), in the same units.
+export function CoordinateReadoutPanel({ panelRef, position, label, value }) {
   const [x, y, z] = position.map(formatCoordinate);
   return (
     <div ref={panelRef} className="coordinate-readout">
-      ({x}, {y}, {z})
+      {label ? `${label} = ${formatCoordinate(value)}` : `(${x}, ${y}, ${z})`}
     </div>
   );
 }
