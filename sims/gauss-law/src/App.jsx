@@ -45,7 +45,7 @@ export default function App() {
     showAxes: true,
     showField: true,
     fieldStyle: 'lines', // or 'arrows'
-    fieldDensity: 3, // 26 lines per charge (SEED_SETS in fieldLines.js), or 7 x 7 x 7 arrows (fieldArrows.js)
+    fieldDensity: 3, // 30 lines per unit charge (seedDirections.js), or 7 x 7 x 7 arrows (fieldArrows.js)
   });
 
   const viewerRef = useRef(null);

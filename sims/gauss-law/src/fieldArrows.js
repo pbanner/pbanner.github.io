@@ -17,7 +17,7 @@ import { fieldAt } from './fieldLines.js';
 // odd, so that the middle layer of arrows runs through the origin -- in
 // particular, there's always a layer in the plane z = 0, where charges are
 // placed. The same slider sets the field lines' density, so this must have
-// as many entries as fieldLines.js's SEED_SETS.
+// as many entries as seedDirections.js's LINES_PER_UNIT_CHARGE.
 const ARROWS_PER_AXIS = [3, 5, 7, 9, 11];
 export const FIELD_ARROW_DENSITY_LEVELS = ARROWS_PER_AXIS.length;
 

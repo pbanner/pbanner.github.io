@@ -8,7 +8,7 @@
 // A field line is a curve tangent to E everywhere, so it's traced by
 // repeatedly stepping a short distance along the field's direction:
 //   - Each line starts on a small sphere around a charge, at one of a
-//     fixed set of directions (see SEED_SETS), the same set for every
+//     fixed set of directions (see seedDirections.js), the same set for every
 //     charge, so the number of lines leaving or entering a charge shows
 //     its size (the picture Gauss's law is about).
 //   - Lines from positive charges are traced along E; lines from negative
@@ -25,6 +25,7 @@
 //     computeFieldLines. Equal counts matter here: lines only begin and end
 //     at charges, so the net number crossing any closed surface then counts
 //     the charge inside it, which is Gauss's law.
+import { LINES_PER_UNIT_CHARGE, seedDirections } from './seedDirections.js';
 
 // Step size bounds, in world units. Steps shrink near charges (where lines
 // curve sharply) down to MIN_STEP, and grow to MAX_STEP far from them.
@@ -59,60 +60,17 @@ const NULL_STEP_FACTOR = 0.8;
 const NULL_SEARCH_DISTANCE = 0.2;
 const NULL_SEARCH_STEP = 0.002;
 
-// ---------------------------------------------------------------------
-// Starting directions
-//
-// The picture can only be as symmetric as the starting directions. If an
-// arrangement of charges looks the same after some reflection or rotation,
-// its field does too -- but the drawn lines only will if each charge's
-// starting directions also look the same after it. Charges snap to a cubic
-// grid, so any symmetry an arrangement can have is one of the cube's 48
-// (reflections across the coordinate planes, swapping axes, 90-degree
-// rotations, and their combinations). So the starting directions are sets
-// that all 48 leave unchanged: Lebedev grids, point sets on the sphere
-// built for exactly this symmetry (originally for numerical integration),
-// and spread out about as evenly as such a set can be.
-//
-// Each set is a union of "orbits": a direction together with every
-// direction any of the 48 symmetries can turn it into, i.e. every
-// permutation of its coordinates with every choice of signs.
+// Starting directions: each unit of charge gets one of seedDirections.js's
+// symmetric sets, which the density setting picks the size of.
 //
 // (When an arrangement's symmetry swaps positive and negative charges, as
 // in a dipole or a square of alternating charges, the field on the mirror
 // plane points straight through it, so every line crossing that plane is
 // its own mirror image. Lines from a positive charge therefore arrive at
 // the mirrored negative charge along mirrored starting directions, and
-// dropping that charge's own duplicates (above) keeps the symmetry.)
-function orbit(v) {
-  const perms = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
-  const norm = Math.hypot(...v);
-  const seen = new Map();
-  for (const perm of perms) {
-    for (let signs = 0; signs < 8; signs++) {
-      const d = perm.map((axis, k) => ((signs >> k) & 1 ? -1 : 1) * v[axis] / norm);
-      seen.set(d.map((c) => c.toFixed(9)).join(','), d.map((c) => c + 0)); // + 0 turns -0 into 0
-    }
-  }
-  return [...seen.values()];
-}
-
-const AXES = orbit([1, 0, 0]); //                6: +/-x, +/-y, +/-z
-const FACE_DIAGONALS = orbit([1, 1, 0]); //     12
-const CORNERS = orbit([1, 1, 1]); //             8
-// Two 24-point orbits from the 38- and 50-point Lebedev grids.
-const LEBEDEV_38_C = orbit([0.4597008433809831, 0.8880738339771153, 0]);
-const LEBEDEV_50_B = orbit([0.3015113445777636, 0.3015113445777636, 0.9045340337332909]);
-
-// The density setting (1-5) picks one of these: 6, 14, 26, 38 or 50
-// starting directions per unit charge.
-const SEED_SETS = [
-  AXES,
-  [...AXES, ...CORNERS],
-  [...AXES, ...FACE_DIAGONALS, ...CORNERS],
-  [...AXES, ...CORNERS, ...LEBEDEV_38_C],
-  [...AXES, ...FACE_DIAGONALS, ...CORNERS, ...LEBEDEV_50_B],
-];
-export const FIELD_LINE_DENSITY_LEVELS = SEED_SETS.length;
+// dropping that charge's own duplicates (see computeFieldLines) keeps the
+// symmetry.)
+export const FIELD_LINE_DENSITY_LEVELS = LINES_PER_UNIT_CHARGE.length;
 
 // The electric field at a point. sources: [{ position: [x, y, z], q }]
 // (Also used by fieldArrows.js.)
@@ -344,7 +302,7 @@ function farthestFrom(candidates, taken) {
 // see the note on mirror planes above), so there's nothing to choose and
 // the symmetry is kept.
 export function computeFieldLines(sources, { density, halfExtent, chargeRadius }) {
-  const seeds = SEED_SETS[density - 1];
+  const seeds = seedDirections(LINES_PER_UNIT_CHARGE[density - 1]);
   const options = { halfExtent, chargeRadius };
   const lines = [];
   // For each charge, the directions (from its center) of the lines arriving

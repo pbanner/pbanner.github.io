@@ -7,7 +7,7 @@ import { FIELD_ARROW_DENSITY_LEVELS } from './fieldArrows.js';
 
 // The electric field is shown as field lines or as a grid of arrows, with
 // one density slider (1-5) for both: it steps through the field lines'
-// starting-direction sets in fieldLines.js (SEED_SETS, 6 to 50 lines per
+// starting-direction sets in seedDirections.js (6 to 54 lines per unit
 // charge), or the arrow grids in fieldArrows.js (3 to 11 arrows along each
 // axis). The value is shown in the label rather than in a separate number
 // box (as the optics lab's SliderPlusTextboxControl does) to keep the panel
