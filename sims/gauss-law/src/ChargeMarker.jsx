@@ -1,14 +1,13 @@
 import { useEffect, useMemo } from 'react';
 import { Billboard, Line } from '@react-three/drei';
 import { CanvasTexture } from 'three';
-import { CHARGE_RADIUS } from './sceneConstants.js';
+import { CHARGE_RADIUS, SELECTION_COLOR } from './sceneConstants.js';
 import { chargeGuideSegments } from './geometry.js';
 import { chargeColor, chargeSignText } from './chargeTypes.js';
 
 const FOOT_DOT_RADIUS = 0.06;
-// The selected charge's ring: the sidebar's "armed" blue, a little way
-// outside the sphere (and outside its hover enlargement).
-const SELECTION_COLOR = '#3498db';
+// The selected charge's ring, a little way outside the sphere (and
+// outside its hover enlargement).
 const SELECTION_RING = [1.45, 1.7]; // inner and outer radius, in charge radii
 
 // A charge bigger than one unit is labeled with its value ("+3", "−2")

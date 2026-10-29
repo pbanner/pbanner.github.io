@@ -93,6 +93,73 @@ export function pickCharge(ray, charges, radius) {
   return best;
 }
 
+// The charged sphere, rod or plane (see chargeTypes.js) the ray hits first,
+// or null. Like pickCharge, plain geometry rather than mesh raycasting.
+// Rods and planes are drawn across the whole box, so they can only be hit
+// inside it. A thin rod (form 'line') is hit within LINE_ROD_PICK_RADIUS
+// of its axis -- wider than it's drawn, so it isn't fiddly to click.
+const LINE_ROD_PICK_RADIUS = 0.15;
+export function pickObject(ray, objects) {
+  let best = null;
+  let bestDist = Infinity;
+  for (const obj of objects) {
+    const dist = rayHitDistance(ray, obj);
+    if (dist !== null && dist < bestDist) {
+      bestDist = dist;
+      best = obj;
+    }
+  }
+  return best;
+}
+
+const H = WORLD_HALF_EXTENT;
+
+// How far along the ray it first hits the object, or null if it misses.
+function rayHitDistance(ray, obj) {
+  const o = ray.origin.toArray();
+  const d = ray.direction.toArray();
+  const c = obj.position;
+  if (obj.kind === 'sphere') {
+    const hit = ray.intersectSphere(new THREE.Sphere(new THREE.Vector3(...c), obj.radius), new THREE.Vector3());
+    return hit ? hit.distanceTo(ray.origin) : null;
+  }
+  if (obj.kind === 'rod') {
+    // Seen along the rod's axis, the rod is a circle: solve
+    // |(o - c) + t d|^2 = R^2 using only the other two coordinates.
+    const R = obj.form === 'line' ? LINE_ROD_PICK_RADIUS : obj.radius;
+    const [u, v] = [0, 1, 2].filter((k) => k !== obj.axis);
+    const ou = o[u] - c[u];
+    const ov = o[v] - c[v];
+    const a = d[u] * d[u] + d[v] * d[v];
+    const b = 2 * (ou * d[u] + ov * d[v]);
+    const cc = ou * ou + ov * ov - R * R;
+    const disc = b * b - 4 * a * cc;
+    if (a === 0 || disc < 0) return null;
+    for (const t of [(-b - Math.sqrt(disc)) / (2 * a), (-b + Math.sqrt(disc)) / (2 * a)]) {
+      if (t > 0 && Math.abs(o[obj.axis] + t * d[obj.axis]) <= H) return t;
+    }
+    return null;
+  }
+  if (obj.kind === 'plane') {
+    const min = [-H, -H, -H];
+    const max = [H, H, H];
+    const half = obj.form === 'slab' ? obj.thickness / 2 : 0;
+    min[obj.axis] = c[obj.axis] - half;
+    max[obj.axis] = c[obj.axis] + half;
+    if (half === 0) {
+      // A sheet has no thickness: where the ray crosses its plane.
+      if (d[obj.axis] === 0) return null;
+      const t = (c[obj.axis] - o[obj.axis]) / d[obj.axis];
+      if (!(t > 0)) return null;
+      const hit = o.map((x, k) => x + t * d[k]);
+      return hit.every((x, k) => k === obj.axis || Math.abs(x) <= H) ? t : null;
+    }
+    const hit = ray.intersectBox(new THREE.Box3(new THREE.Vector3(...min), new THREE.Vector3(...max)), new THREE.Vector3());
+    return hit ? hit.distanceTo(ray.origin) : null;
+  }
+  return null;
+}
+
 // The dashed coordinate guides drawn around a dragged charge at
 // `position` = (x, y, z) (see ChargeMarker), as [start, end] pairs in
 // world coordinates:

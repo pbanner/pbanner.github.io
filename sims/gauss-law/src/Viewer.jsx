@@ -3,12 +3,13 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, GizmoHelper } from '@react-three/drei';
 import { ChargeDrag } from './chargeDrag.js';
 import ChargeMarker from './ChargeMarker.jsx';
+import ChargedObject from './ChargedObject.jsx';
 import Axes from './Axes.jsx';
 import { AxisGizmo, CameraAnimator } from './AxisGizmo.jsx';
 import FieldLines from './FieldLines.jsx';
 import FieldArrows from './FieldArrows.jsx';
 import { CoordinateReadoutPanel, CoordinateReadoutTracker } from './CoordinateReadout.jsx';
-import { rayFromClient, pickCharge, SNAP_STEP } from './geometry.js';
+import { rayFromClient, pickCharge, pickObject, SNAP_STEP } from './geometry.js';
 import { WORLD_HALF_EXTENT, CHARGE_RADIUS, INITIAL_CAMERA_POSITION, INITIAL_CAMERA_TARGET, CAMERA_FOV, CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
 
 // A directional light that rides along with the camera, so whatever side of
@@ -47,7 +48,8 @@ function Floor() {
 //   a re-render for anything else (e.g. the hover highlight) doesn't
 //   recompute the field. The placement ghost isn't a source: only placed
 //   charges make a field.
-// ghost: { q, position } for the translucent placement preview, or null
+// ghost: the charge that click- or drag-to-place would add (see
+//   chargeTypes.js's makeCharge), drawn as a translucent preview, or null
 // armedTypeId: the charge type waiting for click-to-place's second click
 // onPlaceClick(clientX, clientY, modifiers): that second click, on the canvas
 // removeMode: the sidebar's delete tool is on, so clicking a charge deletes it
@@ -60,15 +62,15 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   const wrapperRef = useRef();
   const controlsRef = useRef();
   const cameraAnimatorRef = useRef();
-  const placeClickStartRef = useRef(null);
-  // What the latest press landed on: 'armed' (click-to-place's second
-  // click), 'charge' or 'empty' -- see handlePointerMissed.
-  const pressTargetRef = useRef(null);
+  // The latest left-button press: where it was, and what it landed on --
+  // { target: 'armed' (click-to-place's second click), 'point', 'object'
+  // (with its id) or 'empty', x, y }. See handlePointerDownCapture.
+  const pressRef = useRef(null);
   // The ChargeDrag tracking the placement ghost while a charge is armed.
   const placementRef = useRef(null);
 
-  // The charge under the pointer (highlighted, and sets the cursor), and the
-  // one being dragged, if any.
+  // The charge or object under the pointer (a point charge is highlighted;
+  // either sets the cursor), and the point charge being dragged, if any.
   const [hoveredId, setHoveredId] = useState(null);
   const [draggingId, setDraggingId] = useState(null);
   const dragRef = useRef(null);
@@ -172,41 +174,66 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
     update(downEvent);
   };
 
+  // Point charges are picked, dragged and drawn as ChargeMarkers; the
+  // charged spheres, rods and planes ("objects") as ChargedObjects.
+  const pointCharges = charges.filter((c) => c.kind === 'point');
+  const objects = charges.filter((c) => c.kind !== 'point');
+
+  // What's under a viewport point, if anything: { charge, isPoint }. A
+  // point charge wins over an object, even one in front of it -- a charge
+  // inside a shell would otherwise be impossible to reach.
+  const pickAt = (clientX, clientY) => {
+    const ray = rayAt(clientX, clientY);
+    if (!ray) return null;
+    const point = pickCharge(ray, pointCharges, CHARGE_RADIUS);
+    if (point) return { charge: point, isPoint: true };
+    const obj = pickObject(ray, objects);
+    return obj ? { charge: obj, isPoint: false } : null;
+  };
+
   // Runs in the *capture* phase -- on the way down from the outer page
   // to the canvas, before the event reaches OrbitControls, which listens
   // on an element inside this wrapper. That ordering is what lets one
-  // left-drag mean two different things: on a charge, stopPropagation()
-  // here keeps OrbitControls from ever seeing the press, so the charge
-  // moves and the camera doesn't; on empty space it passes through
-  // untouched and the camera orbits.
+  // left-drag mean two different things: on a point charge,
+  // stopPropagation() here keeps OrbitControls from ever seeing the press,
+  // so the charge moves and the camera doesn't; on empty space it passes
+  // through untouched and the camera orbits.
+  //
+  // An object isn't moved by dragging it (a big sphere or a plane covers
+  // so much of the view that the camera could hardly be turned), so a
+  // press on one passes through to OrbitControls too, and it's only
+  // selected (or, in delete mode, deleted) if the press turns out to be a
+  // click -- see handlePointerUp.
   //
   // While a charge is armed, this just records the press for
-  // click-to-place's second click, which is acted on at pointerup only if
-  // the pointer barely moved -- so a real drag still orbits the camera,
-  // and only a genuine click drops the charge.
-  // Only point charges can be picked, dragged and drawn as ChargeMarkers.
-  const pointCharges = charges.filter((c) => c.kind === 'point');
-
+  // click-to-place's second click, which is likewise acted on at pointerup
+  // only if the pointer barely moved -- so a real drag still orbits the
+  // camera, and only a genuine click drops the charge.
   const handlePointerDownCapture = (e) => {
-    placeClickStartRef.current = null;
-    pressTargetRef.current = null;
+    pressRef.current = null;
     if (e.button !== 0) return; // right-drag pans; leave it to OrbitControls
+    const at = { x: e.clientX, y: e.clientY };
     if (armedTypeId) {
-      pressTargetRef.current = 'armed';
-      placeClickStartRef.current = { x: e.clientX, y: e.clientY };
+      pressRef.current = { target: 'armed', ...at };
       return;
     }
-    const ray = rayAt(e.clientX, e.clientY);
-    const charge = ray && pickCharge(ray, pointCharges, CHARGE_RADIUS);
-    pressTargetRef.current = charge ? 'charge' : 'empty';
-    if (!charge) return;
+    const picked = pickAt(e.clientX, e.clientY);
+    if (!picked) {
+      pressRef.current = { target: 'empty', ...at };
+      return;
+    }
+    if (!picked.isPoint) {
+      pressRef.current = { target: 'object', id: picked.charge.id, ...at };
+      return;
+    }
+    pressRef.current = { target: 'point', ...at };
     e.stopPropagation();
     if (removeMode) {
-      onDeleteCharge(charge.id);
+      onDeleteCharge(picked.charge.id);
       setHoveredId(null);
     } else {
-      onSelect(charge.id);
-      startDrag(charge, e);
+      onSelect(picked.charge.id);
+      startDrag(picked.charge, e);
     }
   };
 
@@ -216,15 +243,14 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   // click handler -- so clicking the axis gizmo's labels doesn't deselect.
   // Charges aren't such objects (they're picked with plain ray math, in
   // handlePointerDownCapture), so a click on one would count as missing
-  // too, as would click-to-place's click; pressTargetRef rules those out.
+  // too, as would click-to-place's click; pressRef rules those out.
   const handlePointerMissed = () => {
-    if (pressTargetRef.current === 'empty') onSelect(null);
+    if (pressRef.current?.target === 'empty') onSelect(null);
   };
 
   const handlePointerMove = (e) => {
     if (dragRef.current || armedTypeId) return;
-    const ray = rayAt(e.clientX, e.clientY);
-    const id = (ray && pickCharge(ray, pointCharges, CHARGE_RADIUS)?.id) ?? null;
+    const id = pickAt(e.clientX, e.clientY)?.charge.id ?? null;
     if (id !== hoveredId) setHoveredId(id);
   };
 
@@ -232,16 +258,28 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   // or else the placement ghost.
   const readoutPosition = charges.find((c) => c.id === draggingId)?.position ?? ghost?.position ?? null;
 
+  // Over a point charge: grab (it can be dragged). Over an object: a
+  // pointing hand (it can be clicked).
   let cursor;
   if (draggingId != null) cursor = 'grabbing';
-  else if (hoveredId != null && !armedTypeId) cursor = removeMode ? 'pointer' : 'grab';
+  else if (hoveredId != null && !armedTypeId) {
+    const isPoint = pointCharges.some((c) => c.id === hoveredId);
+    cursor = removeMode || !isPoint ? 'pointer' : 'grab';
+  }
 
   const handlePointerUp = (e) => {
-    const start = placeClickStartRef.current;
-    placeClickStartRef.current = null;
-    if (!start || !armedTypeId) return;
-    if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > CLICK_MOVE_THRESHOLD) return;
-    onPlaceClick(e.clientX, e.clientY, { shiftKey: e.shiftKey, altKey: e.altKey });
+    const press = pressRef.current;
+    if (!press || Math.hypot(e.clientX - press.x, e.clientY - press.y) > CLICK_MOVE_THRESHOLD) return;
+    if (press.target === 'armed' && armedTypeId) {
+      onPlaceClick(e.clientX, e.clientY, { shiftKey: e.shiftKey, altKey: e.altKey });
+    } else if (press.target === 'object') {
+      if (removeMode) {
+        onDeleteCharge(press.id);
+        setHoveredId(null);
+      } else {
+        onSelect(press.id);
+      }
+    }
   };
 
   return (
@@ -279,7 +317,13 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
           />
         ))}
 
-        {ghost && <ChargeMarker q={ghost.q} position={ghost.position} ghost showGuides />}
+        {objects.map((obj) => (
+          <ChargedObject key={obj.id} charge={obj} selected={obj.id === selectedId} />
+        ))}
+
+        {ghost && (ghost.kind === 'point'
+          ? <ChargeMarker q={ghost.q} position={ghost.position} ghost showGuides />
+          : <ChargedObject charge={ghost} ghost />)}
 
         {/* makeDefault registers these as the scene's controls. Left-drag
             rotates, scroll/pinch zooms, and right-drag (or two-finger drag)

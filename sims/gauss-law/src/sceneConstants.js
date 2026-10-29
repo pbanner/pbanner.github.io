@@ -13,6 +13,10 @@ export const WORLD_HALF_EXTENT = 5;
 
 export const CHARGE_RADIUS = 0.15;
 
+// What's selected for the properties panel is marked in this blue, the
+// sidebar's "armed" color.
+export const SELECTION_COLOR = '#3498db';
+
 export const INITIAL_CAMERA_POSITION = [11, -14, 9];
 export const INITIAL_CAMERA_TARGET = [0, 0, 0];
 export const CAMERA_FOV = 35;

@@ -4,7 +4,7 @@ import ChargeSidebar from './ChargeSidebar.jsx';
 import ChargeIcon from './ChargeIcon.jsx';
 import DisplayOptionsPanel from './DisplayOptionsPanel.jsx';
 import PropertiesPanel from './PropertiesPanel.jsx';
-import { getChargeType } from './chargeTypes.js';
+import { getChargeType, makeCharge, normalizePosition } from './chargeTypes.js';
 import { CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
 import './App.css';
 
@@ -14,15 +14,17 @@ const SIDEBAR_LABEL_GAP = 12;
 const GHOST_ICON_SIZE = 36;
 
 export default function App() {
-  // Everything placed, each with an id and a kind -- so far only point
-  // charges, { id, kind: 'point', position: [x, y, z], q } (see
-  // chargeTypes.js and chargeField.js).
+  // Everything placed -- point charges and charged spheres, rods and
+  // planes -- each { id, kind, position, ... } (see chargeTypes.js).
+  // Called "charges" throughout: a charged sphere is a charge too, just a
+  // spread-out one.
   const [charges, setCharges] = useState([]);
   const nextChargeIdRef = useRef(1);
 
   // The charge selected for editing in the properties panel, or null.
-  // Clicking (or starting to drag) a charge selects it; a newly placed
-  // charge is selected right away, so the panel shows what can be changed.
+  // Clicking a charge (or starting to drag a point charge) selects it; a
+  // newly placed one is selected right away, so the panel shows what can
+  // be changed.
   const [selectedId, setSelectedId] = useState(null);
 
   // The charge type armed for placement (from a sidebar click, or during a
@@ -60,11 +62,11 @@ export default function App() {
 
   const addCharge = (typeId, position) => {
     const id = nextChargeIdRef.current++;
-    setCharges((prev) => [...prev, { id, kind: 'point', position, q: getChargeType(typeId).q }]);
+    setCharges((prev) => [...prev, { id, ...makeCharge(typeId, position) }]);
     setSelectedId(id);
   };
   const updateCharge = (id, changes) => {
-    setCharges((prev) => prev.map((c) => (c.id === id ? { ...c, ...changes } : c)));
+    setCharges((prev) => prev.map((c) => (c.id === id ? normalizePosition({ ...c, ...changes }) : c)));
   };
   const moveCharge = (id, position) => updateCharge(id, { position });
   const deleteCharge = (id) => {
@@ -199,7 +201,7 @@ export default function App() {
       <Viewer
         ref={viewerRef}
         charges={charges}
-        ghost={armedType && ghostPoint ? { q: armedType.q, position: ghostPoint } : null}
+        ghost={armedTypeId && ghostPoint ? makeCharge(armedTypeId, ghostPoint) : null}
         armedTypeId={armedTypeId}
         onPlaceClick={handlePlaceClick}
         removeMode={removeMode}
@@ -237,7 +239,7 @@ export default function App() {
       {selectedCharge && (
         <PropertiesPanel
           charge={selectedCharge}
-          onChangeCharge={(q) => updateCharge(selectedCharge.id, { q })}
+          onChange={(changes) => updateCharge(selectedCharge.id, changes)}
           onDelete={() => deleteCharge(selectedCharge.id)}
           onClose={() => setSelectedId(null)}
         />
@@ -256,8 +258,8 @@ export default function App() {
           nothing else on screen hints that Shift and Alt do anything. */}
       <div className="interaction-hint">
         {removeMode
-          ? 'Click a charge to delete it. Esc to stop deleting.'
-          : 'Drag a charge in from the sidebar · Click a charge to edit it · Drag a charge to move it · Shift+drag to raise or lower · Hold Alt to turn off snapping · Drag onto the trash to delete'}
+          ? 'Click a charge or object to delete it. Esc to stop deleting.'
+          : 'Drag a charge or object in from the sidebar · Click one to edit it · Drag a point charge to move it · Shift+drag to raise or lower · Hold Alt to turn off snapping · Drag onto the trash to delete'}
       </div>
 
       {/* While armed: a flat 2D icon follows the pointer whenever the charge

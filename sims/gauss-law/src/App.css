@@ -145,14 +145,14 @@
 }
 
 /* One line of usage help along the bottom edge, centered in the space
-   between the axis gizmo (lower left) and the Display Options panel (lower
-   right). With left, right and width all set, auto side margins center it
+   between the axis gizmo (lower left) and the Reset View button and
+   Display Options panel (lower right; see .lower-right-stack). With left, right and width all set, auto side margins center it
    within that space; width: fit-content lets it shrink to its text, and
    wrap only once the text is wider than the space. */
 .interaction-hint {
   position: absolute;
   left: 150px;
-  right: calc(16px + var(--display-panel-width) + 16px);
+  right: calc(16px + var(--display-panel-width) + 10px + 60px + 16px);
   bottom: 16px;
   width: fit-content;
   margin: 0 auto;
@@ -312,12 +312,13 @@ input[type="range"]::-moz-range-track {
 }
 
 /* Upper-right corner: the properties panel for whatever is selected
-   (PropertiesPanel.jsx), in the same style as Display Options. */
+   (PropertiesPanel.jsx), in the same style as Display Options, wide
+   enough for a charge density ("+0.010 q/tick²") and three coordinates. */
 .properties-panel {
   position: absolute;
   right: 16px;
   top: 16px;
-  width: var(--display-panel-width);
+  width: 270px;
   z-index: 10;
 }
 
@@ -350,6 +351,11 @@ input[type="range"]::-moz-range-track {
   gap: 8px;
   font-size: 13px;
   color: #333;
+}
+
+/* A row's label stays on one line. */
+.property-row > span:first-child {
+  white-space: nowrap;
 }
 
 /* − value + : the value between two small square buttons. Tabular digits
@@ -386,6 +392,7 @@ input[type="range"]::-moz-range-track {
 .stepper-value {
   min-width: 3.2em;
   text-align: center;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
@@ -398,4 +405,62 @@ input[type="range"]::-moz-range-track {
   color: #b42318;
   border-color: #e0a39c;
   background: #fdf1f0;
+}
+
+/* Joined toggle buttons for a small choice (Form, Along, Parallel to); the
+   chosen one in the selection blue. */
+.segmented {
+  display: flex;
+}
+
+.segmented button {
+  padding: 2px 8px;
+  border: 1px solid #bbb;
+  background: #fff;
+  font-size: 12px;
+  color: #333;
+  cursor: pointer;
+}
+
+.segmented button + button {
+  border-left: none;
+}
+
+.segmented button:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.segmented button:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.segmented button:hover:not(.active) {
+  background: #f0f0f0;
+}
+
+.segmented button.active {
+  background: #3498db;
+  border-color: #3498db;
+  color: #fff;
+}
+
+/* Number boxes, each with its axis name to its left. */
+.number-fields {
+  display: flex;
+  gap: 6px;
+}
+
+.overlay-controls .number-field {
+  gap: 3px;
+  cursor: default;
+}
+
+.number-field input {
+  width: 3.2em;
+  padding: 2px 4px;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
