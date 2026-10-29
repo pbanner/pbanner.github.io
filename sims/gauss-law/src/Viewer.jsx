@@ -51,14 +51,19 @@ function Floor() {
 // armedTypeId: the charge type waiting for click-to-place's second click
 // onPlaceClick(clientX, clientY, modifiers): that second click, on the canvas
 // removeMode: the sidebar's delete tool is on, so clicking a charge deletes it
+// selectedId / onSelect(id or null): the charge selected for the properties
+//   panel. Pressing on a charge selects it; clicking empty space deselects.
 // onMoveCharge(id, position) / onDeleteCharge(id): edits to placed charges
 // showGrid / showAxes / showField / fieldStyle ('lines' or 'arrows') /
 //   fieldDensity: the Display Options panel's settings
-export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick, removeMode, onMoveCharge, onDeleteCharge, showGrid, showAxes, showField, fieldStyle, fieldDensity }) {
+export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onDeleteCharge, showGrid, showAxes, showField, fieldStyle, fieldDensity }) {
   const wrapperRef = useRef();
   const controlsRef = useRef();
   const cameraAnimatorRef = useRef();
   const placeClickStartRef = useRef(null);
+  // What the latest press landed on: 'armed' (click-to-place's second
+  // click), 'charge' or 'empty' -- see handlePointerMissed.
+  const pressTargetRef = useRef(null);
   // The ChargeDrag tracking the placement ghost while a charge is armed.
   const placementRef = useRef(null);
 
@@ -181,21 +186,36 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   // and only a genuine click drops the charge.
   const handlePointerDownCapture = (e) => {
     placeClickStartRef.current = null;
+    pressTargetRef.current = null;
     if (e.button !== 0) return; // right-drag pans; leave it to OrbitControls
     if (armedTypeId) {
+      pressTargetRef.current = 'armed';
       placeClickStartRef.current = { x: e.clientX, y: e.clientY };
       return;
     }
     const ray = rayAt(e.clientX, e.clientY);
     const charge = ray && pickCharge(ray, charges, CHARGE_RADIUS);
+    pressTargetRef.current = charge ? 'charge' : 'empty';
     if (!charge) return;
     e.stopPropagation();
     if (removeMode) {
       onDeleteCharge(charge.id);
       setHoveredId(null);
     } else {
+      onSelect(charge.id);
       startDrag(charge, e);
     }
+  };
+
+  // A click on empty space deselects. react-three-fiber calls this for a
+  // click (a press and release without moving more than a couple of
+  // pixels, so not an orbiting drag) that hit no 3D object with its own
+  // click handler -- so clicking the axis gizmo's labels doesn't deselect.
+  // Charges aren't such objects (they're picked with plain ray math, in
+  // handlePointerDownCapture), so a click on one would count as missing
+  // too, as would click-to-place's click; pressTargetRef rules those out.
+  const handlePointerMissed = () => {
+    if (pressTargetRef.current === 'empty') onSelect(null);
   };
 
   const handlePointerMove = (e) => {
@@ -234,6 +254,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
       <Canvas
         camera={{ position: INITIAL_CAMERA_POSITION, up: [0, 0, 1], fov: CAMERA_FOV }}
         style={{ width: '100%', height: '100%' }}
+        onPointerMissed={handlePointerMissed}
       >
         <color attach="background" args={['#f4f5f7']} />
         <ambientLight intensity={1.2} />
@@ -250,6 +271,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
             q={charge.q}
             position={charge.position}
             highlighted={charge.id === draggingId || (draggingId == null && charge.id === hoveredId)}
+            selected={charge.id === selectedId}
             showGuides={charge.id === draggingId}
           />
         ))}

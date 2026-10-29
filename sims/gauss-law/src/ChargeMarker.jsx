@@ -6,6 +6,10 @@ import { chargeGuideSegments } from './geometry.js';
 import { chargeColor, chargeSignText } from './chargeTypes.js';
 
 const FOOT_DOT_RADIUS = 0.06;
+// The selected charge's ring: the sidebar's "armed" blue, a little way
+// outside the sphere (and outside its hover enlargement).
+const SELECTION_COLOR = '#3498db';
+const SELECTION_RING = [1.45, 1.7]; // inner and outer radius, in charge radii
 
 // A charge bigger than one unit is labeled with its value ("+3", "−2")
 // instead of a bare sign: white text drawn into a canvas, used as the
@@ -37,7 +41,8 @@ function useChargeLabelTexture(q) {
 // negative) with a white + or − -- or its value, if it's more than one
 // unit -- that always turns to face the camera (drei's Billboard), so the
 // sign is readable from any viewing angle. `ghost` draws it translucent, for the
-// placement preview; `highlighted` enlarges it slightly (hovered/dragged).
+// placement preview; `highlighted` enlarges it slightly (hovered/dragged);
+// `selected` circles it with a blue ring that faces the camera.
 //
 // `showGuides` (while the charge is being placed or dragged) adds black
 // dashed coordinate guides (see chargeGuideSegments): a drop line to the
@@ -47,7 +52,7 @@ function useChargeLabelTexture(q) {
 // sitting at a different point further back; the guides show which one it
 // actually is, and read its x, y and z off the axis ticks. They're hidden
 // otherwise to keep the scene uncluttered.
-export default function ChargeMarker({ q, position, ghost = false, highlighted = false, showGuides = false }) {
+export default function ChargeMarker({ q, position, ghost = false, highlighted = false, selected = false, showGuides = false }) {
   const barLength = CHARGE_RADIUS * 1.1;
   const barWidth = CHARGE_RADIUS * 0.24;
   // Just in front of the sphere's surface (in the billboard's own frame,
@@ -90,6 +95,14 @@ export default function ChargeMarker({ q, position, ghost = false, highlighted =
             )}
           </Billboard>
         </group>
+        {selected && (
+          <Billboard>
+            <mesh>
+              <ringGeometry args={[SELECTION_RING[0] * CHARGE_RADIUS, SELECTION_RING[1] * CHARGE_RADIUS, 48]} />
+              <meshBasicMaterial color={SELECTION_COLOR} />
+            </mesh>
+          </Billboard>
+        )}
       </group>
 
       {/* The guides sit outside the positioned group, so their endpoints are

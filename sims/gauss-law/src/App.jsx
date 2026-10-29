@@ -3,6 +3,7 @@ import Viewer from './Viewer.jsx';
 import ChargeSidebar from './ChargeSidebar.jsx';
 import ChargeIcon from './ChargeIcon.jsx';
 import DisplayOptionsPanel from './DisplayOptionsPanel.jsx';
+import PropertiesPanel from './PropertiesPanel.jsx';
 import { getChargeType } from './chargeTypes.js';
 import { CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
 import './App.css';
@@ -16,6 +17,11 @@ export default function App() {
   // Every placed charge: { id, position: [x, y, z], q } (see chargeTypes.js).
   const [charges, setCharges] = useState([]);
   const nextChargeIdRef = useRef(1);
+
+  // The charge selected for editing in the properties panel, or null.
+  // Clicking (or starting to drag) a charge selects it; a newly placed
+  // charge is selected right away, so the panel shows what can be changed.
+  const [selectedId, setSelectedId] = useState(null);
 
   // The charge type armed for placement (from a sidebar click, or during a
   // drag out of the sidebar), or null.
@@ -53,12 +59,15 @@ export default function App() {
   const addCharge = (typeId, position) => {
     const id = nextChargeIdRef.current++;
     setCharges((prev) => [...prev, { id, position, q: getChargeType(typeId).q }]);
+    setSelectedId(id);
   };
-  const moveCharge = (id, position) => {
-    setCharges((prev) => prev.map((c) => (c.id === id ? { ...c, position } : c)));
+  const updateCharge = (id, changes) => {
+    setCharges((prev) => prev.map((c) => (c.id === id ? { ...c, ...changes } : c)));
   };
+  const moveCharge = (id, position) => updateCharge(id, { position });
   const deleteCharge = (id) => {
     setCharges((prev) => prev.filter((c) => c.id !== id));
+    setSelectedId((prev) => (prev === id ? null : prev));
   };
 
   const disarm = () => {
@@ -162,15 +171,18 @@ export default function App() {
 
   const toggleRemoveMode = () => {
     disarm();
+    setSelectedId(null);
     setRemoveMode((prev) => !prev);
   };
 
-  // Escape backs out of placement or delete mode, same as the optics lab.
+  // Escape backs out of placement or delete mode, same as the optics lab,
+  // and deselects.
   useEffect(() => {
     const onKeyDown = (e) => {
       if (e.key === 'Escape') {
         disarm();
         setRemoveMode(false);
+        setSelectedId(null);
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -178,6 +190,7 @@ export default function App() {
   }, []);
 
   const armedType = armedTypeId ? getChargeType(armedTypeId) : null;
+  const selectedCharge = charges.find((c) => c.id === selectedId) ?? null;
 
   return (
     <div className="app-layout">
@@ -188,6 +201,8 @@ export default function App() {
         armedTypeId={armedTypeId}
         onPlaceClick={handlePlaceClick}
         removeMode={removeMode}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
         onMoveCharge={moveCharge}
         onDeleteCharge={deleteCharge}
         showGrid={displayOptions.showGrid}
@@ -217,6 +232,15 @@ export default function App() {
         </div>
       )}
 
+      {selectedCharge && (
+        <PropertiesPanel
+          charge={selectedCharge}
+          onChangeCharge={(q) => updateCharge(selectedCharge.id, { q })}
+          onDelete={() => deleteCharge(selectedCharge.id)}
+          onClose={() => setSelectedId(null)}
+        />
+      )}
+
       {/* Lower-right corner: Reset View stacked on top of the Display
           Options panel. */}
       <div className="lower-right-stack">
@@ -231,7 +255,7 @@ export default function App() {
       <div className="interaction-hint">
         {removeMode
           ? 'Click a charge to delete it. Esc to stop deleting.'
-          : 'Drag a charge in from the sidebar · Drag a charge to move it · Shift+drag to raise or lower · Hold Alt to turn off snapping · Drag onto the trash to delete'}
+          : 'Drag a charge in from the sidebar · Click a charge to edit it · Drag a charge to move it · Shift+drag to raise or lower · Hold Alt to turn off snapping · Drag onto the trash to delete'}
       </div>
 
       {/* While armed: a flat 2D icon follows the pointer whenever the charge

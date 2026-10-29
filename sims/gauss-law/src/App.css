@@ -310,3 +310,92 @@ input[type="range"]::-moz-range-track {
   background: transparent;
   border: none;
 }
+
+/* Upper-right corner: the properties panel for whatever is selected
+   (PropertiesPanel.jsx), in the same style as Display Options. */
+.properties-panel {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  width: var(--display-panel-width);
+  z-index: 10;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* The panel's × closes it by deselecting. */
+.panel-close-button {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 2px;
+  color: #666;
+  cursor: pointer;
+}
+
+.panel-close-button:hover {
+  color: #222;
+}
+
+/* A label on the left, its control on the right. */
+.property-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: #333;
+}
+
+/* − value + : the value between two small square buttons. Tabular digits
+   keep the value from shifting sideways as it changes. */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stepper button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 15px;
+  line-height: 1;
+  color: #333;
+  cursor: pointer;
+}
+
+.stepper button:hover:not(:disabled) {
+  background: #f0f0f0;
+  border-color: #999;
+}
+
+.stepper button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.stepper-value {
+  min-width: 3.2em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel-delete-button {
+  margin-top: 4px;
+  padding: 6px 10px;
+}
+
+.panel-delete-button:hover {
+  color: #b42318;
+  border-color: #e0a39c;
+  background: #fdf1f0;
+}
