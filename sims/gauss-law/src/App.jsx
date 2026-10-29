@@ -13,7 +13,7 @@ const SIDEBAR_LABEL_GAP = 12;
 const GHOST_ICON_SIZE = 36;
 
 export default function App() {
-  // Every placed charge: { id, type, position: [x, y, z] }.
+  // Every placed charge: { id, position: [x, y, z], q } (see chargeTypes.js).
   const [charges, setCharges] = useState([]);
   const nextChargeIdRef = useRef(1);
 
@@ -52,7 +52,7 @@ export default function App() {
 
   const addCharge = (typeId, position) => {
     const id = nextChargeIdRef.current++;
-    setCharges((prev) => [...prev, { id, type: typeId, position }]);
+    setCharges((prev) => [...prev, { id, position, q: getChargeType(typeId).q }]);
   };
   const moveCharge = (id, position) => {
     setCharges((prev) => prev.map((c) => (c.id === id ? { ...c, position } : c)));
@@ -184,7 +184,7 @@ export default function App() {
       <Viewer
         ref={viewerRef}
         charges={charges}
-        ghost={armedTypeId && ghostPoint ? { type: armedTypeId, position: ghostPoint } : null}
+        ghost={armedType && ghostPoint ? { q: armedType.q, position: ghostPoint } : null}
         armedTypeId={armedTypeId}
         onPlaceClick={handlePlaceClick}
         removeMode={removeMode}

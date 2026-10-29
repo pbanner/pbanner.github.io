@@ -1,4 +1,4 @@
-import { useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { useImperativeHandle, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, GizmoHelper } from '@react-three/drei';
 import { ChargeDrag } from './chargeDrag.js';
@@ -8,7 +8,6 @@ import { AxisGizmo, CameraAnimator } from './AxisGizmo.jsx';
 import FieldLines from './FieldLines.jsx';
 import FieldArrows from './FieldArrows.jsx';
 import { CoordinateReadoutPanel, CoordinateReadoutTracker } from './CoordinateReadout.jsx';
-import { getChargeType } from './chargeTypes.js';
 import { rayFromClient, pickCharge, SNAP_STEP } from './geometry.js';
 import { WORLD_HALF_EXTENT, CHARGE_RADIUS, INITIAL_CAMERA_POSITION, INITIAL_CAMERA_TARGET, CAMERA_FOV, CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
 
@@ -42,8 +41,13 @@ function Floor() {
   );
 }
 
-// charges: [{ id, type, position: [x, y, z] }]
-// ghost: { type, position } for the translucent placement preview, or null
+// charges: [{ id, position: [x, y, z], q }]. They're also the field's
+//   sources, as they are: FieldLines/FieldArrows read each one's position
+//   and q, and since App.jsx only makes a new array when a charge changes,
+//   a re-render for anything else (e.g. the hover highlight) doesn't
+//   recompute the field. The placement ghost isn't a source: only placed
+//   charges make a field.
+// ghost: { q, position } for the translucent placement preview, or null
 // armedTypeId: the charge type waiting for click-to-place's second click
 // onPlaceClick(clientX, clientY, modifiers): that second click, on the canvas
 // removeMode: the sidebar's delete tool is on, so clicking a charge deletes it
@@ -65,15 +69,6 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   const dragRef = useRef(null);
   const readoutPanelRef = useRef(null);
 
-  // The placed charges as field sources. Memoized on `charges` so that a
-  // re-render for anything else (e.g. the hover highlight) hands
-  // FieldLines/FieldArrows the same array, and the field isn't recomputed
-  // for nothing.
-  // The placement ghost isn't a source: only placed charges make a field.
-  const fieldSources = useMemo(
-    () => charges.map((c) => ({ position: c.position, q: getChargeType(c.type).q })),
-    [charges],
-  );
 
   // Can't use controls.reset(): drei captures the controls' saved state
   // before applying the `target` prop, so reset() would aim at the wrong
@@ -246,20 +241,20 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
 
         {showGrid && <Floor />}
         {showAxes && <Axes />}
-        {showField && fieldStyle === 'lines' && <FieldLines sources={fieldSources} density={fieldDensity} />}
-        {showField && fieldStyle === 'arrows' && <FieldArrows sources={fieldSources} density={fieldDensity} />}
+        {showField && fieldStyle === 'lines' && <FieldLines sources={charges} density={fieldDensity} />}
+        {showField && fieldStyle === 'arrows' && <FieldArrows sources={charges} density={fieldDensity} />}
 
         {charges.map((charge) => (
           <ChargeMarker
             key={charge.id}
-            type={getChargeType(charge.type)}
+            q={charge.q}
             position={charge.position}
             highlighted={charge.id === draggingId || (draggingId == null && charge.id === hoveredId)}
             showGuides={charge.id === draggingId}
           />
         ))}
 
-        {ghost && <ChargeMarker type={getChargeType(ghost.type)} position={ghost.position} ghost showGuides />}
+        {ghost && <ChargeMarker q={ghost.q} position={ghost.position} ghost showGuides />}
 
         {/* makeDefault registers these as the scene's controls. Left-drag
             rotates, scroll/pinch zooms, and right-drag (or two-finger drag)

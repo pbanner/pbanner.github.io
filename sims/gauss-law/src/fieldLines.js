@@ -273,13 +273,13 @@ function farthestFrom(candidates, taken) {
   return best;
 }
 
-// sources: [{ position: [x, y, z], q }], with q = +/-1 (the only charges
-// the sim has; a charge of any other size would need its own starting set
-// with |q| times as many lines). Returns an array of lines, each an array
-// of [x, y, z] points ordered in the direction of the field.
+// sources: [{ position: [x, y, z], q }], with q a whole number (of units
+// of charge). Returns an array of lines, each an array of [x, y, z] points
+// ordered in the direction of the field.
 //
-// Every unit charge gets the same number of lines, N (the size of the
-// starting set):
+// Every unit of charge gets the same number of lines, so a charge q gets
+// N = |q| times the density setting's lines per unit charge, starting out
+// in the directions of seedDirections.js's symmetric set of that size:
 //   1. Each positive charge starts a line in every starting direction.
 //      Where one ends on a negative charge, the direction it arrived from
 //      is recorded.
@@ -291,7 +291,7 @@ function farthestFrom(candidates, taken) {
 //      it (farthestFrom). If too few remain, it tries extra directions,
 //      farthest-first, until it has enough.
 // This can't always come out exact. A negative charge surrounded by
-// positive ones can receive more than N lines, since each positive charge
+// positive ones can receive more than its N lines, since each positive charge
 // sends it a whole number of lines -- about N times the fraction of its
 // flux that ends there -- and those roundings add up; or it can fall short
 // with no line of its own able to escape. Lines are whole numbers and flux
@@ -302,7 +302,8 @@ function farthestFrom(candidates, taken) {
 // see the note on mirror planes above), so there's nothing to choose and
 // the symmetry is kept.
 export function computeFieldLines(sources, { density, halfExtent, chargeRadius }) {
-  const seeds = seedDirections(LINES_PER_UNIT_CHARGE[density - 1]);
+  const linesPerUnitCharge = LINES_PER_UNIT_CHARGE[density - 1];
+  const seedsFor = (source) => seedDirections(linesPerUnitCharge * Math.abs(source.q));
   const options = { halfExtent, chargeRadius };
   const lines = [];
   // For each charge, the directions (from its center) of the lines arriving
@@ -325,7 +326,7 @@ export function computeFieldLines(sources, { density, halfExtent, chargeRadius }
 
   sources.forEach((source, i) => {
     if (!(source.q > 0)) return;
-    for (const dir of seeds) {
+    for (const dir of seedsFor(source)) {
       const traced = trace(i, dir, +1);
       if (!traced) continue;
       const { points, endsAt } = traced;
@@ -338,6 +339,7 @@ export function computeFieldLines(sources, { density, halfExtent, chargeRadius }
 
   sources.forEach((source, i) => {
     if (!(source.q < 0)) return;
+    const seeds = seedsFor(source);
     const needed = seeds.length - arrivals[i].length;
     if (needed <= 0) return;
     // Backward-traced lines that don't end on a positive charge.

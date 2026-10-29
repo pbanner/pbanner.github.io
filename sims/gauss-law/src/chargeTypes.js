@@ -1,12 +1,29 @@
-// Central list of placeable charges -- shared between the sidebar (icon
-// buttons), the 2D placement ghost (App.jsx), and the 3D scene (which
-// renders placed charges and the 3D placement ghost). Plain data, no React.
+// Point charges' colors and limits, and the sidebar's two charge buttons.
+// Plain data, no React.
 //
-// q is in units of some elementary charge "q" for now; nothing computes a
-// field from it yet.
+// A placed charge is { id, position: [x, y, z], q }, with q a whole
+// number of units of some elementary charge "q", from -MAX_CHARGE to
+// +MAX_CHARGE but never 0. The sidebar places +1 or -1; the properties
+// panel changes it from there.
+export const MAX_CHARGE = 5;
+
+const POSITIVE_COLOR = '#d63a3a';
+const NEGATIVE_COLOR = '#2f6fd6';
+
+export function chargeColor(q) {
+  return q > 0 ? POSITIVE_COLOR : NEGATIVE_COLOR;
+}
+
+// "+3", "−2" (a true minus sign), or just "+" / "−" for a unit charge.
+export function chargeSignText(q) {
+  const sign = q > 0 ? '+' : '−';
+  return Math.abs(q) === 1 ? sign : `${sign}${Math.abs(q)}`;
+}
+
+// The sidebar's buttons, also used by the placement ghost.
 export const CHARGE_TYPES = [
-  { id: 'positive', label: 'Positive Charge', q: +1, sign: '+', color: '#d63a3a' },
-  { id: 'negative', label: 'Negative Charge', q: -1, sign: '−', color: '#2f6fd6' },
+  { id: 'positive', label: 'Positive Charge', q: +1, color: POSITIVE_COLOR },
+  { id: 'negative', label: 'Negative Charge', q: -1, color: NEGATIVE_COLOR },
 ];
 
 export function getChargeType(id) {
