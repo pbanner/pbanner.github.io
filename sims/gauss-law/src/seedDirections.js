@@ -86,14 +86,52 @@ export const LINES_PER_UNIT_CHARGE = [6, 18, 30, 42, 54];
 
 const cache = new Map();
 
-// The symmetric set of `count` starting directions, as unit vectors.
-export function seedDirections(count) {
+function build(count) {
   if (!cache.has(count)) {
     const reps = ORBIT_REPRESENTATIVES[count];
     if (!reps) throw new Error(`No symmetric set of ${count} starting directions`);
-    const set = reps.flatMap(orbit);
-    if (set.length !== count) throw new Error(`Starting-direction set ${count} has ${set.length} directions`);
-    cache.set(count, set);
+    const orbits = reps.map(orbit);
+    const directions = orbits.flat();
+    if (directions.length !== count) throw new Error(`Starting-direction set ${count} has ${directions.length} directions`);
+    // Each direction's threshold (see seedThresholds): its place in
+    // "farthest-point" order -- starting from the first direction, each
+    // next one is whichever is farthest from all those before it -- as a
+    // fraction of the set.
+    const thresholds = new Array(count);
+    const closest = directions.map(() => -Infinity); // largest dot product with any direction taken so far
+    let next = 0;
+    for (let rank = 0; rank < count; rank++) {
+      thresholds[next] = (rank + 0.5) / count;
+      const taken = directions[next];
+      let best = -1;
+      directions.forEach((d, i) => {
+        if (thresholds[i] !== undefined) return;
+        closest[i] = Math.max(closest[i], d[0] * taken[0] + d[1] * taken[1] + d[2] * taken[2]);
+        if (best < 0 || closest[i] < closest[best]) best = i;
+      });
+      next = best;
+    }
+    cache.set(count, { directions, thresholds });
   }
   return cache.get(count);
+}
+
+// The symmetric set of `count` starting directions, as unit vectors.
+export function seedDirections(count) {
+  return build(count).directions;
+}
+
+// A number from 0 to 1 for each of seedDirections(count)'s directions,
+// spread evenly over 0..1 -- so of all the lines, the fraction whose
+// threshold is below any value v is v, to within one line -- and in an
+// order that spreads out over the sphere: the directions with thresholds
+// below any v are about as evenly spread as v x count directions can be.
+// fieldLines.js compares a line's threshold with the fraction of its flux
+// still going, to decide where it ends inside a negatively charged object;
+// so where some fraction of a charge's lines end, as many do as should,
+// and they're spread around evenly. (They can't always be exactly
+// symmetric: e.g. 30 of a 60-line set, whose orbits have 12, 24 and 24
+// directions.)
+export function seedThresholds(count) {
+  return build(count).thresholds;
 }
