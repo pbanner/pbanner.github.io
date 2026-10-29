@@ -1,9 +1,9 @@
 // Point charges' colors and limits, and the sidebar's two charge buttons.
 // Plain data, no React.
 //
-// A placed charge is { id, position: [x, y, z], q }, with q a whole
-// number of units of some elementary charge "q", from -MAX_CHARGE to
-// +MAX_CHARGE but never 0. The sidebar places +1 or -1; the properties
+// A placed point charge is { id, kind: 'point', position: [x, y, z], q },
+// with q a whole number of units of some elementary charge "q", from
+// -MAX_CHARGE to +MAX_CHARGE but never 0. The sidebar places +1 or -1; the properties
 // panel changes it from there.
 export const MAX_CHARGE = 5;
 

@@ -41,9 +41,9 @@ function Floor() {
   );
 }
 
-// charges: [{ id, position: [x, y, z], q }]. They're also the field's
-//   sources, as they are: FieldLines/FieldArrows read each one's position
-//   and q, and since App.jsx only makes a new array when a charge changes,
+// charges: everything placed, [{ id, kind, ... }] (see chargeField.js).
+//   They're also the field's sources, as they are, and since App.jsx only
+//   makes a new array when a charge changes,
 //   a re-render for anything else (e.g. the hover highlight) doesn't
 //   recompute the field. The placement ghost isn't a source: only placed
 //   charges make a field.
@@ -184,6 +184,9 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   // click-to-place's second click, which is acted on at pointerup only if
   // the pointer barely moved -- so a real drag still orbits the camera,
   // and only a genuine click drops the charge.
+  // Only point charges can be picked, dragged and drawn as ChargeMarkers.
+  const pointCharges = charges.filter((c) => c.kind === 'point');
+
   const handlePointerDownCapture = (e) => {
     placeClickStartRef.current = null;
     pressTargetRef.current = null;
@@ -194,7 +197,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
       return;
     }
     const ray = rayAt(e.clientX, e.clientY);
-    const charge = ray && pickCharge(ray, charges, CHARGE_RADIUS);
+    const charge = ray && pickCharge(ray, pointCharges, CHARGE_RADIUS);
     pressTargetRef.current = charge ? 'charge' : 'empty';
     if (!charge) return;
     e.stopPropagation();
@@ -221,7 +224,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   const handlePointerMove = (e) => {
     if (dragRef.current || armedTypeId) return;
     const ray = rayAt(e.clientX, e.clientY);
-    const id = (ray && pickCharge(ray, charges, CHARGE_RADIUS)?.id) ?? null;
+    const id = (ray && pickCharge(ray, pointCharges, CHARGE_RADIUS)?.id) ?? null;
     if (id !== hoveredId) setHoveredId(id);
   };
 
@@ -265,7 +268,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
         {showField && fieldStyle === 'lines' && <FieldLines sources={charges} density={fieldDensity} />}
         {showField && fieldStyle === 'arrows' && <FieldArrows sources={charges} density={fieldDensity} />}
 
-        {charges.map((charge) => (
+        {pointCharges.map((charge) => (
           <ChargeMarker
             key={charge.id}
             q={charge.q}

@@ -35,7 +35,8 @@ function makeHeadGeometry() {
 // once per sample, each with its own position, orientation, size and
 // color, in one draw call. Shafts and heads are separate meshes, since a
 // shaft stretches with its arrow's length but a head doesn't, and an
-// instance can only stretch its whole geometry. sources: [{ position, q }].
+// instance can only stretch its whole geometry. sources: everything
+// charged (see chargeField.js).
 export default function FieldArrows({ sources, density }) {
   const arrows = useMemo(
     () => computeFieldArrows(sources, { density, halfExtent: WORLD_HALF_EXTENT }),

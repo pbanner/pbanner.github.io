@@ -2,8 +2,7 @@
 // three.js, so it can be tested on its own (FieldLines.jsx draws them).
 //
 // The field is the superposition E(r) = sum_i q_i (r - r_i) / |r - r_i|^3,
-// with the Coulomb constant set to 1 -- only the field's direction and
-// relative strength matter for drawing lines.
+// with the Coulomb constant set to 1 (chargeField.js computes it).
 //
 // A field line is a curve tangent to E everywhere, so it's traced by
 // repeatedly stepping a short distance along the field's direction:
@@ -25,6 +24,7 @@
 //     computeFieldLines. Equal counts matter here: lines only begin and end
 //     at charges, so the net number crossing any closed surface then counts
 //     the charge inside it, which is Gauss's law.
+import { fieldAt, objectField } from './chargeField.js';
 import { LINES_PER_UNIT_CHARGE, seedDirections } from './seedDirections.js';
 
 // Step size bounds, in world units. Steps shrink near charges (where lines
@@ -72,36 +72,24 @@ const NULL_SEARCH_STEP = 0.002;
 // symmetry.)
 export const FIELD_LINE_DENSITY_LEVELS = LINES_PER_UNIT_CHARGE.length;
 
-// The electric field at a point. sources: [{ position: [x, y, z], q }]
-// (Also used by fieldArrows.js.)
-export function fieldAt([x, y, z], sources) {
+// |E| / (the sum of each source's own |E|) at p -- see NULL_RATIO -- and
+// the distance from p to the nearest point charge.
+function cancellationAndNearest(p, sources) {
   let ex = 0;
   let ey = 0;
   let ez = 0;
-  for (const { position: [sx, sy, sz], q } of sources) {
-    const dx = x - sx;
-    const dy = y - sy;
-    const dz = z - sz;
-    const r2 = dx * dx + dy * dy + dz * dz;
-    if (r2 === 0) continue;
-    const s = q / (r2 * Math.sqrt(r2));
-    ex += s * dx;
-    ey += s * dy;
-    ez += s * dz;
-  }
-  return [ex, ey, ez];
-}
-
-// |E| / sum(|q_i| / r_i^2) at p -- see NULL_RATIO -- and the distance from
-// p to the nearest charge.
-function cancellationAndNearest(p, sources) {
-  const [ex, ey, ez] = fieldAt(p, sources);
   let scale = 0;
   let nearest = Infinity;
-  for (const { position: [sx, sy, sz], q } of sources) {
-    const r2 = (p[0] - sx) ** 2 + (p[1] - sy) ** 2 + (p[2] - sz) ** 2;
-    scale += Math.abs(q) / r2;
-    nearest = Math.min(nearest, Math.sqrt(r2));
+  for (const source of sources) {
+    const e = objectField(source, p);
+    ex += e[0];
+    ey += e[1];
+    ez += e[2];
+    scale += Math.hypot(e[0], e[1], e[2]);
+    if (source.kind === 'point') {
+      const [sx, sy, sz] = source.position;
+      nearest = Math.min(nearest, Math.hypot(p[0] - sx, p[1] - sy, p[2] - sz));
+    }
   }
   return { ratio: Math.hypot(ex, ey, ez) / scale, nearest };
 }
@@ -217,6 +205,7 @@ function traceLine(start, startIndex, sources, sign, { halfExtent, chargeRadius 
     // loops back to it, but only once the line has actually left it.)
     for (let j = 0; j < sources.length; j++) {
       const s = sources[j];
+      if (s.kind !== 'point') continue;
       const d = Math.hypot(p[0] - s.position[0], p[1] - s.position[1], p[2] - s.position[2]);
       if (d < chargeRadius && (j !== startIndex || length > 2 * chargeRadius)) {
         points.push(s.position); // finish at the charge's center
@@ -273,8 +262,9 @@ function farthestFrom(candidates, taken) {
   return best;
 }
 
-// sources: [{ position: [x, y, z], q }], with q a whole number (of units
-// of charge). Returns an array of lines, each an array of [x, y, z] points
+// sources: everything charged (see chargeField.js); lines start and end
+// only at point charges ({ kind: 'point', position: [x, y, z], q }, q a
+// whole number of units of charge). Returns an array of lines, each an array of [x, y, z] points
 // ordered in the direction of the field.
 //
 // Every unit of charge gets the same number of lines, so a charge q gets
@@ -325,7 +315,7 @@ export function computeFieldLines(sources, { density, halfExtent, chargeRadius }
   };
 
   sources.forEach((source, i) => {
-    if (!(source.q > 0)) return;
+    if (source.kind !== 'point' || !(source.q > 0)) return;
     for (const dir of seedsFor(source)) {
       const traced = trace(i, dir, +1);
       if (!traced) continue;
@@ -338,14 +328,14 @@ export function computeFieldLines(sources, { density, halfExtent, chargeRadius }
   });
 
   sources.forEach((source, i) => {
-    if (!(source.q < 0)) return;
+    if (source.kind !== 'point' || !(source.q < 0)) return;
     const seeds = seedsFor(source);
     const needed = seeds.length - arrivals[i].length;
     if (needed <= 0) return;
     // Backward-traced lines that don't end on a positive charge.
     const ownLine = (dir) => {
       const traced = trace(i, dir, -1);
-      if (!traced || (traced.endsAt !== null && sources[traced.endsAt].q > 0)) return null;
+      if (!traced || (traced.endsAt !== null && sources[traced.endsAt].q > 0)) return null; // (endsAt is always a point charge)
       return { dir, points: traced.points };
     };
     let candidates = seeds.map(ownLine).filter(Boolean);

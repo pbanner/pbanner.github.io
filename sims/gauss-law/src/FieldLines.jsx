@@ -51,7 +51,8 @@ function Arrowheads({ arrows }) {
 
 // The electric field lines of the placed charges (see fieldLines.js for
 // how they're traced), with arrowheads showing the field's direction.
-// sources: [{ position, q }]; recomputed only when they or the density
+// sources: everything charged (see chargeField.js); recomputed only when
+// they or the density
 // setting change, which includes every step of dragging a charge.
 export default function FieldLines({ sources, density }) {
   const lines = useMemo(

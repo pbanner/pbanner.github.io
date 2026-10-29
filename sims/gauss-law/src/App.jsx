@@ -14,7 +14,9 @@ const SIDEBAR_LABEL_GAP = 12;
 const GHOST_ICON_SIZE = 36;
 
 export default function App() {
-  // Every placed charge: { id, position: [x, y, z], q } (see chargeTypes.js).
+  // Everything placed, each with an id and a kind -- so far only point
+  // charges, { id, kind: 'point', position: [x, y, z], q } (see
+  // chargeTypes.js and chargeField.js).
   const [charges, setCharges] = useState([]);
   const nextChargeIdRef = useRef(1);
 
@@ -58,7 +60,7 @@ export default function App() {
 
   const addCharge = (typeId, position) => {
     const id = nextChargeIdRef.current++;
-    setCharges((prev) => [...prev, { id, position, q: getChargeType(typeId).q }]);
+    setCharges((prev) => [...prev, { id, kind: 'point', position, q: getChargeType(typeId).q }]);
     setSelectedId(id);
   };
   const updateCharge = (id, changes) => {
