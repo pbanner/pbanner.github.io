@@ -1,7 +1,7 @@
 import { useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { CanvasTexture, Quaternion, Vector3 } from 'three';
-import { axisViewOrientation } from './cameraViews.js';
+import { axisViewOrientation, stopMomentum } from './cameraViews.js';
 
 // The orientation gizmo in the lower-left corner, and the camera move it
 // triggers. drei's GizmoHelper still draws it (in its own overlay, turned
@@ -93,8 +93,15 @@ export function AxisGizmo({ onAxisClick }) {
 // two: height = 2 distance tan(fov / 2). Narrowing the field of view while
 // keeping the height (a "dolly zoom") flattens the perspective: at a few
 // degrees, near and far things are drawn at practically the same scale.
-// state() is the camera's current { quaternion, target, fov, height }, to
-// come back to.
+// state() is the camera's current { quaternion, target, fov, height, up },
+// to come back to; a goal with an `up` puts that back as the camera's up
+// when the move ends (see below). With `lock`, the view can't be grabbed
+// until the move is over -- for the 2D cut's view, which would otherwise be
+// left half-turned and half-flattened.
+//
+// Every move starts by stopping whatever motion OrbitControls still has
+// from the last drag (stopMomentum), which would otherwise carry on
+// turning the camera during and after the move.
 //
 // Throughout, the camera's `up` follows the screen's up: OrbitControls
 // (drei's, from three-stdlib) works out its orbit axis from `up` and
@@ -120,10 +127,14 @@ export function CameraAnimator({ ref, controlsRef }) {
       target: controls.target.clone(),
       fov: camera.fov,
       height: visibleHeight(camera.position.distanceTo(controls.target), camera.fov),
+      up: camera.up.clone(),
     };
   };
-  const moveTo = (goal, duration) => {
-    if (!controlsRef.current) return;
+  const moveTo = (goal, duration, { lock = false } = {}) => {
+    const controls = controlsRef.current;
+    if (!controls) return;
+    stopMomentum(controls);
+    controls.enabled = !lock;
     move.current = { from: state(), to: goal, duration, elapsed: 0 };
   };
 
@@ -134,12 +145,17 @@ export function CameraAnimator({ ref, controlsRef }) {
       const { quaternion } = axisViewOrientation(from.quaternion, axis);
       const angle = from.quaternion.angleTo(quaternion);
       if (angle < 1e-6) return;
-      moveTo({ ...from, quaternion }, Math.min(MAX_DURATION, Math.max(MIN_DURATION, angle / TURN_RATE)));
+      // No `up` in the goal: the camera ends with up along the new
+      // screen-up, as it is throughout the move.
+      const goal = { ...from, quaternion };
+      delete goal.up;
+      moveTo(goal, Math.min(MAX_DURATION, Math.max(MIN_DURATION, angle / TURN_RATE)));
     },
     moveTo,
     state,
     cancel() {
       move.current = null;
+      if (controlsRef.current) controlsRef.current.enabled = true;
     },
   }));
 
@@ -172,7 +188,11 @@ export function CameraAnimator({ ref, controlsRef }) {
       camera.fov = fov;
       camera.updateProjectionMatrix();
     }
-    if (t >= 1) move.current = null;
+    if (t >= 1) {
+      if (to.up) camera.up.copy(to.up);
+      controls.enabled = true;
+      move.current = null;
+    }
   });
 
   return null;

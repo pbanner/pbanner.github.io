@@ -368,7 +368,7 @@ export default function App() {
         {removeMode
           ? 'Click a charge or object to delete it. Esc to stop deleting.'
           : view2D
-            ? 'Viewing the 2D cut · Drag a charge in from the sidebar · Click one to edit it · Drag a point charge to move it · Scroll to zoom, right-drag to pan · Back to 3D in the lower left'
+            ? 'Viewing the 2D cut · Drag a charge in from the sidebar · Click one to edit it · Drag a point charge to move it · Drag empty space to pan, scroll to zoom · Back to 3D in the lower left'
             : 'Drag a charge or object in from the sidebar · Click one to edit it · Drag a point charge to move it · Shift+drag to raise or lower · Hold Alt to turn off snapping · Drag onto the trash to delete'}
       </div>
 

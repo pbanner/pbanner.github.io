@@ -49,3 +49,14 @@ export function axisViewOrientation(current, axis) {
   const quaternion = new Quaternion().setFromRotationMatrix(new Matrix4().makeBasis(right, up, back));
   return { quaternion, up };
 }
+
+// OrbitControls (with damping on) keeps easing the camera along after a
+// drag ends, and has no way to stop that. But one update with damping off
+// applies and then clears the motion it has left. Used before every
+// animated camera move and by Reset View.
+export function stopMomentum(controls) {
+  const damping = controls.enableDamping;
+  controls.enableDamping = false;
+  controls.update();
+  controls.enableDamping = damping;
+}

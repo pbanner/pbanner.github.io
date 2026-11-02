@@ -10,7 +10,7 @@ import CutPlane from './CutPlane.jsx';
 import { objectHandles, LineDrag } from './handles.js';
 import Axes from './Axes.jsx';
 import { AxisGizmo, CameraAnimator } from './AxisGizmo.jsx';
-import { axisViewOrientation } from './cameraViews.js';
+import { axisViewOrientation, stopMomentum } from './cameraViews.js';
 import FieldLines from './FieldLines.jsx';
 import FieldArrows from './FieldArrows.jsx';
 import { CoordinateReadoutPanel, CoordinateReadoutTracker } from './CoordinateReadout.jsx';
@@ -55,9 +55,17 @@ function Floor({ axis = 2, offset = 0 }) {
 // The 2D cut's view: the camera looks straight at the cut with a field of
 // view of FLAT_FOV degrees -- narrow enough that the perspective is
 // practically flat -- from far enough back that FLAT_HEIGHT world units
-// (the box, with a margin) fit on screen. Getting there and back takes
-// CUT_VIEW_DURATION seconds (see CameraAnimator's moveTo).
+// (the box, with a margin) fit on screen both ways. Getting there and back
+// takes CUT_VIEW_DURATION seconds (see CameraAnimator's moveTo), during
+// which the view can't be grabbed. In 2D, dragging with either button
+// pans (there's no rotating), and scrolling zooms.
 const FLAT_FOV = 3;
+// Which mouse buttons and touches do what: OrbitControls' defaults in 3D;
+// in 2D, panning instead of rotating.
+const ORBIT_MOUSE_BUTTONS = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+const PAN_MOUSE_BUTTONS = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+const ORBIT_TOUCHES = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+const PAN_TOUCHES = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
 const FLAT_HEIGHT = 12.5;
 const CUT_VIEW_DURATION = 1.0;
 
@@ -110,7 +118,10 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
     const side = camera.position.getComponent(cut.axis) >= cut.offset ? 1 : -1;
     const direction = [0, 1, 2].map((k) => (k === cut.axis ? side : 0));
     const target = new THREE.Vector3(...[0, 1, 2].map((k) => (k === cut.axis ? cut.offset : 0)));
-    return { quaternion: axisViewOrientation(from.quaternion, direction).quaternion, target, fov: FLAT_FOV, height: FLAT_HEIGHT };
+    // In a window narrower than it is tall, the box's width is the tighter
+    // fit: visible width = height x aspect ratio.
+    const height = Math.max(FLAT_HEIGHT, FLAT_HEIGHT / camera.aspect);
+    return { quaternion: axisViewOrientation(from.quaternion, direction).quaternion, target, fov: FLAT_FOV, height };
   };
 
   // Turning view2D on swings the camera round to face the cut, flattening
@@ -126,9 +137,9 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
     if (view2D && cutAxis !== undefined) {
       const now = animator.state();
       if (!saved3DRef.current) saved3DRef.current = now;
-      animator.moveTo(flatFraming(now), CUT_VIEW_DURATION);
+      animator.moveTo(flatFraming(now), CUT_VIEW_DURATION, { lock: true });
     } else if (!view2D && saved3DRef.current) {
-      animator.moveTo(saved3DRef.current, CUT_VIEW_DURATION);
+      animator.moveTo(saved3DRef.current, CUT_VIEW_DURATION, { lock: true });
       saved3DRef.current = null;
     }
     // flatFraming reads the current cut, whose position is in the deps.
@@ -138,7 +149,10 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   // Can't use controls.reset(): drei captures the controls' saved state
   // before applying the `target` prop, so reset() would aim at the wrong
   // point (same issue the Bloch sphere sim works around). Set both
-  // explicitly instead. In 2D, Reset View re-centers the cut instead.
+  // explicitly instead, after stopping any motion left over from a drag
+  // (which would otherwise carry on turning the camera), and put back the
+  // field of view (which an interrupted 2D transition could have left
+  // narrower). In 2D, Reset View re-centers the cut instead.
   const resetView = () => {
     const controls = controlsRef.current;
     if (!controls) return;
@@ -148,6 +162,9 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
       return;
     }
     cameraAnimatorRef.current?.cancel(); // a gizmo move in progress would otherwise carry on from here
+    stopMomentum(controls);
+    controls.object.fov = CAMERA_FOV;
+    controls.object.updateProjectionMatrix();
     controls.object.up.set(0, 0, 1); // a gizmo move may have left another axis up
     controls.object.position.set(...INITIAL_CAMERA_POSITION);
     controls.target.set(...INITIAL_CAMERA_TARGET);
@@ -546,7 +563,14 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
         {/* makeDefault registers these as the scene's controls. Left-drag
             rotates, scroll/pinch zooms, and right-drag (or two-finger drag)
             pans. */}
-        <OrbitControls ref={controlsRef} target={INITIAL_CAMERA_TARGET} enableRotate={!view2D} makeDefault />
+        <OrbitControls
+          ref={controlsRef}
+          target={INITIAL_CAMERA_TARGET}
+          enableRotate={!view2D}
+          mouseButtons={view2D ? PAN_MOUSE_BUTTONS : ORBIT_MOUSE_BUTTONS}
+          touches={view2D ? PAN_TOUCHES : ORBIT_TOUCHES}
+          makeDefault
+        />
 
         <CoordinateReadoutTracker panelRef={readoutPanelRef} position={readout?.position ?? null} />
 
