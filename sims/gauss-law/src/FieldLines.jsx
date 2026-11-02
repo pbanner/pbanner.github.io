@@ -44,7 +44,11 @@ function Arrowheads({ arrows, opacity }) {
       <coneGeometry args={[ARROW_RADIUS, ARROW_LENGTH, 12]} />
       {/* Lit rather than flat, so a cone pointing at the viewer (its shaded
           sides) looks different from one pointing away (its flat base). */}
-      <meshStandardMaterial color={LINE_COLOR} roughness={0.6} transparent={opacity < 1} opacity={opacity} />
+      {/* Always transparent, even at full opacity: three.js compiles an
+          opaque material's shader to ignore opacity altogether, and turning
+          `transparent` on later doesn't recompile it, so arrowheads that
+          started out opaque would never fade. */}
+      <meshStandardMaterial color={LINE_COLOR} roughness={0.6} transparent opacity={opacity} />
     </instancedMesh>
   );
 }
@@ -87,7 +91,7 @@ export default function FieldLines({ sources, density, cut = null, faded = false
   const opacity = faded ? FADED_OPACITY : 1;
   return (
     <group>
-      <Line segments points={segmentPoints} color={LINE_COLOR} lineWidth={cut ? 1.6 : 1.3} transparent={faded} opacity={opacity} />
+      <Line segments points={segmentPoints} color={LINE_COLOR} lineWidth={cut ? 1.6 : 1.3} transparent opacity={opacity} />
       <Arrowheads arrows={arrows} opacity={opacity} />
     </group>
   );
