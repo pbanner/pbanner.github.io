@@ -420,6 +420,11 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   // camera, and only a genuine click drops the charge.
   const handlePointerDownCapture = (e) => {
     pressRef.current = null;
+    // Finish any typing in the properties panel first: taking the focus
+    // away from its box commits what was typed to the charge it belongs
+    // to, before this press can select a different one (which would
+    // otherwise replace the box, typing and all).
+    if (document.activeElement instanceof HTMLInputElement) document.activeElement.blur();
     if (e.button !== 0) return; // right-drag pans; leave it to OrbitControls
     const at = { x: e.clientX, y: e.clientY };
     if (armedTypeId) {
