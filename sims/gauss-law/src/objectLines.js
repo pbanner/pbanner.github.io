@@ -77,8 +77,15 @@ export function objectSeeds(obj, linesPerUnitCharge, halfExtent) {
     const dirs = seedDirections(n);
     const us = seedThresholds(n);
     dirs.forEach((d, i) => {
-      const r = obj.form === 'shell' ? obj.radius : obj.radius * Math.cbrt(us[i]);
-      add(c.map((v, k) => v + r * d[k]), obj.form === 'shell' ? d : null, us[i]);
+      if (obj.form === 'shell') {
+        add(c.map((v, k) => v + obj.radius * d[k]), d, us[i]);
+        return;
+      }
+      // (`radial` says how the depth follows from the threshold. Mirror
+      // images' thresholds, and so depths, differ; fieldLines.js uses it to
+      // tell which seeds are mirror images all the same.)
+      const point = c.map((v, k) => v + obj.radius * Math.cbrt(us[i]) * d[k]);
+      if (inBox(point)) seeds.push({ point, normal: null, u: us[i], radial: { center: c, dir: d, R: obj.radius, power: 3 } });
     });
     return seeds;
   }

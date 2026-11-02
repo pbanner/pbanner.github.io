@@ -104,7 +104,9 @@ export function cutObjectSeeds(obj, cut, density, halfExtent) {
     directions.forEach((d, i) => {
       const r = solidPower ? obj.radius * thresholds[i] ** (1 / solidPower) : startRadius;
       const point = center.map((x, k) => x + r * d[k]);
-      if (inBox(point)) seeds.push({ point, normal: solidPower ? null : d, u: thresholds[i], ...(fromCenter ? { origin: center } : {}) });
+      if (!inBox(point)) return;
+      if (solidPower) seeds.push({ point, normal: null, u: thresholds[i], radial: { center, dir: d, R: obj.radius, power: solidPower } });
+      else seeds.push({ point, normal: d, u: thresholds[i], ...(fromCenter ? { origin: center } : {}) });
     });
   };
   if (obj.kind === 'sphere') {

@@ -33,6 +33,7 @@ import { chargeSign } from './chargeTypes.js';
 import { LINES_PER_UNIT_CHARGE, seedDirections, seedThresholds } from './seedDirections.js';
 import { objectSeeds, sinkGeometry, LINE_ROD_RADIUS } from './objectLines.js';
 import { circleDirections, cutObjectSeeds, pointLineCount } from './cutLines.js';
+import { arrangementSymmetries, seedOrbits } from './symmetry.js';
 
 // Step size bounds, in world units. Steps shrink near charges (where lines
 // curve sharply) down to MIN_STEP, and grow to MAX_STEP far from them.
@@ -302,25 +303,10 @@ function traceLine(start, startIndex, sources, sign, { halfExtent, chargeRadius,
   return { points, endsAt: null };
 }
 
-// n points spread almost evenly over the unit sphere: a "Fibonacci
-// sphere", which steps evenly in height while turning by the golden angle
-// each time. Only used for extra starting directions at a negative charge
-// that's short of lines (see computeFieldLines), which happens only when
-// the arrangement has no symmetry to preserve.
-function fibonacciSphere(n) {
-  const golden = Math.PI * (3 - Math.sqrt(5));
-  const dirs = [];
-  for (let i = 0; i < n; i++) {
-    const z = 1 - (2 * (i + 0.5)) / n;
-    const r = Math.sqrt(1 - z * z);
-    dirs.push([r * Math.cos(golden * i), r * Math.sin(golden * i), z]);
-  }
-  return dirs;
-}
-const EXTRA_DIRECTIONS = fibonacciSphere(400);
-// The same for a point charge in a 2D cut: directions around a circle in
-// it.
-const EXTRA_CIRCLE_DIRECTIONS = (axis) => circleDirections(360, axis).directions;
+// (Extra directions come in symmetric sets too: seedDirections.js's
+// biggest, or in a 2D cut, 360 around a circle.)
+const EXTRA_COUNT_3D = 270;
+const EXTRA_COUNT_2D = 360;
 // How many extra directions a short negative charge tries before giving
 // up. When none of that many well-spread directions escapes, the charge's
 // field comes (almost) entirely from positive charges, and more tries
@@ -331,25 +317,6 @@ const unit = (v) => {
   const n = Math.hypot(v[0], v[1], v[2]);
   return [v[0] / n, v[1] / n, v[2] / n];
 };
-
-// Of `candidates` (each with a unit .dir), the index of the one whose
-// direction is farthest, by angle, from every direction in `taken` -- the
-// largest dot product with any of them being the smallest. Repeatedly
-// taking that one ("farthest-point selection") spreads the picks out as
-// evenly as the candidates allow.
-function farthestFrom(candidates, taken) {
-  let best = -1;
-  let bestClosest = Infinity;
-  candidates.forEach((c, i) => {
-    let closest = -Infinity;
-    for (const t of taken) closest = Math.max(closest, dot(c.dir, t));
-    if (closest < bestClosest) {
-      bestClosest = closest;
-      best = i;
-    }
-  });
-  return best;
-}
 
 // sources: everything charged (see chargeTypes.js). Returns an array of
 // lines, each an array of [x, y, z] points ordered in the direction of the
@@ -366,21 +333,21 @@ function farthestFrom(candidates, taken) {
 //      N - k
 //      lines of its own. Its own lines are traced backward from its
 //      starting directions, and any that end on a positive charge are
-//      discarded (they duplicate step 1's). If more remain than it needs,
-//      it keeps the ones spread out best among the lines already touching
-//      it (farthestFrom). If too few remain, it tries extra directions,
-//      farthest-first, until it has enough.
+//      discarded (they duplicate step 1's). It keeps as many of the rest
+//      as it needs, chosen in whole orbits (sets of lines the arrangement's
+//      symmetries map onto each other; symmetry.js), those spread out best
+//      among the lines already touching it first. If too few remain, it
+//      tries extra directions, again in orbits, farthest-first.
 // This can't always come out exact. A negative charge surrounded by
 // positive ones can receive more than its N lines, since each positive charge
 // sends it a whole number of lines -- about N times the fraction of its
 // flux that ends there -- and those roundings add up; or it can fall short
 // with no line of its own able to escape. Lines are whole numbers and flux
 // isn't, so with every line a true field line from evenly spread starting
-// directions, a few such charges are off by a line or two.
-// When an arrangement is symmetric, exactly N - k of a negative charge's
-// own lines remain (they're mirror images of the positive charges' lines;
-// see the note on mirror planes above), so there's nothing to choose and
-// the symmetry is kept.
+// directions, a few such charges are off by a line or two. And choosing
+// lines in whole orbits, so that a symmetric arrangement's picture is
+// symmetric, can leave a charge a few lines over or under where the orbits
+// don't add up to exactly what it needs.
 //   3. A negatively charged object's own lines are traced backward from
 //      its seeds, and again any that end on a positive charge (point or
 //      object) are discarded. Its charge is spread out, so there's no
@@ -401,8 +368,50 @@ export function computeFieldLines(sources, { density, halfExtent, chargeRadius, 
     return { directions: seedDirections(count), thresholds: seedThresholds(count) };
   };
   const seedsOf = (obj) => (cut ? cutObjectSeeds(obj, cut, density, halfExtent) : objectSeeds(obj, linesPerUnitCharge, halfExtent));
-  const extraDirections = cut ? EXTRA_CIRCLE_DIRECTIONS(cut.axis) : EXTRA_DIRECTIONS;
   const options = { halfExtent, chargeRadius, cut };
+
+  // Every charge's seeds, each with its `orbit`: which set of seeds the
+  // arrangement's symmetries map onto each other it's in (symmetry.js). A
+  // point charge's seeds are its starting directions; an object's, where
+  // its lines start (objectLines.js, cutLines.js). Each seed's `site` is
+  // where it is, or for a seed inside a solid -- whose depth follows from
+  // its threshold, so differs between mirror images -- the point on the
+  // solid's surface in its direction.
+  const symmetries = arrangementSymmetries(sources, cut);
+  const inOrbits = (seedLists) => {
+    const orbitOf = seedOrbits(seedLists.flat(), symmetries);
+    let k = 0;
+    return seedLists.map((list) => list.map((seed) => ({ ...seed, orbit: orbitOf[k++] })));
+  };
+  const tag = (seed) => (seed.dir ? 'direction' : seed.normal ? `surface${seed.layer ?? ''}` : 'volume');
+  const site = (seed, source) => {
+    if (seed.dir) return add(source.position, seed.dir, 1);
+    if (seed.radial) return add(seed.radial.center, seed.radial.dir, seed.radial.R);
+    return seed.point;
+  };
+  const seedsFor = inOrbits(
+    sources.map((source) => {
+      const list = source.kind === 'point'
+        ? (({ directions, thresholds }) => directions.map((dir, k) => ({ dir, u: thresholds[k] })))(directionsFor(source))
+        : seedsOf(source);
+      return list.map((seed) => ({ ...seed, tag: tag(seed), site: site(seed, source) }));
+    }),
+  );
+  // Extra directions a negative point charge can try when it's short of
+  // lines (computeFieldLines' step 2), likewise in symmetric sets; worked
+  // out the first time one is needed.
+  let extraFor = null;
+  const extraSeeds = (i) => {
+    if (!extraFor) {
+      const extra = cut ? circleDirections(EXTRA_COUNT_2D, cut.axis) : { directions: seedDirections(EXTRA_COUNT_3D), thresholds: seedThresholds(EXTRA_COUNT_3D) };
+      extraFor = inOrbits(
+        sources.map((source) => (source.kind === 'point' && source.q < 0
+          ? extra.directions.map((dir, k) => ({ dir, u: extra.thresholds[k], tag: 'extra', site: add(source.position, dir, 1) }))
+          : [])),
+      );
+    }
+    return extraFor[i];
+  };
   // The objects a line can end in: negatively charged ones for lines
   // traced along E, positive ones for lines traced against it.
   const sinksFor = (sign) => sources
@@ -466,7 +475,7 @@ export function computeFieldLines(sources, { density, halfExtent, chargeRadius, 
     return starts;
   };
   const traceObject = (i, sign, keep) => {
-    for (const seed of seedsOf(sources[i])) {
+    for (const seed of seedsFor[i]) {
       for (const start of startsAt(seed, sign)) {
         if (!inside(start, halfExtent)) continue;
         const traced = traceLine(start, -1, sources, sign, options, sinks[sign], seed.u);
@@ -482,11 +491,10 @@ export function computeFieldLines(sources, { density, halfExtent, chargeRadius, 
 
   sources.forEach((source, i) => {
     if (source.kind !== 'point' || !(source.q > 0)) return;
-    const { directions, thresholds: us } = directionsFor(source);
-    directions.forEach((dir, k) => {
-      const traced = trace(i, dir, +1, us[k]);
+    for (const seed of seedsFor[i]) {
+      const traced = trace(i, seed.dir, +1, seed.u);
       if (traced) addForwardLine(traced);
-    });
+    }
   });
   sources.forEach((source, i) => {
     if (source.kind !== 'point' && chargeSign(source) > 0) traceObject(i, +1, addForwardLine);
@@ -494,33 +502,92 @@ export function computeFieldLines(sources, { density, halfExtent, chargeRadius, 
 
   sources.forEach((source, i) => {
     if (source.kind !== 'point' || !(source.q < 0)) return;
-    const { directions: seeds, thresholds: us } = directionsFor(source);
+    const seeds = seedsFor[i];
     const needed = seeds.length - arrivals[i].length;
     if (needed <= 0) return;
-    // Backward-traced lines that don't end on a positive charge.
-    const ownLine = (dir, k) => {
-      const traced = trace(i, dir, -1, k === undefined ? 0.5 : us[k]);
-      if (!traced || endsOnPositive(traced.endsAt)) return null;
-      return { dir, points: traced.points };
-    };
-    let candidates = seeds.map(ownLine).filter(Boolean);
+    // Its own lines are chosen in whole orbits -- sets of symmetric lines,
+    // all kept or none -- so a symmetric arrangement keeps its symmetry,
+    // getting as close to the number needed as the orbits' sizes allow
+    // (exactly, when the arrangement has no symmetry and every orbit is a
+    // single line). Among the orbits whose lines all count (traced
+    // backward, none ends on a positive charge), the one spread out best
+    // from the lines already touching the charge goes first, and an orbit
+    // that would overshoot is only taken if that ends closer to the count.
     const chosen = [];
     const taken = [...arrivals[i]];
-    const take = (c) => {
-      chosen.push(c);
-      taken.push(c.dir);
+    // Each orbit's `closest`: how near its lines come to those already
+    // touching the charge -- the largest dot product of any of its
+    // directions with any of theirs. The smaller, the better spread. It's
+    // brought up to date with just the new lines whenever lines are taken.
+    const nearer = (o, dirs) => {
+      for (const m of o.members) for (const t of dirs) o.closest = Math.max(o.closest, dot(m.dir, t));
     };
-    if (candidates.length <= needed) {
-      candidates.forEach(take);
-    } else {
-      while (chosen.length < needed) take(candidates.splice(farthestFrom(candidates, taken), 1)[0]);
+    const orbitsOf = (list) => {
+      const byOrbit = new Map();
+      for (const seed of list) {
+        if (!byOrbit.has(seed.orbit)) byOrbit.set(seed.orbit, []);
+        byOrbit.get(seed.orbit).push(seed);
+      }
+      return [...byOrbit.entries()].map(([orbit, members]) => {
+        const o = { orbit, members, closest: -Infinity };
+        nearer(o, taken);
+        return o;
+      });
+    };
+    const bySpread = (a, b) => a.closest - b.closest || a.orbit - b.orbit;
+    let traces = 0;
+    const ownLine = (seed) => {
+      traces++;
+      const traced = trace(i, seed.dir, -1, seed.u);
+      if (!traced || endsOnPositive(traced.endsAt)) return null;
+      return { dir: seed.dir, points: traced.points };
+    };
+    // The orbit, given its lines, or null if they don't all count. Its
+    // lines are mirror images of each other, so once one doesn't count,
+    // none would, and the rest needn't be traced.
+    const usable = (o) => {
+      const found = [];
+      for (const m of o.members) {
+        const line = ownLine(m);
+        if (!line) return null;
+        found.push(line);
+      }
+      o.lines = found;
+      return o;
+    };
+    // Whether an orbit of n lines is worth taking when the charge is
+    // `missing` lines short: if they fit, or (`over`) if they overshoot by
+    // less than that, ending closer to the count.
+    const fits = (n, missing) => n <= missing;
+    const over = (n, missing) => n - missing < missing;
+    // Takes an orbit's lines, and updates how near the `others` come.
+    const take = (o, others) => {
+      const dirs = o.lines.map((c) => c.dir);
+      chosen.push(...o.lines);
+      taken.push(...dirs);
+      for (const other of others) nearer(other, dirs);
+    };
+    let pending = orbitsOf(seeds).map(usable).filter(Boolean);
+    while (chosen.length < needed && pending.length) {
+      pending.sort(bySpread);
+      const missing = needed - chosen.length;
+      const next = pending.find((o) => fits(o.lines.length, missing)) ?? pending.find((o) => over(o.lines.length, missing));
+      if (!next) break;
+      pending = pending.filter((o) => o !== next);
+      take(next, pending);
     }
-    // Still short: try extra directions, farthest from everything first.
-    const extra = extraDirections.map((dir) => ({ dir }));
-    for (let tries = 0; chosen.length < needed && tries < MAX_EXTRA_TRIES; tries++) {
-      const { dir } = extra.splice(farthestFrom(extra, taken), 1)[0];
-      const c = ownLine(dir);
-      if (c) take(c);
+    // Still short: try extra directions (in symmetric sets too), those
+    // farthest from everything first, until MAX_EXTRA_TRIES more lines have
+    // been traced.
+    if (chosen.length < needed) {
+      traces = 0;
+      const extra = orbitsOf(extraSeeds(i));
+      while (chosen.length < needed && extra.length && traces < MAX_EXTRA_TRIES) {
+        extra.sort(bySpread);
+        const o = usable(extra.shift());
+        const missing = needed - chosen.length;
+        if (o && (fits(o.lines.length, missing) || over(o.lines.length, missing))) take(o, extra);
+      }
     }
     for (const c of chosen) lines.push(c.points.reverse());
   });
