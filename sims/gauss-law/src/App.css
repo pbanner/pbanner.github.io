@@ -526,3 +526,39 @@ input[type="range"]::-moz-range-track {
 .cut-inset:hover {
   border-color: #3498db;
 }
+
+/* In a short window, the sidebar mustn't run into the view controls in
+   the lower-left corner (the axis gizmo or the 2D cut's inset and its
+   buttons, about 200px tall): it's capped above them, and scrolls if it
+   still doesn't fit -- which in windows under 620px tall, where its
+   buttons are also smaller (below), takes a very short window. */
+.sidebar-panel {
+  max-height: calc(100dvh - 16px - 210px);
+  overflow-y: auto;
+}
+
+@media (max-height: 620px) {
+  .sidebar-panel {
+    gap: 4px;
+    padding: 8px 6px;
+  }
+
+  .sidebar-heading {
+    font-size: 14px;
+  }
+
+  .sidebar-column {
+    gap: 2px;
+  }
+
+  .sidebar-icon-button {
+    width: 36px;
+    height: 36px;
+    padding: 4px;
+  }
+
+  .sidebar-icon-button svg {
+    width: 26px;
+    height: 26px;
+  }
+}
