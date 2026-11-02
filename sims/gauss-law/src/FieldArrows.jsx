@@ -37,10 +37,19 @@ function makeHeadGeometry() {
 // shaft stretches with its arrow's length but a head doesn't, and an
 // instance can only stretch its whole geometry. sources: everything
 // charged (see chargeField.js).
-export default function FieldArrows({ sources, density }) {
+//
+// cut: a valid 2D cut ({ axis, offset }), to draw a grid of arrows in it
+// only (the 2D view), or null.
+export default function FieldArrows({ sources, density, cut = null }) {
+  const cutAxis = cut?.axis;
+  const cutOffset = cut?.offset;
   const arrows = useMemo(
-    () => computeFieldArrows(sources, { density, halfExtent: WORLD_HALF_EXTENT }),
-    [sources, density],
+    () => computeFieldArrows(sources, {
+      density,
+      halfExtent: WORLD_HALF_EXTENT,
+      cut: cutAxis === undefined ? null : { axis: cutAxis, offset: cutOffset },
+    }),
+    [sources, density, cutAxis, cutOffset],
   );
   const shaftGeometry = useMemo(() => makeShaftGeometry(), []);
   const headGeometry = useMemo(() => makeHeadGeometry(), []);

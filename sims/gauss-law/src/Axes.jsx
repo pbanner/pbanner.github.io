@@ -53,7 +53,9 @@ function AxisLabel({ text, color, position }) {
 // Each axis also gets a tick dot every SNAP_STEP -- the same spacing as the
 // floor grid's lines, so on x and y the ticks sit exactly where grid lines
 // cross the axis, and on z they mark the heights a raised charge snaps to.
-export default function Axes() {
+// hiddenAxis: an axis to leave out (0, 1 or 2) -- in the 2D cut's view,
+// the one pointing straight out of the screen.
+export default function Axes({ hiddenAxis = null }) {
   const tickValues = [];
   const steps = Math.round(WORLD_HALF_EXTENT / SNAP_STEP);
   for (let i = -steps; i <= steps; i++) {
@@ -62,6 +64,7 @@ export default function Axes() {
   return (
     <group>
       {AXIS_DIRECTIONS.map((u, axis) => {
+        if (axis === hiddenAxis) return null;
         const color = AXIS_COLORS[axis];
         const end = u.clone().multiplyScalar(WORLD_HALF_EXTENT).toArray();
         const start = u.clone().multiplyScalar(-WORLD_HALF_EXTENT).toArray();

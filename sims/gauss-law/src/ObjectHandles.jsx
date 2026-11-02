@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { objectHandles } from './handles.js';
-import { SELECTION_COLOR } from './sceneConstants.js';
+import { SELECTION_COLOR, CAMERA_FOV } from './sceneConstants.js';
 
 // The handles on the selected sphere, rod or plane (see handles.js for
 // what each does), in the selection blue. They're drawn on top of
@@ -14,8 +14,12 @@ import { SELECTION_COLOR } from './sceneConstants.js';
 // handle is drawn a little bigger, and a disabled one (handles.js) gray.
 //
 // Sizes below are in "handle units", HANDLE_SCALE x the distance to the
-// camera in world units -- about 10 pixels at the default zoom.
+// camera in world units -- about 10 pixels at the default zoom -- with
+// the default field of view. A narrower one (the 2D cut's view) shows
+// less at the same distance, so handles shrink in proportion (sizeAt).
 const HANDLE_SCALE = 0.011;
+const DEFAULT_FOV_TAN = Math.tan((CAMERA_FOV * Math.PI) / 360);
+const sizeAt = (camera, position) => (camera.position.distanceTo(position) * HANDLE_SCALE * Math.tan((camera.fov * Math.PI) / 360)) / DEFAULT_FOV_TAN;
 const GROWN = 1.25;
 const DISABLED_COLOR = '#a3a9b1';
 const Y = new THREE.Vector3(0, 1, 0);
@@ -92,7 +96,7 @@ export default function ObjectHandles({ charge, hoveredId, activeId }) {
       // An arrow points along its line; the move handle lies in its plane.
       g.quaternion.setFromUnitVectors(h.shape === 'move' ? Z : Y, direction.set(...h.direction));
       const grown = !h.disabled && (h.id === hoveredId || h.id === activeId) ? GROWN : 1;
-      g.scale.setScalar(cam.position.distanceTo(g.position) * HANDLE_SCALE * grown);
+      g.scale.setScalar(sizeAt(cam, g.position) * grown);
     }
   });
 
@@ -105,7 +109,7 @@ export default function ObjectHandles({ charge, hoveredId, activeId }) {
         key={h.id}
         ref={(g) => { groups.current[h.id] = g; }}
         position={h.position}
-        scale={camera.position.distanceTo(new THREE.Vector3(...h.position)) * HANDLE_SCALE}
+        scale={sizeAt(camera, new THREE.Vector3(...h.position))}
       >
         <Shape color={h.disabled ? DISABLED_COLOR : SELECTION_COLOR} />
       </group>

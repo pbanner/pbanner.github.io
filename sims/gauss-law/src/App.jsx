@@ -4,6 +4,7 @@ import ChargeSidebar from './ChargeSidebar.jsx';
 import ChargeIcon from './ChargeIcon.jsx';
 import DisplayOptionsPanel from './DisplayOptionsPanel.jsx';
 import PropertiesPanel, { CutPanel } from './PropertiesPanel.jsx';
+import CutInset from './CutInset.jsx';
 import { getChargeType, makeCharge, normalizePosition } from './chargeTypes.js';
 import { allowedCuts, defaultCutAxis, placeCut } from './cutPlanes.js';
 import { CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
@@ -54,6 +55,19 @@ export default function App() {
   };
   const moveCut = (offset) => {
     if (placedCut?.movable) setCut({ ...cut, offset });
+  };
+
+  // Whether the cut is shown in 2D (Viewer turns the camera to face it).
+  // Only a valid cut can be; if it ever stops being valid, the view goes
+  // back to 3D.
+  const [view2D, setView2D] = useState(false);
+  if (view2D && !placedCut?.valid) setView2D(false);
+  const viewCut = () => {
+    if (!placedCut?.valid) return;
+    disarm();
+    setRemoveMode(false);
+    setSelectedId((prev) => (prev === 'cut' ? null : prev));
+    setView2D(true);
   };
 
   // The charge type armed for placement (from a sidebar click, or during a
@@ -245,6 +259,7 @@ export default function App() {
         onDeleteCharge={deleteCharge}
         cut={placedCut}
         onMoveCut={moveCut}
+        view2D={view2D}
         showGrid={displayOptions.showGrid}
         showAxes={displayOptions.showAxes}
         showField={displayOptions.showField}
@@ -278,7 +293,7 @@ export default function App() {
           allowed={allowed}
           onChangeAxis={(axis) => setCut(cutAt(axis))}
           onChangeOffset={moveCut}
-          onView={null}
+          onView={viewCut}
           onRemove={removeCut}
           onClose={() => setSelectedId(null)}
         />
@@ -294,10 +309,22 @@ export default function App() {
       )}
 
       {/* Lower-left corner: the view controls, under the axis gizmo (which
-          Viewer draws in the canvas). */}
+          Viewer draws in the canvas) -- or in 2D, under a small 3D picture
+          of where the cut is. The cut's button inserts a cut, views it in
+          2D, or goes back to 3D. */}
       <div className="view-controls">
-        {placedCut ? (
-          <button className="control-button view-button" disabled>
+        {view2D && placedCut && <CutInset charges={charges} cut={placedCut} onClick={() => setView2D(false)} />}
+        {view2D ? (
+          <button className="control-button view-button" onClick={() => setView2D(false)}>
+            Back to 3D
+          </button>
+        ) : placedCut ? (
+          <button
+            className="control-button view-button"
+            disabled={!placedCut.valid}
+            title={placedCut.valid ? undefined : "The charges aren't all in the cut"}
+            onClick={viewCut}
+          >
             View 2D cut
           </button>
         ) : (
@@ -317,7 +344,11 @@ export default function App() {
 
       {/* Lower-right corner: the Display Options panel. */}
       <div className="lower-right-stack">
-        <DisplayOptionsPanel displayOptions={displayOptions} setDisplayOptions={setDisplayOptions} />
+        <DisplayOptionsPanel
+          displayOptions={displayOptions}
+          setDisplayOptions={setDisplayOptions}
+          gridPlane={view2D && placedCut ? ['yz', 'xz', 'xy'][placedCut.axis] : 'xy'}
+        />
       </div>
 
       {/* How to place and manipulate charges, shown at all times --
@@ -325,7 +356,9 @@ export default function App() {
       <div className="interaction-hint">
         {removeMode
           ? 'Click a charge or object to delete it. Esc to stop deleting.'
-          : 'Drag a charge or object in from the sidebar · Click one to edit it · Drag a point charge to move it · Shift+drag to raise or lower · Hold Alt to turn off snapping · Drag onto the trash to delete'}
+          : view2D
+            ? 'Viewing the 2D cut · Drag a charge in from the sidebar · Click one to edit it · Drag a point charge to move it · Scroll to zoom, right-drag to pan · Back to 3D in the lower left'
+            : 'Drag a charge or object in from the sidebar · Click one to edit it · Drag a point charge to move it · Shift+drag to raise or lower · Hold Alt to turn off snapping · Drag onto the trash to delete'}
       </div>
 
       {/* While armed: a flat 2D icon follows the pointer whenever the charge

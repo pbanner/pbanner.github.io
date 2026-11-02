@@ -78,38 +78,66 @@ export function AxisGizmo({ onAxisClick }) {
   );
 }
 
-// Turns the camera to look along an axis (viewAlong) by the smallest
-// rotation from its current orientation to the chosen end orientation (see
-// cameraViews.js): a slerp, the rotation's shortest path, eased in and out,
-// with the camera kept at its distance from the target, behind the
-// direction it looks. The view may roll or flip on the way. Throughout, the
-// camera's `up` follows the screen's up: OrbitControls (drei's, from
-// three-stdlib) works out its orbit axis from `up` and re-aims the camera
-// with it on every update, so it then reproduces each frame's orientation
-// rather than levelling it, and after the move, dragging the view orbits
-// around whatever is up on screen.
+// Moves the camera smoothly. viewAlong(axis) turns it to look along an
+// axis by the smallest rotation from its current orientation to the chosen
+// end orientation (see cameraViews.js): a slerp, the rotation's shortest
+// path, eased in and out, with the camera kept at its distance from the
+// target, behind the direction it looks. The view may roll or flip on the
+// way.
+//
+// moveTo(goal, duration) is the general move, which the 2D cut's view
+// uses: at once, it turns the camera (slerp), moves the point it orbits
+// (`target`), and changes its field of view (`fov`) and how much of the
+// scene fits on screen -- `height`, the height visible at the target, in
+// world units. The camera's distance from the target follows from those
+// two: height = 2 distance tan(fov / 2). Narrowing the field of view while
+// keeping the height (a "dolly zoom") flattens the perspective: at a few
+// degrees, near and far things are drawn at practically the same scale.
+// state() is the camera's current { quaternion, target, fov, height }, to
+// come back to.
+//
+// Throughout, the camera's `up` follows the screen's up: OrbitControls
+// (drei's, from three-stdlib) works out its orbit axis from `up` and
+// re-aims the camera with it on every update, so it then reproduces each
+// frame's orientation rather than levelling it, and after the move,
+// dragging the view orbits around whatever is up on screen.
 //
 // Grabbing the view mid-move (OrbitControls' 'start' event) cancels the
 // move, so the hand always wins. That's also why the gizmo starts moves on
 // a click rather than on pointerdown: the gizmo is drawn on the same
 // canvas, so pressing on it also fires 'start', which would cancel a move
 // begun on that same press.
+const visibleHeight = (distance, fov) => 2 * distance * Math.tan((fov * Math.PI) / 360);
+
 export function CameraAnimator({ ref, controlsRef }) {
   const move = useRef(null);
 
+  const state = () => {
+    const controls = controlsRef.current;
+    const camera = controls.object;
+    return {
+      quaternion: camera.quaternion.clone(),
+      target: controls.target.clone(),
+      fov: camera.fov,
+      height: visibleHeight(camera.position.distanceTo(controls.target), camera.fov),
+    };
+  };
+  const moveTo = (goal, duration) => {
+    if (!controlsRef.current) return;
+    move.current = { from: state(), to: goal, duration, elapsed: 0 };
+  };
+
   useImperativeHandle(ref, () => ({
     viewAlong(axis) {
-      const controls = controlsRef.current;
-      if (!controls) return;
-      const camera = controls.object;
-      const from = camera.quaternion.clone();
-      const { quaternion: to } = axisViewOrientation(from, axis);
-      const angle = from.angleTo(to);
+      if (!controlsRef.current) return;
+      const from = state();
+      const { quaternion } = axisViewOrientation(from.quaternion, axis);
+      const angle = from.quaternion.angleTo(quaternion);
       if (angle < 1e-6) return;
-      const duration = Math.min(MAX_DURATION, Math.max(MIN_DURATION, angle / TURN_RATE));
-      const distance = camera.position.distanceTo(controls.target);
-      move.current = { from, to, distance, duration, elapsed: 0 };
+      moveTo({ ...from, quaternion }, Math.min(MAX_DURATION, Math.max(MIN_DURATION, angle / TURN_RATE)));
     },
+    moveTo,
+    state,
     cancel() {
       move.current = null;
     },
@@ -130,11 +158,20 @@ export function CameraAnimator({ ref, controlsRef }) {
     m.elapsed += delta;
     const t = Math.min(1, m.elapsed / m.duration);
     const eased = t * t * (3 - 2 * t); // smoothstep: starts and ends gently
-    const q = new Quaternion().slerpQuaternions(m.from, m.to, eased);
+    const { from, to } = m;
+    const q = new Quaternion().slerpQuaternions(from.quaternion, to.quaternion, eased);
+    const fov = from.fov + (to.fov - from.fov) * eased;
+    const height = from.height + (to.height - from.height) * eased;
+    const distance = height / (2 * Math.tan((fov * Math.PI) / 360));
     const camera = controls.object;
+    controls.target.lerpVectors(from.target, to.target, eased);
     camera.quaternion.copy(q);
-    camera.position.copy(new Vector3(0, 0, 1).applyQuaternion(q).multiplyScalar(m.distance).add(controls.target));
+    camera.position.copy(new Vector3(0, 0, 1).applyQuaternion(q).multiplyScalar(distance).add(controls.target));
     camera.up.set(0, 1, 0).applyQuaternion(q);
+    if (camera.fov !== fov) {
+      camera.fov = fov;
+      camera.updateProjectionMatrix();
+    }
     if (t >= 1) move.current = null;
   });
 

@@ -41,7 +41,11 @@ export function arrowSpacing(density, halfExtent) {
 // sources: everything charged (see chargeField.js). Returns
 // [{ position, direction, strength }], direction a unit vector along E and
 // strength from 0 (faintest) to 1 (strongest).
-export function computeFieldArrows(sources, { density, halfExtent }) {
+//
+// With `cut` ({ axis, offset }, a valid 2D cut), the arrows are a square
+// grid in the cut instead -- the same spacing, one layer -- where the
+// field lies along the cut.
+export function computeFieldArrows(sources, { density, halfExtent, cut = null }) {
   if (sources.length === 0) return [];
   const n = ARROWS_PER_AXIS[density - 1];
   const spacing = arrowSpacing(density, halfExtent);
@@ -50,8 +54,16 @@ export function computeFieldArrows(sources, { density, halfExtent }) {
   const arrows = [];
   for (let i = 0; i < n; i++) {
     for (let j = 0; j < n; j++) {
-      for (let k = 0; k < n; k++) {
-        const position = [i, j, k].map((c) => -halfExtent + (c + 0.5) * spacing);
+      for (let k = 0; k < (cut ? 1 : n); k++) {
+        let position = [i, j, k].map((c) => -halfExtent + (c + 0.5) * spacing);
+        if (cut) {
+          // i and j run along the cut's two axes.
+          const [u, v] = [0, 1, 2].filter((a) => a !== cut.axis);
+          position = [0, 0, 0];
+          position[cut.axis] = cut.offset;
+          position[u] = -halfExtent + (i + 0.5) * spacing;
+          position[v] = -halfExtent + (j + 0.5) * spacing;
+        }
         const tooClose = sources.some((s) => s.kind === 'point' && Math.hypot(...position.map((v, m) => v - s.position[m])) < minDistance);
         if (tooClose) continue;
         const e = fieldAt(position, sources);

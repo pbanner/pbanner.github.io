@@ -18,14 +18,16 @@ if (FIELD_LINE_DENSITY_LEVELS !== FIELD_ARROW_DENSITY_LEVELS) {
 }
 const FIELD_DENSITY_RANGE = { min: 1, max: FIELD_LINE_DENSITY_LEVELS, step: 1 };
 
-export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions }) {
+// gridPlane: the plane the grid is drawn in, for its label -- 'xy' (the
+// floor), or the 2D cut's plane while it's shown.
+export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions, gridPlane = 'xy' }) {
   const setOption = (key, value) => setDisplayOptions((prev) => ({ ...prev, [key]: value }));
   return (
     <div className="overlay-controls display-options-panel">
       <h3>Display Options</h3>
       <label>
         <input type="checkbox" checked={displayOptions.showGrid} onChange={(e) => setOption('showGrid', e.target.checked)} />
-        Grid (xy plane)
+        Grid ({gridPlane} plane)
       </label>
       <label>
         <input type="checkbox" checked={displayOptions.showAxes} onChange={(e) => setOption('showAxes', e.target.checked)} />

@@ -1,4 +1,4 @@
-import { useImperativeHandle, useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { OrbitControls, GizmoHelper } from '@react-three/drei';
@@ -10,6 +10,7 @@ import CutPlane from './CutPlane.jsx';
 import { objectHandles, LineDrag } from './handles.js';
 import Axes from './Axes.jsx';
 import { AxisGizmo, CameraAnimator } from './AxisGizmo.jsx';
+import { axisViewOrientation } from './cameraViews.js';
 import FieldLines from './FieldLines.jsx';
 import FieldArrows from './FieldArrows.jsx';
 import { CoordinateReadoutPanel, CoordinateReadoutTracker } from './CoordinateReadout.jsx';
@@ -34,17 +35,31 @@ function CameraLight() {
 // colors are the same so the lines through the origin don't stand out
 // either. It's built lying in three's default XZ plane, so it's rotated a
 // quarter turn about x to lie in XY instead (our floor, since z is up).
+// In the 2D cut's view, the same grid is drawn in the cut instead: across
+// `axis` at `offset` (turned a quarter turn about z for a cut across x).
 //
 // The grid is drawn first (renderOrder -1) and doesn't write depth, so
 // anything else at z = 0 -- the axes, a dragged charge's guides -- always
 // draws over it instead of z-fighting with the grid lines it overlaps.
 const GRID_COLOR = '#d3d7dc';
-function Floor() {
+const GRID_ROTATIONS = [[0, 0, Math.PI / 2], [0, 0, 0], [Math.PI / 2, 0, 0]];
+function Floor({ axis = 2, offset = 0 }) {
   const size = 2 * WORLD_HALF_EXTENT;
+  const position = [0, 0, 0];
+  position[axis] = offset;
   return (
-    <gridHelper args={[size, Math.round(size / SNAP_STEP), GRID_COLOR, GRID_COLOR]} rotation={[Math.PI / 2, 0, 0]} renderOrder={-1} material-depthWrite={false} />
+    <gridHelper args={[size, Math.round(size / SNAP_STEP), GRID_COLOR, GRID_COLOR]} position={position} rotation={GRID_ROTATIONS[axis]} renderOrder={-1} material-depthWrite={false} />
   );
 }
+
+// The 2D cut's view: the camera looks straight at the cut with a field of
+// view of FLAT_FOV degrees -- narrow enough that the perspective is
+// practically flat -- from far enough back that FLAT_HEIGHT world units
+// (the box, with a margin) fit on screen. Getting there and back takes
+// CUT_VIEW_DURATION seconds (see CameraAnimator's moveTo).
+const FLAT_FOV = 3;
+const FLAT_HEIGHT = 12.5;
+const CUT_VIEW_DURATION = 1.0;
 
 // charges: everything placed, [{ id, kind, ... }] (see chargeField.js).
 //   They're also the field's sources, as they are, and since App.jsx only
@@ -64,9 +79,11 @@ function Floor() {
 // cut: the 2D cut, where it is (cutPlanes.js's placeCut), or null.
 //   Selected as 'cut', it has a handle that slides it along its axis
 //   (onMoveCut(offset)), when the charges allow that.
+// view2D: showing the cut in 2D: the camera turns to face it and flattens
+//   its perspective, and only the cut's field lines (or arrows) are drawn.
 // showGrid / showAxes / showField / fieldStyle ('lines' or 'arrows') /
 //   fieldDensity: the Display Options panel's settings
-export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, cut, onMoveCut, showGrid, showAxes, showField, fieldStyle, fieldDensity }) {
+export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, cut, onMoveCut, view2D, showGrid, showAxes, showField, fieldStyle, fieldDensity }) {
   const wrapperRef = useRef();
   const controlsRef = useRef();
   const cameraAnimatorRef = useRef();
@@ -85,13 +102,51 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   const readoutPanelRef = useRef(null);
 
 
+  // The camera facing the cut in 2D: from whichever side of it the camera
+  // is on, turned from its current orientation by the smallest rotation
+  // (as the axis gizmo turns it), centered on the middle of the cut.
+  const flatFraming = (from) => {
+    const camera = controlsRef.current.object;
+    const side = camera.position.getComponent(cut.axis) >= cut.offset ? 1 : -1;
+    const direction = [0, 1, 2].map((k) => (k === cut.axis ? side : 0));
+    const target = new THREE.Vector3(...[0, 1, 2].map((k) => (k === cut.axis ? cut.offset : 0)));
+    return { quaternion: axisViewOrientation(from.quaternion, direction).quaternion, target, fov: FLAT_FOV, height: FLAT_HEIGHT };
+  };
+
+  // Turning view2D on swings the camera round to face the cut, flattening
+  // the perspective on the way; turning it off swings it back to where it
+  // was in 3D (saved3DRef). Re-run if the cut moves while in 2D, to keep it
+  // centered.
+  const saved3DRef = useRef(null);
+  const cutAxis = cut?.axis;
+  const cutOffset = cut?.offset;
+  useEffect(() => {
+    const animator = cameraAnimatorRef.current;
+    if (!animator || !controlsRef.current) return;
+    if (view2D && cutAxis !== undefined) {
+      const now = animator.state();
+      if (!saved3DRef.current) saved3DRef.current = now;
+      animator.moveTo(flatFraming(now), CUT_VIEW_DURATION);
+    } else if (!view2D && saved3DRef.current) {
+      animator.moveTo(saved3DRef.current, CUT_VIEW_DURATION);
+      saved3DRef.current = null;
+    }
+    // flatFraming reads the current cut, whose position is in the deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view2D, cutAxis, cutOffset]);
+
   // Can't use controls.reset(): drei captures the controls' saved state
   // before applying the `target` prop, so reset() would aim at the wrong
   // point (same issue the Bloch sphere sim works around). Set both
-  // explicitly instead.
+  // explicitly instead. In 2D, Reset View re-centers the cut instead.
   const resetView = () => {
     const controls = controlsRef.current;
     if (!controls) return;
+    if (view2D && cut) {
+      const animator = cameraAnimatorRef.current;
+      animator.moveTo(flatFraming(animator.state()), 0.35);
+      return;
+    }
     cameraAnimatorRef.current?.cancel(); // a gizmo move in progress would otherwise carry on from here
     controls.object.up.set(0, 0, 1); // a gizmo move may have left another axis up
     controls.object.position.set(...INITIAL_CAMERA_POSITION);
@@ -451,13 +506,14 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
         <ambientLight intensity={1.2} />
         <CameraLight />
 
-        {showGrid && <Floor />}
-        {showAxes && <Axes />}
+        {showGrid && (view2D && cut ? <Floor axis={cut.axis} offset={cut.offset} /> : <Floor />)}
+        {showAxes && <Axes hiddenAxis={view2D && cut ? cut.axis : null} />}
         {/* With a valid 2D cut, its lines are painted on it, over the 3D
-            lines, which fade. */}
-        {showField && fieldStyle === 'lines' && <FieldLines sources={charges} density={fieldDensity} faded={!!cut?.valid} />}
+            lines, which fade -- and in 2D, they're all there is. Arrows
+            are the 3D grid's, or in 2D a grid in the cut. */}
+        {showField && fieldStyle === 'lines' && !view2D && <FieldLines sources={charges} density={fieldDensity} faded={!!cut?.valid} />}
         {showField && fieldStyle === 'lines' && cut?.valid && <FieldLines sources={charges} density={fieldDensity} cut={cut} />}
-        {showField && fieldStyle === 'arrows' && <FieldArrows sources={charges} density={fieldDensity} />}
+        {showField && fieldStyle === 'arrows' && <FieldArrows sources={charges} density={fieldDensity} cut={view2D ? cut : null} />}
 
         {pointCharges.map((charge) => (
           <ChargeMarker
@@ -474,7 +530,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
           <ChargedObject key={obj.id} charge={obj} selected={obj.id === selectedId} />
         ))}
 
-        {cut && <CutPlane cut={cut} charges={charges} selected={selectedId === 'cut'} />}
+        {cut && !view2D && <CutPlane cut={cut} charges={charges} selected={selectedId === 'cut'} />}
 
         {selectedObject && <ObjectHandles charge={selectedObject} hoveredId={hoveredHandleId} activeId={handleDrag?.id} />}
 
@@ -485,7 +541,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
         {/* makeDefault registers these as the scene's controls. Left-drag
             rotates, scroll/pinch zooms, and right-drag (or two-finger drag)
             pans. */}
-        <OrbitControls ref={controlsRef} target={INITIAL_CAMERA_TARGET} makeDefault />
+        <OrbitControls ref={controlsRef} target={INITIAL_CAMERA_TARGET} enableRotate={!view2D} makeDefault />
 
         <CoordinateReadoutTracker panelRef={readoutPanelRef} position={readout?.position ?? null} />
 
@@ -494,9 +550,12 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
             swings the camera around to look along that axis (see
             AxisGizmo.jsx and cameraViews.js). */}
         <CameraAnimator ref={cameraAnimatorRef} controlsRef={controlsRef} />
-        <GizmoHelper alignment="bottom-left" margin={VIEW_CONTROLS_GIZMO_MARGIN}>
-          <AxisGizmo onAxisClick={(axis) => cameraAnimatorRef.current?.viewAlong(axis)} />
-        </GizmoHelper>
+        {/* In 2D, a 3D inset (App.jsx) takes the gizmo's place. */}
+        {!view2D && (
+          <GizmoHelper alignment="bottom-left" margin={VIEW_CONTROLS_GIZMO_MARGIN}>
+            <AxisGizmo onAxisClick={(axis) => cameraAnimatorRef.current?.viewAlong(axis)} />
+          </GizmoHelper>
+        )}
       </Canvas>
 
       {readout && <CoordinateReadoutPanel panelRef={readoutPanelRef} position={readout.position} label={readout.label} value={readout.value} />}

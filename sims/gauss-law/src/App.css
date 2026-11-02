@@ -505,3 +505,24 @@ input[type="range"]::-moz-range-track {
   color: #aaa;
   cursor: default;
 }
+
+/* In the 2D cut's view, a small 3D picture of where the cut is, in the
+   axis gizmo's place above the view buttons (CutInset.jsx); clicking it
+   goes back to 3D. */
+.cut-inset {
+  display: block;
+  width: 108px;
+  height: 108px;
+  margin-bottom: 4px;
+  padding: 0;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fbfbfc;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.cut-inset:hover {
+  border-color: #3498db;
+}
