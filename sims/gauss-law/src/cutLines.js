@@ -98,12 +98,13 @@ export function cutObjectSeeds(obj, cut, density, halfExtent) {
   // it at right angles. A solid's seeds are at the radius enclosing a
   // fraction u of its charge: (r / R)^3 = u for a ball, (r / R)^2 = u for
   // a cylinder's cross-section.
-  const radial = (count, startRadius, solidPower) => {
+  // A thin rod's lines are drawn from its axis (see objectLines.js).
+  const radial = (count, startRadius, solidPower, fromCenter = false) => {
     const { directions, thresholds } = circleDirections(count, axis);
     directions.forEach((d, i) => {
       const r = solidPower ? obj.radius * thresholds[i] ** (1 / solidPower) : startRadius;
       const point = center.map((x, k) => x + r * d[k]);
-      if (inBox(point)) seeds.push({ point, normal: solidPower ? null : d, u: thresholds[i] });
+      if (inBox(point)) seeds.push({ point, normal: solidPower ? null : d, u: thresholds[i], ...(fromCenter ? { origin: center } : {}) });
     });
   };
   if (obj.kind === 'sphere') {
@@ -115,7 +116,7 @@ export function cutObjectSeeds(obj, cut, density, halfExtent) {
     // symmetry.
     const lambda = Math.abs(obj.lambda) / TICK;
     const count = 4 * Math.max(1, Math.round((2 * perUnit * REFERENCE_DISTANCE * lambda) / 4));
-    if (obj.form === 'line') radial(count, LINE_ROD_START, 0);
+    if (obj.form === 'line') radial(count, LINE_ROD_START, 0, true);
     else radial(count, obj.radius, obj.form === 'solid' ? 2 : 0);
     return seeds;
   }
@@ -133,8 +134,8 @@ export function cutObjectSeeds(obj, cut, density, halfExtent) {
       add(base, i >= 0 ? i : -i - 1);
     }
   };
-  const push = (point, normal, u) => {
-    if (inBox(point)) seeds.push({ point, normal, u });
+  const push = (point, normal, u, origin) => {
+    if (inBox(point)) seeds.push({ point, normal, u, ...(origin ? { origin } : {}) });
   };
   const goldenU = (fold) => ((fold + 0.5) * GOLDEN) % 1;
   const plasticU = (fold) => ((fold + 0.5) * PLASTIC) % 1;
@@ -150,7 +151,8 @@ export function cutObjectSeeds(obj, cut, density, halfExtent) {
         const n = [0, 0, 0];
         n[side] = s;
         if (obj.form === 'solid') push(base.map((x, k) => x + s * obj.radius * Math.sqrt(plasticU(fold)) * n[k]), null, goldenU(fold));
-        else push(base.map((x, k) => x + (obj.form === 'line' ? LINE_ROD_START : obj.radius) * n[k]), n, goldenU(fold));
+        else if (obj.form === 'line') push(base.map((x, k) => x + LINE_ROD_START * n[k]), n, goldenU(fold), base);
+        else push(base.map((x, k) => x + obj.radius * n[k]), n, goldenU(fold));
       }
     });
     return seeds;

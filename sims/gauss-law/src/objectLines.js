@@ -54,12 +54,14 @@ function chargeAmount(obj) {
 // The seeds of a sphere, rod or plane: [{ point, normal, u }]. `normal` is
 // the surface's outward unit normal at a surface seed (where lines can
 // leave from either side), or null at a volume seed (where one line leaves
-// along the field). Seeds outside the box are left out.
+// along the field). A thin rod's seeds also have an `origin`, the point on
+// its axis where their lines are drawn from. Seeds outside the box are
+// left out.
 export function objectSeeds(obj, linesPerUnitCharge, halfExtent) {
   const seeds = [];
   const inBox = (p) => p.every((v) => Math.abs(v) <= halfExtent);
-  const add = (point, normal, u) => {
-    if (inBox(point)) seeds.push({ point, normal, u });
+  const add = (point, normal, u, origin) => {
+    if (inBox(point)) seeds.push({ point, normal, u, ...(origin ? { origin } : {}) });
   };
   const c = obj.position;
 
@@ -109,7 +111,8 @@ export function objectSeeds(obj, linesPerUnitCharge, halfExtent) {
           }
           const point = c.map((x, k) => x + r * radial[k]);
           point[obj.axis] = along;
-          add(point, normal, r2(ring, group));
+          const origin = obj.form === 'line' ? c.map((x, k) => (k === obj.axis ? along : x)) : null;
+          add(point, normal, r2(ring, group), origin);
         }
       }
     }

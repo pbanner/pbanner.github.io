@@ -246,6 +246,11 @@ function traceLine(start, startIndex, sources, sign, { halfExtent, chargeRadius,
     const direction = [(next[0] - p[0]) / h, (next[1] - p[1]) / h, (next[2] - p[2]) / h];
     if (previousDirection && dot(direction, previousDirection) < 0) break;
     previousDirection = direction;
+    // A step that leaves the box is cut short at the box's face first, so
+    // a line ending inside an object on the way out still ends in the box.
+    const leaving = !inside(next, halfExtent);
+    if (leaving) next = clipToCube(p, next, halfExtent);
+    const stepLength = leaving ? Math.hypot(...sub(next, p)) : h;
     for (const { index, geometry } of sinks) {
       if (geometry.line) {
         // A thin rod: lines end on its axis, like on a point charge.
@@ -268,15 +273,15 @@ function traceLine(start, startIndex, sources, sign, { halfExtent, chargeRadius,
         }
       } else if (geometry.volume.inside(next)) {
         const strength = Math.hypot(...fieldAt(next, sources));
-        survival *= Math.exp((-4 * Math.PI * geometry.volume.density * h) / strength);
+        survival *= Math.exp((-4 * Math.PI * geometry.volume.density * stepLength) / strength);
         if (!(survival >= u)) {
           points.push(next);
           return { points, endsAt: index };
         }
       }
     }
-    if (!inside(next, halfExtent)) {
-      points.push(clipToCube(p, next, halfExtent));
+    if (leaving) {
+      points.push(next);
       return { points, endsAt: null };
     }
     points.push(next);
@@ -462,7 +467,10 @@ export function computeFieldLines(sources, { density, halfExtent, chargeRadius, 
         if (!inside(start, halfExtent)) continue;
         const traced = traceLine(start, -1, sources, sign, options, sinks[sign], seed.u);
         if (traced.points.length < 2) continue;
-        if (seed.normal) traced.points.unshift(seed.point); // start exactly on the surface
+        // Start exactly on the surface -- or, for a thin rod, on its axis,
+        // as a point charge's lines start at its center (the rod hides
+        // that first stretch).
+        if (seed.normal) traced.points.unshift(seed.origin ?? seed.point);
         keep(traced);
       }
     }
