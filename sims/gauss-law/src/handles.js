@@ -15,6 +15,10 @@
 //               slides the plane along its normal.
 //   'thickness' (shape 'dot') on a slab's face: drags the face out or in,
 //               the other face following, so the slab stays centered.
+// The 2D cut plane, passed as { kind: 'cut', axis, offset, movable } (see
+// cutPlanes.js), has a 'position' handle too, which slides it along its
+// axis -- `disabled` when the charges pin the cut where it is (they allow
+// it at only one position).
 // `direction` is the line the handle moves along (for the 'arrow' and
 // 'dot' shapes) or, for 'move', the normal of the plane it moves in.
 // Where they are depends on the camera (the radius and thickness handles
@@ -61,6 +65,11 @@ export function objectHandles(obj, camera) {
       handles.push({ id: 'radius', shape: 'dot', position: add(c, r, obj.radius), direction: r });
     }
     return handles;
+  }
+  if (obj.kind === 'cut') {
+    const position = [0, 0, 0];
+    position[obj.axis] = obj.offset;
+    return [{ id: 'position', shape: 'arrow', position, direction: unitAxis(obj.axis), disabled: !obj.movable }];
   }
   if (obj.kind === 'plane') {
     const n = unitAxis(obj.axis);

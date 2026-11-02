@@ -1,5 +1,6 @@
 // The properties panel in the upper-right corner: the settings of whatever
-// is selected, shown only while something is. Styled like the Display
+// is selected -- a charge (PropertiesPanel) or the 2D cut (CutPanel) --
+// shown only while something is. Styled like the Display
 // Options panel (.overlay-controls in App.css). Purely presentational: the
 // selection and the charges live in App.jsx.
 //
@@ -36,8 +37,8 @@ function formatTicks(ticks) {
 
 // A number box. While it's being typed in, it shows the draft text; Enter
 // or leaving the box commits it (clamped to [min, max]), and text that
-// isn't a number puts the old value back.
-function NumberField({ label, ticks, min, max, onCommit }) {
+// isn't a number puts the old value back. `disabled` grays it out.
+function NumberField({ label, ticks, min, max, onCommit, disabled = false }) {
   const [draft, setDraft] = useState(null);
   const commit = () => {
     if (draft === null) return;
@@ -52,6 +53,7 @@ function NumberField({ label, ticks, min, max, onCommit }) {
         type="text"
         inputMode="decimal"
         value={draft ?? formatTicks(ticks)}
+        disabled={disabled}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
@@ -62,12 +64,13 @@ function NumberField({ label, ticks, min, max, onCommit }) {
   );
 }
 
-// A choice among a few options, as a row of joined toggle buttons.
-function Segmented({ options, value, onChange }) {
+// A choice among a few options, as a row of joined toggle buttons;
+// isDisabled(option) grays out the options that can't be chosen.
+function Segmented({ options, value, onChange, isDisabled = () => false }) {
   return (
     <div className="segmented">
       {options.map(([v, label]) => (
-        <button type="button" key={v} className={v === value ? 'active' : ''} onClick={() => onChange(v)}>
+        <button type="button" key={v} className={v === value ? 'active' : ''} disabled={isDisabled(v)} onClick={() => onChange(v)}>
           {label}
         </button>
       ))}
@@ -200,6 +203,58 @@ export default function PropertiesPanel({ charge, onChange, onDelete, onClose })
 
       <button type="button" className="control-button panel-delete-button" onClick={onDelete}>
         Delete
+      </button>
+    </div>
+  );
+}
+
+// The 2D cut's panel. Its orientation can be switched among the ones the
+// charges allow (the others are grayed out), and its position typed in
+// only when the charges allow it anywhere along its axis; otherwise it's
+// shown, grayed out, at the one position they allow.
+//
+// cut: where the cut is (cutPlanes.js's placeCut). allowed: allowedCuts
+// for the current charges. onChangeAxis(axis) / onChangeOffset(world) /
+// onView() / onRemove() / onClose(): edits, viewing it in 2D, removing it,
+// and deselecting. onView is null while the 2D view isn't available.
+export function CutPanel({ cut, allowed, onChangeAxis, onChangeOffset, onView, onRemove, onClose }) {
+  return (
+    <div className="overlay-controls properties-panel">
+      <div className="panel-header">
+        <h3>2D Cut</h3>
+        <button type="button" className="panel-close-button" aria-label="Deselect" onClick={onClose}>
+          ×
+        </button>
+      </div>
+      <div className="property-row">
+        <span>Parallel to</span>
+        <Segmented
+          options={PLANE_NAMES.map((n, k) => [k, n])}
+          value={cut.axis}
+          onChange={onChangeAxis}
+          isDisabled={(axis) => allowed[axis].kind === 'none'}
+        />
+      </div>
+      <div className="property-row">
+        <span>At</span>
+        <div className="number-fields">
+          <NumberField
+            key={`cut-${cut.axis}`}
+            label={AXIS_NAMES[cut.axis]}
+            ticks={toTicks(cut.offset)}
+            min={-WORLD_LIMIT_TICKS}
+            max={WORLD_LIMIT_TICKS}
+            disabled={!cut.movable}
+            onCommit={(ticks) => onChangeOffset(toWorld(ticks))}
+          />
+        </div>
+      </div>
+      {!cut.valid && <p className="panel-warning">The charges aren&apos;t all in this cut: move them back into it, or choose another orientation.</p>}
+      <button type="button" className="control-button panel-wide-button" disabled={!onView || !cut.valid} onClick={onView}>
+        View 2D cut
+      </button>
+      <button type="button" className="control-button panel-delete-button" onClick={onRemove}>
+        Remove cut
       </button>
     </div>
   );

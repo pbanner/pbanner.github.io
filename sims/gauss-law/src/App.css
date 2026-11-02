@@ -469,3 +469,39 @@ input[type="range"]::-moz-range-track {
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
+
+.segmented button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.segmented button:disabled:hover {
+  background: #fff;
+}
+
+.number-field input:disabled {
+  background: #f0f1f3;
+  color: #888;
+}
+
+/* The 2D cut's panel: why its cut is invalid, in the cut's invalid
+   orange, and its View 2D cut button. */
+.panel-warning {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #b8650a;
+}
+
+.panel-wide-button {
+  margin-top: 4px;
+  padding: 6px 10px;
+}
+
+.control-button:disabled,
+.control-button:disabled:hover {
+  background: #fff;
+  border-color: #ddd;
+  color: #aaa;
+  cursor: default;
+}

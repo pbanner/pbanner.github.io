@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Viewer from './Viewer.jsx';
 import ChargeSidebar from './ChargeSidebar.jsx';
 import ChargeIcon from './ChargeIcon.jsx';
 import DisplayOptionsPanel from './DisplayOptionsPanel.jsx';
-import PropertiesPanel from './PropertiesPanel.jsx';
+import PropertiesPanel, { CutPanel } from './PropertiesPanel.jsx';
 import { getChargeType, makeCharge, normalizePosition } from './chargeTypes.js';
+import { allowedCuts, defaultCutAxis, placeCut } from './cutPlanes.js';
 import { CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
 import './App.css';
 
@@ -21,11 +22,39 @@ export default function App() {
   const [charges, setCharges] = useState([]);
   const nextChargeIdRef = useRef(1);
 
-  // The charge selected for editing in the properties panel, or null.
-  // Clicking a charge (or starting to drag a point charge) selects it; a
-  // newly placed one is selected right away, so the panel shows what can
-  // be changed.
+  // The charge selected for editing in the properties panel -- or 'cut',
+  // the 2D cut -- or null. Clicking a charge (or starting to drag a point
+  // charge) selects it; a newly placed one is selected right away, so the
+  // panel shows what can be changed.
   const [selectedId, setSelectedId] = useState(null);
+
+  // The 2D cut, if there is one: { axis, offset } (see cutPlanes.js). Its
+  // orientation is the user's choice; so is its offset, but only while the
+  // charges allow it anywhere along its axis -- otherwise it's wherever the
+  // charges pin it (placeCut), and the stored offset is kept in step with
+  // that, so the cut stays put if they stop pinning it.
+  const [cut, setCut] = useState(null);
+  const allowed = useMemo(() => allowedCuts(charges), [charges]);
+  const placedCut = cut && placeCut(cut, allowed);
+  if (cut && placedCut.offset !== cut.offset) setCut({ ...cut, offset: placedCut.offset });
+  // A new cut takes the first allowed orientation (cutPlanes.js), at the
+  // charges' one allowed position, or in the middle of the box.
+  const cutAt = (axis) => ({ axis, offset: allowed[axis].kind === 'one' ? allowed[axis].offset : 0 });
+  const insertCut = () => {
+    const axis = defaultCutAxis(allowed);
+    if (axis === null) return;
+    disarm();
+    setRemoveMode(false);
+    setCut(cutAt(axis));
+    setSelectedId('cut');
+  };
+  const removeCut = () => {
+    setCut(null);
+    setSelectedId((prev) => (prev === 'cut' ? null : prev));
+  };
+  const moveCut = (offset) => {
+    if (placedCut?.movable) setCut({ ...cut, offset });
+  };
 
   // The charge type armed for placement (from a sidebar click, or during a
   // drag out of the sidebar), or null.
@@ -70,6 +99,10 @@ export default function App() {
   };
   const moveCharge = (id, position) => updateCharge(id, { position });
   const deleteCharge = (id) => {
+    if (id === 'cut') {
+      removeCut();
+      return;
+    }
     setCharges((prev) => prev.filter((c) => c.id !== id));
     setSelectedId((prev) => (prev === id ? null : prev));
   };
@@ -210,6 +243,8 @@ export default function App() {
         onMoveCharge={moveCharge}
         onUpdateCharge={updateCharge}
         onDeleteCharge={deleteCharge}
+        cut={placedCut}
+        onMoveCut={moveCut}
         showGrid={displayOptions.showGrid}
         showAxes={displayOptions.showAxes}
         showField={displayOptions.showField}
@@ -237,6 +272,18 @@ export default function App() {
         </div>
       )}
 
+      {selectedId === 'cut' && placedCut && (
+        <CutPanel
+          cut={placedCut}
+          allowed={allowed}
+          onChangeAxis={(axis) => setCut(cutAt(axis))}
+          onChangeOffset={moveCut}
+          onView={null}
+          onRemove={removeCut}
+          onClose={() => setSelectedId(null)}
+        />
+      )}
+
       {selectedCharge && (
         <PropertiesPanel
           charge={selectedCharge}
@@ -249,6 +296,20 @@ export default function App() {
       {/* Lower-left corner: the view controls, under the axis gizmo (which
           Viewer draws in the canvas). */}
       <div className="view-controls">
+        {placedCut ? (
+          <button className="control-button view-button" disabled>
+            View 2D cut
+          </button>
+        ) : (
+          <button
+            className="control-button view-button"
+            disabled={defaultCutAxis(allowed) === null}
+            title={defaultCutAxis(allowed) === null ? "The charges aren't all in one plane parallel to xy, xz or yz" : undefined}
+            onClick={insertCut}
+          >
+            Insert 2D cut
+          </button>
+        )}
         <button className="control-button view-button" onClick={() => viewerRef.current?.resetView()}>
           Reset View
         </button>

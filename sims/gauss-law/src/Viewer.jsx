@@ -6,6 +6,7 @@ import { ChargeDrag } from './chargeDrag.js';
 import ChargeMarker from './ChargeMarker.jsx';
 import ChargedObject from './ChargedObject.jsx';
 import ObjectHandles from './ObjectHandles.jsx';
+import CutPlane from './CutPlane.jsx';
 import { objectHandles, LineDrag } from './handles.js';
 import Axes from './Axes.jsx';
 import { AxisGizmo, CameraAnimator } from './AxisGizmo.jsx';
@@ -59,10 +60,13 @@ function Floor() {
 // selectedId / onSelect(id or null): the charge selected for the properties
 //   panel. Pressing on a charge selects it; clicking empty space deselects.
 // onMoveCharge(id, position) / onUpdateCharge(id, changes) /
-//   onDeleteCharge(id): edits to placed charges
+//   onDeleteCharge(id): edits to placed charges ('cut' for the 2D cut)
+// cut: the 2D cut, where it is (cutPlanes.js's placeCut), or null.
+//   Selected as 'cut', it has a handle that slides it along its axis
+//   (onMoveCut(offset)), when the charges allow that.
 // showGrid / showAxes / showField / fieldStyle ('lines' or 'arrows') /
 //   fieldDensity: the Display Options panel's settings
-export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, showGrid, showAxes, showField, fieldStyle, fieldDensity }) {
+export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, cut, onMoveCut, showGrid, showAxes, showField, fieldStyle, fieldDensity }) {
   const wrapperRef = useRef();
   const controlsRef = useRef();
   const cameraAnimatorRef = useRef();
@@ -183,21 +187,33 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   const pointCharges = charges.filter((c) => c.kind === 'point');
   const objects = charges.filter((c) => c.kind !== 'point');
 
+  // The 2D cut, as something to pick and give handles to, like an object.
+  const cutObject = cut && { kind: 'cut', id: 'cut', ...cut };
+
   // What's under a viewport point, if anything: { charge, isPoint }. A
   // point charge wins over an object, even one in front of it -- a charge
-  // inside a shell would otherwise be impossible to reach.
+  // inside a shell would otherwise be impossible to reach -- and an object
+  // over the 2D cut, which crosses the whole box.
   const pickAt = (clientX, clientY) => {
     const ray = rayAt(clientX, clientY);
     if (!ray) return null;
     const point = pickCharge(ray, pointCharges, CHARGE_RADIUS);
     if (point) return { charge: point, isPoint: true };
     const obj = pickObject(ray, objects);
-    return obj ? { charge: obj, isPoint: false } : null;
+    if (obj) return { charge: obj, isPoint: false };
+    // The cut is picked like a sheet at its position.
+    const cutPosition = cut && [0, 1, 2].map((k) => (k === cut.axis ? cut.offset : 0));
+    if (cut && pickObject(ray, [{ kind: 'plane', form: 'sheet', axis: cut.axis, position: cutPosition }])) {
+      return { charge: cutObject, isPoint: false };
+    }
+    return null;
   };
 
-  // The selected sphere, rod or plane, whose handles (handles.js) are
-  // shown -- except while placing something or deleting.
-  const selectedObject = !armedTypeId && !removeMode ? objects.find((c) => c.id === selectedId) ?? null : null;
+  // The selected sphere, rod, plane or 2D cut, whose handles (handles.js)
+  // are shown -- except while placing something or deleting.
+  const selectedObject = armedTypeId || removeMode ? null
+    : selectedId === 'cut' ? cutObject
+    : objects.find((c) => c.id === selectedId) ?? null;
   // The handle under the pointer, and the one being dragged, if any: { id,
   // label, value, position } -- the readout shows label = value, floating
   // above the handle's position.
@@ -217,6 +233,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
     let best = null;
     let bestDist = HANDLE_HIT_PX;
     for (const h of objectHandles(selectedObject, camera)) {
+      if (h.disabled) continue;
       const ndc = new THREE.Vector3(...h.position).project(camera);
       const x = rect.left + ((ndc.x + 1) / 2) * rect.width;
       const y = rect.top + ((1 - ndc.y) / 2) * rect.height;
@@ -249,7 +266,11 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
     let apply;
     let label;
     let valueOf;
-    if (handle.id === 'lift') {
+    if (obj.kind === 'cut') {
+      drag = new LineDrag(handle.position, handle.direction, obj.offset);
+      apply = (v) => ({ offset: clampToWorld(v) });
+      [label, valueOf] = [['x', 'y', 'z'][axis], (o) => o.offset];
+    } else if (handle.id === 'lift') {
       drag = new LineDrag(handle.position, handle.direction, obj.position[2]);
       apply = (v) => ({ position: [obj.position[0], obj.position[1], clampToWorld(v)] });
       [label, valueOf] = ['z', (o) => o.position[2]];
@@ -278,7 +299,8 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
       if (!controls) return;
       const ray = rayFromClient(controls.object, wrapperRef.current.getBoundingClientRect(), ev.clientX, ev.clientY);
       const changes = apply(drag.update(ray, ev.altKey), ev.altKey);
-      onUpdateCharge(obj.id, changes);
+      if (obj.kind === 'cut') onMoveCut(changes.offset);
+      else onUpdateCharge(obj.id, changes);
       const moved = { ...obj, ...changes };
       const h = objectHandles(moved, controls.object).find((x) => x.id === handle.id);
       setHandleDrag({ id: handle.id, label, value: valueOf(moved), position: h.position });
@@ -448,6 +470,8 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
         {objects.map((obj) => (
           <ChargedObject key={obj.id} charge={obj} selected={obj.id === selectedId} />
         ))}
+
+        {cut && <CutPlane cut={cut} charges={charges} selected={selectedId === 'cut'} />}
 
         {selectedObject && <ObjectHandles charge={selectedObject} hoveredId={hoveredHandleId} activeId={handleDrag?.id} />}
 

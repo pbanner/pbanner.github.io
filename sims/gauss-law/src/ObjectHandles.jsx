@@ -11,41 +11,42 @@ import { SELECTION_COLOR } from './sceneConstants.js';
 // away they are: every frame, each is scaled in proportion to its distance
 // from the camera. Their positions are also updated every frame, since
 // some depend on which way the camera faces. The hovered or dragged
-// handle is drawn a little bigger.
+// handle is drawn a little bigger, and a disabled one (handles.js) gray.
 //
 // Sizes below are in "handle units", HANDLE_SCALE x the distance to the
 // camera in world units -- about 10 pixels at the default zoom.
 const HANDLE_SCALE = 0.011;
 const GROWN = 1.25;
+const DISABLED_COLOR = '#a3a9b1';
 const Y = new THREE.Vector3(0, 1, 0);
 const Z = new THREE.Vector3(0, 0, 1);
 
-function HandleMaterial() {
-  return <meshBasicMaterial color={SELECTION_COLOR} depthTest={false} transparent />;
+function HandleMaterial({ color }) {
+  return <meshBasicMaterial color={color} depthTest={false} transparent />;
 }
 
 // A ball: a radius or thickness handle.
-function Dot() {
+function Dot({ color }) {
   return (
     <mesh renderOrder={10}>
       <sphereGeometry args={[1, 20, 16]} />
-      <HandleMaterial />
+      <HandleMaterial color={color} />
     </mesh>
   );
 }
 
 // A double-headed arrow along its local y.
-function Arrow() {
+function Arrow({ color }) {
   return (
     <>
       <mesh renderOrder={10}>
         <cylinderGeometry args={[0.3, 0.3, 2.2, 12]} />
-        <HandleMaterial />
+        <HandleMaterial color={color} />
       </mesh>
       {[1, -1].map((s) => (
         <mesh key={s} renderOrder={10} position={[0, 1.6 * s, 0]} rotation={[s > 0 ? 0 : Math.PI, 0, 0]}>
           <coneGeometry args={[0.8, 1.1, 16]} />
-          <HandleMaterial />
+          <HandleMaterial color={color} />
         </mesh>
       ))}
     </>
@@ -54,19 +55,19 @@ function Arrow() {
 
 // A ball with four arrowheads around it in its local xy plane: moves
 // within that plane.
-function Move() {
+function Move({ color }) {
   return (
     <>
       <mesh renderOrder={10}>
         <sphereGeometry args={[0.7, 20, 16]} />
-        <HandleMaterial />
+        <HandleMaterial color={color} />
       </mesh>
       {[0, 1, 2, 3].map((i) => {
         const angle = (i * Math.PI) / 2;
         return (
           <mesh key={i} renderOrder={10} position={[1.6 * Math.cos(angle), 1.6 * Math.sin(angle), 0]} rotation={[0, 0, angle - Math.PI / 2]}>
             <coneGeometry args={[0.55, 0.9, 12]} />
-            <HandleMaterial />
+            <HandleMaterial color={color} />
           </mesh>
         );
       })}
@@ -76,8 +77,8 @@ function Move() {
 
 const SHAPES = { dot: Dot, arrow: Arrow, move: Move };
 
-// charge: the selected object. hoveredId / activeId: the id of the handle
-// under the pointer, and of the one being dragged.
+// charge: the selected object (or the 2D cut). hoveredId / activeId: the
+// id of the handle under the pointer, and of the one being dragged.
 export default function ObjectHandles({ charge, hoveredId, activeId }) {
   const camera = useThree((state) => state.camera);
   const groups = useRef({});
@@ -90,7 +91,7 @@ export default function ObjectHandles({ charge, hoveredId, activeId }) {
       g.position.set(...h.position);
       // An arrow points along its line; the move handle lies in its plane.
       g.quaternion.setFromUnitVectors(h.shape === 'move' ? Z : Y, direction.set(...h.direction));
-      const grown = h.id === hoveredId || h.id === activeId ? GROWN : 1;
+      const grown = !h.disabled && (h.id === hoveredId || h.id === activeId) ? GROWN : 1;
       g.scale.setScalar(cam.position.distanceTo(g.position) * HANDLE_SCALE * grown);
     }
   });
@@ -106,7 +107,7 @@ export default function ObjectHandles({ charge, hoveredId, activeId }) {
         position={h.position}
         scale={camera.position.distanceTo(new THREE.Vector3(...h.position)) * HANDLE_SCALE}
       >
-        <Shape />
+        <Shape color={h.disabled ? DISABLED_COLOR : SELECTION_COLOR} />
       </group>
     );
   });
