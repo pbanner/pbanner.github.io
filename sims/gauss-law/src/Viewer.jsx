@@ -13,7 +13,7 @@ import FieldLines from './FieldLines.jsx';
 import FieldArrows from './FieldArrows.jsx';
 import { CoordinateReadoutPanel, CoordinateReadoutTracker } from './CoordinateReadout.jsx';
 import { rayFromClient, pickCharge, pickObject, snapValue, clampToWorld, SNAP_STEP } from './geometry.js';
-import { WORLD_HALF_EXTENT, CHARGE_RADIUS, INITIAL_CAMERA_POSITION, INITIAL_CAMERA_TARGET, CAMERA_FOV, CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
+import { WORLD_HALF_EXTENT, CHARGE_RADIUS, INITIAL_CAMERA_POSITION, INITIAL_CAMERA_TARGET, CAMERA_FOV, CLICK_MOVE_THRESHOLD, VIEW_CONTROLS_GIZMO_MARGIN } from './sceneConstants.js';
 
 // A directional light that rides along with the camera, so whatever side of
 // the scene is facing the viewer is always the lit side -- same approach as
@@ -138,7 +138,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   const liftPlacement = () => placementRef.current?.liftOff() ?? false;
 
   // resetView is exposed too, for the Reset View button, which App.jsx
-  // renders alongside the Display Options panel.
+  // renders under the axis gizmo.
   useImperativeHandle(ref, () => ({ startPlacement, placementAt, liftPlacement, resetView }));
 
   // Moves a placed charge, following the same ChargeDrag rules as a
@@ -462,11 +462,12 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
 
         <CoordinateReadoutTracker panelRef={readoutPanelRef} position={readout?.position ?? null} />
 
-        {/* Orientation widget in the lower-left corner. Clicking one of its
-            axis labels swings the camera around to look along that axis
-            (see AxisGizmo.jsx and cameraViews.js). */}
+        {/* Orientation widget in the lower-left corner, above the view
+            controls' buttons (App.jsx). Clicking one of its axis labels
+            swings the camera around to look along that axis (see
+            AxisGizmo.jsx and cameraViews.js). */}
         <CameraAnimator ref={cameraAnimatorRef} controlsRef={controlsRef} />
-        <GizmoHelper alignment="bottom-left" margin={[70, 70]}>
+        <GizmoHelper alignment="bottom-left" margin={VIEW_CONTROLS_GIZMO_MARGIN}>
           <AxisGizmo onAxisClick={(axis) => cameraAnimatorRef.current?.viewAlong(axis)} />
         </GizmoHelper>
       </Canvas>

@@ -246,12 +246,16 @@ export default function App() {
         />
       )}
 
-      {/* Lower-right corner: Reset View stacked on top of the Display
-          Options panel. */}
-      <div className="lower-right-stack">
-        <button className="control-button reset-view-button" onClick={() => viewerRef.current?.resetView()}>
+      {/* Lower-left corner: the view controls, under the axis gizmo (which
+          Viewer draws in the canvas). */}
+      <div className="view-controls">
+        <button className="control-button view-button" onClick={() => viewerRef.current?.resetView()}>
           Reset View
         </button>
+      </div>
+
+      {/* Lower-right corner: the Display Options panel. */}
+      <div className="lower-right-stack">
         <DisplayOptionsPanel displayOptions={displayOptions} setDisplayOptions={setDisplayOptions} />
       </div>
 
