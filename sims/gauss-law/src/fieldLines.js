@@ -447,8 +447,8 @@ export function computeFieldLines(sources, { density, halfExtent, chargeRadius, 
   // which add up to 4 pi |sigma|. So the seed starts a line from the
   // outer side if its threshold u is below that side's share, a / (a +
   // b), and from the inner side if u is below b / (a + b). A lone shell
-  // or rod sends every line out; a lone sheet sends half each way, from
-  // the same points on both sides (those with u < 1/2).
+  // or rod sends every line out; a lone sheet sends half each way (see
+  // objectLines.js for how a sheet's seeds share that out).
   const startsAt = (seed, sign) => {
     if (!seed.normal) return [seed.point];
     const outer = add(seed.point, seed.normal, SURFACE_OFFSET);
@@ -456,9 +456,13 @@ export function computeFieldLines(sources, { density, halfExtent, chargeRadius, 
     const a = Math.max(0, sign * dot(fieldAt(outer, sources), seed.normal));
     const b = Math.max(0, -sign * dot(fieldAt(inner, sources), seed.normal));
     if (!(a + b > 0)) return [];
+    // A sheet's seeds come in two layers (objectLines.js), each with half
+    // its lines, so a seed's share of a side is twice the side's share of
+    // the flux, less one for the second layer.
+    const share = (fraction) => (seed.layer === undefined ? fraction : 2 * fraction - seed.layer);
     const starts = [];
-    if (seed.u < a / (a + b)) starts.push(outer);
-    if (seed.u < b / (a + b)) starts.push(inner);
+    if (seed.u < share(a / (a + b))) starts.push(outer);
+    if (seed.u < share(b / (a + b))) starts.push(inner);
     return starts;
   };
   const traceObject = (i, sign, keep) => {

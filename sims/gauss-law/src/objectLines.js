@@ -32,12 +32,16 @@ export const LINE_ROD_RADIUS = 0.06;
 const RING_SPACING_RADIUS = 1.5;
 
 // Thresholds for the seeds of rods and planes, from the "R2" sequence: for
-// whole numbers a and b, frac(0.5 + a A1 + b A2) fills 0..1 evenly however
-// many (a, b) pairs there are. A1 and A2 are 1/g and 1/g^2 for g the
-// "plastic number", the 2D analogue of the golden ratio.
+// whole numbers a and b, frac(R2_START + a A1 + b A2) fills 0..1 evenly
+// however many (a, b) pairs there are. A1 and A2 are 1/g and 1/g^2 for g
+// the "plastic number", the 2D analogue of the golden ratio. R2_START
+// isn't 1/2, so no threshold is exactly 1/2: a lone sheet sends exactly
+// half its flux each way, and a threshold equal to that fraction would be
+// decided by rounding errors.
 const A1 = 0.7548776662466927;
 const A2 = 0.5698402909980532;
-const r2 = (a, b) => (((0.5 + a * A1 + b * A2) % 1) + 1) % 1;
+const R2_START = 0.3;
+const r2 = (a, b) => (((R2_START + a * A1 + b * A2) % 1) + 1) % 1;
 
 // The two axes other than `axis`, in order.
 const across = (axis) => [0, 1, 2].filter((k) => k !== axis);
@@ -55,13 +59,13 @@ function chargeAmount(obj) {
 // the surface's outward unit normal at a surface seed (where lines can
 // leave from either side), or null at a volume seed (where one line leaves
 // along the field). A thin rod's seeds also have an `origin`, the point on
-// its axis where their lines are drawn from. Seeds outside the box are
-// left out.
+// its axis where their lines are drawn from, and a sheet's a `layer` (see
+// below). Seeds outside the box are left out.
 export function objectSeeds(obj, linesPerUnitCharge, halfExtent) {
   const seeds = [];
   const inBox = (p) => p.every((v) => Math.abs(v) <= halfExtent);
-  const add = (point, normal, u, origin) => {
-    if (inBox(point)) seeds.push({ point, normal, u, ...(origin ? { origin } : {}) });
+  const add = (point, normal, u, origin, layer) => {
+    if (inBox(point)) seeds.push({ point, normal, u, ...(origin ? { origin } : {}), ...(layer !== undefined ? { layer } : {}) });
   };
   const c = obj.position;
 
@@ -120,42 +124,61 @@ export function objectSeeds(obj, linesPerUnitCharge, halfExtent) {
   }
 
   if (obj.kind === 'plane') {
-    // A square lattice over the box's cross-section, centered on the
-    // middle of the box, with lines per unit area = perArea. A sheet's
-    // lines can leave from either side of each lattice point. A slab's
-    // seeds come in mirror-image pairs, d either side of its middle (d
-    // spread evenly over half its thickness), so the lattice has half as
-    // many points.
+    // Square lattices over the box's cross-section, centered on the middle
+    // of the box. perArea is the sheet's lines per unit area, counting both
+    // sides.
     const perArea = linesPerUnitCharge * chargeAmount(obj);
-    const slab = obj.form === 'slab';
-    const spacing = 1 / Math.sqrt(slab ? perArea / 2 : perArea);
     const [u, v] = across(obj.axis);
-    const count = Math.floor(halfExtent / spacing + 0.5); // lattice points per side of the middle
-    for (let i = -count; i < count; i++) {
-      for (let j = -count; j < count; j++) {
-        // The point's symmetric group: mirroring across the middle or
-        // swapping the two directions maps the lattice to itself.
-        const fi = i >= 0 ? i : -i - 1;
-        const fj = j >= 0 ? j : -j - 1;
-        const [g0, g1] = [Math.min(fi, fj), Math.max(fi, fj)];
-        const base = [0, 0, 0];
-        base[obj.axis] = c[obj.axis];
-        base[u] = (i + 0.5) * spacing;
-        base[v] = (j + 0.5) * spacing;
-        const normal = [0, 0, 0];
-        normal[obj.axis] = 1;
-        if (!slab) {
-          add(base, normal, r2(g0, g1));
-        } else {
-          const d = (obj.thickness / 2) * r2(g1, g0);
-          for (const side of [-1, 1]) {
-            const point = [...base];
-            point[obj.axis] += side * d;
-            add(point, null, r2(g0, g1));
-          }
+    const normal = [0, 0, 0];
+    normal[obj.axis] = 1;
+    // A point of a lattice with this spacing, and its symmetric group
+    // (mirroring across the middle or swapping the two directions maps
+    // the lattice to itself): `fold` takes a lattice index to the same
+    // index for every point in the group.
+    const lattice = (spacing, offset, fold, visit) => {
+      const count = Math.floor(halfExtent / spacing + 1);
+      for (let i = -count; i <= count; i++) {
+        for (let j = -count; j <= count; j++) {
+          const base = [0, 0, 0];
+          base[obj.axis] = c[obj.axis];
+          base[u] = (i + offset) * spacing;
+          base[v] = (j + offset) * spacing;
+          const [fi, fj] = [fold(i), fold(j)];
+          visit(base, Math.min(fi, fj), Math.max(fi, fj));
         }
       }
+    };
+    const cellCentered = (i) => (i >= 0 ? i : -i - 1);
+    const onPoints = (i) => Math.abs(i);
+    if (obj.form === 'slab') {
+      // A slab's seeds come in mirror-image pairs, d either side of its
+      // middle (d spread evenly over half its thickness), so the lattice
+      // has half as many points.
+      lattice(1 / Math.sqrt(perArea / 2), 0.5, cellCentered, (base, g0, g1) => {
+        const d = (obj.thickness / 2) * r2(g1, g0);
+        for (const side of [-1, 1]) {
+          const point = [...base];
+          point[obj.axis] += side * d;
+          add(point, null, r2(g0, g1));
+        }
+      });
+      return seeds;
     }
+    // A sheet: two lattices, each with half its lines per unit area, the
+    // second offset by half a spacing from the first (together, a square
+    // lattice at 45 degrees). Each point is a seed on both sides of the
+    // sheet, with a `layer`, 0 or 1, which fieldLines.js uses to decide
+    // which sides it starts lines on: where one side gets a share f of the
+    // sheet's flux, a layer-0 point starts a line on it if its threshold
+    // is below 2f, and a layer-1 point if it's below 2f - 1. Then each side
+    // gets (perArea / 2) x 2f = perArea x f lines per unit area, as it
+    // should, and they're spread as evenly as possible: a lone sheet
+    // (f = 1/2 each way) starts a line both ways from every layer-0 point
+    // -- a regular grid of lines through it -- and a capacitor's plate
+    // (f = 1 inward) one inward from every point of both.
+    const spacing = 1 / Math.sqrt(perArea / 2);
+    lattice(spacing, 0.5, cellCentered, (base, g0, g1) => add(base, normal, r2(g0, g1), null, 0));
+    lattice(spacing, 0, onPoints, (base, g0, g1) => add(base, normal, r2(g1, g0), null, 1));
     return seeds;
   }
   return seeds;

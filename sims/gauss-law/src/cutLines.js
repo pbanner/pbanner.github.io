@@ -124,18 +124,20 @@ export function cutObjectSeeds(obj, cut, density, halfExtent) {
   // Lines from points spaced evenly along a line in the cut -- a rod lying
   // in it, or where a charged plane crosses it -- symmetric about the
   // middle of the box. At each point, `add(base, fold)` adds that point's
-  // seeds; mirror-image points (fold) get the same thresholds.
-  const along = (dir, perLength, add) => {
+  // seeds; mirror-image points (fold) get the same thresholds. The points
+  // are midway between multiples of the spacing, or with `onMultiples`, at
+  // them (including the middle itself).
+  const along = (dir, perLength, add, onMultiples = false) => {
     const spacing = 1 / perLength;
-    const count = Math.floor(halfExtent / spacing + 0.5);
-    for (let i = -count; i < count; i++) {
+    const count = Math.floor(halfExtent / spacing + 1);
+    for (let i = -count; i <= count; i++) {
       const base = [...center];
-      base[dir] = (i + 0.5) * spacing;
-      add(base, i >= 0 ? i : -i - 1);
+      base[dir] = (i + (onMultiples ? 0 : 0.5)) * spacing;
+      if (inBox(base)) add(base, onMultiples ? Math.abs(i) : i >= 0 ? i : -i - 1);
     }
   };
-  const push = (point, normal, u, origin) => {
-    if (inBox(point)) seeds.push({ point, normal, u, ...(origin ? { origin } : {}) });
+  const push = (point, normal, u, origin, layer) => {
+    if (inBox(point)) seeds.push({ point, normal, u, ...(origin ? { origin } : {}), ...(layer !== undefined ? { layer } : {}) });
   };
   const goldenU = (fold) => ((fold + 0.5) * GOLDEN) % 1;
   const plasticU = (fold) => ((fold + 0.5) * PLASTIC) % 1;
@@ -160,10 +162,11 @@ export function cutObjectSeeds(obj, cut, density, halfExtent) {
 
   if (obj.kind === 'plane') {
     // Crossing the cut: N r0 sigma lines per unit length each side. A
-    // sheet's seeds can send a line out either side (as in 3D, depending
-    // on the field there), half each way when it's alone, so they're
-    // twice as dense; a slab's come in mirror-image pairs, a depth d either
-    // side of its middle.
+    // sheet's seeds are two rows (`layer` 0 and 1), each with a line per
+    // spacing each way, the second offset by half a spacing: as in 3D (see
+    // objectLines.js), a lone sheet starts a line both ways from every
+    // point of the first row and none from the second. A slab's come in
+    // mirror-image pairs, a depth d either side of its middle.
     const sigma = Math.abs(obj.sigma) / (TICK * TICK);
     const perSide = perUnit * REFERENCE_DISTANCE * sigma;
     const dir = [0, 1, 2].find((k) => k !== axis && k !== obj.axis);
@@ -171,7 +174,8 @@ export function cutObjectSeeds(obj, cut, density, halfExtent) {
     const normal = [0, 0, 0];
     normal[obj.axis] = 1;
     if (obj.form === 'sheet') {
-      along(dir, 2 * perSide, (base, fold) => push(base, normal, goldenU(fold)));
+      along(dir, perSide, (base, fold) => push(base, normal, goldenU(fold), null, 0));
+      along(dir, perSide, (base, fold) => push(base, normal, plasticU(fold), null, 1), true);
     } else {
       along(dir, perSide, (base, fold) => {
         const d = (obj.thickness / 2) * plasticU(fold);
