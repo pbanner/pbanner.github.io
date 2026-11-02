@@ -274,9 +274,11 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
     if (point) return { charge: point, isPoint: true };
     const obj = pickObject(ray, objects);
     if (obj) return { charge: obj, isPoint: false };
-    // The cut is picked like a sheet at its position.
+    // The cut is picked like a sheet at its position -- except in 2D,
+    // where it isn't drawn (it's the whole view), so a click on empty space
+    // deselects and the delete tool can't delete it.
     const cutPosition = cut && [0, 1, 2].map((k) => (k === cut.axis ? cut.offset : 0));
-    if (cut && pickObject(ray, [{ kind: 'plane', form: 'sheet', axis: cut.axis, position: cutPosition }])) {
+    if (cut && !view2D && pickObject(ray, [{ kind: 'plane', form: 'sheet', axis: cut.axis, position: cutPosition }])) {
       return { charge: cutObject, isPoint: false };
     }
     return null;
