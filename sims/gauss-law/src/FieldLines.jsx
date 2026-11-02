@@ -16,7 +16,7 @@ const ARROW_LENGTH = 0.17;
 // per arrow, each with its own position and orientation (its "instance
 // matrix"). That's one draw call however many arrows there are, rather
 // than one mesh each.
-function Arrowheads({ arrows }) {
+function Arrowheads({ arrows, opacity }) {
   const meshRef = useRef();
   useLayoutEffect(() => {
     const mesh = meshRef.current;
@@ -44,7 +44,7 @@ function Arrowheads({ arrows }) {
       <coneGeometry args={[ARROW_RADIUS, ARROW_LENGTH, 12]} />
       {/* Lit rather than flat, so a cone pointing at the viewer (its shaded
           sides) looks different from one pointing away (its flat base). */}
-      <meshStandardMaterial color={LINE_COLOR} roughness={0.6} />
+      <meshStandardMaterial color={LINE_COLOR} roughness={0.6} transparent={opacity < 1} opacity={opacity} />
     </instancedMesh>
   );
 }
@@ -52,12 +52,24 @@ function Arrowheads({ arrows }) {
 // The electric field lines of the placed charges (see fieldLines.js for
 // how they're traced), with arrowheads showing the field's direction.
 // sources: everything charged (see chargeField.js); recomputed only when
-// they or the density
-// setting change, which includes every step of dragging a charge.
-export default function FieldLines({ sources, density }) {
+// they or the density setting change, which includes every step of
+// dragging a charge.
+//
+// cut: a valid 2D cut ({ axis, offset }), to draw only the lines lying in
+// it (or null for all of them, in 3D). faded: drawn faint, as the 3D lines
+// are while a cut's lines are painted over them.
+const FADED_OPACITY = 0.22;
+export default function FieldLines({ sources, density, cut = null, faded = false }) {
+  const cutAxis = cut?.axis;
+  const cutOffset = cut?.offset;
   const lines = useMemo(
-    () => computeFieldLines(sources, { density, halfExtent: WORLD_HALF_EXTENT, chargeRadius: CHARGE_RADIUS }),
-    [sources, density],
+    () => computeFieldLines(sources, {
+      density,
+      halfExtent: WORLD_HALF_EXTENT,
+      chargeRadius: CHARGE_RADIUS,
+      cut: cutAxis === undefined ? null : { axis: cutAxis, offset: cutOffset },
+    }),
+    [sources, density, cutAxis, cutOffset],
   );
   // `segments` mode draws each consecutive pair of points as its own line
   // segment, so every line's consecutive points become pairs: all the
@@ -72,10 +84,11 @@ export default function FieldLines({ sources, density }) {
   const arrows = useMemo(() => arrowheadsAlong(lines, ARROW_SPACING), [lines]);
 
   if (segmentPoints.length === 0) return null;
+  const opacity = faded ? FADED_OPACITY : 1;
   return (
     <group>
-      <Line segments points={segmentPoints} color={LINE_COLOR} lineWidth={1.3} />
-      <Arrowheads arrows={arrows} />
+      <Line segments points={segmentPoints} color={LINE_COLOR} lineWidth={cut ? 1.6 : 1.3} transparent={faded} opacity={opacity} />
+      <Arrowheads arrows={arrows} opacity={opacity} />
     </group>
   );
 }

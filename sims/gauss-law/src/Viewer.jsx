@@ -453,7 +453,10 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
 
         {showGrid && <Floor />}
         {showAxes && <Axes />}
-        {showField && fieldStyle === 'lines' && <FieldLines sources={charges} density={fieldDensity} />}
+        {/* With a valid 2D cut, its lines are painted on it, over the 3D
+            lines, which fade. */}
+        {showField && fieldStyle === 'lines' && <FieldLines sources={charges} density={fieldDensity} faded={!!cut?.valid} />}
+        {showField && fieldStyle === 'lines' && cut?.valid && <FieldLines sources={charges} density={fieldDensity} cut={cut} />}
         {showField && fieldStyle === 'arrows' && <FieldArrows sources={charges} density={fieldDensity} />}
 
         {pointCharges.map((charge) => (

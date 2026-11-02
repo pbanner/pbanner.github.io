@@ -32,6 +32,7 @@ import { fieldAt, objectField } from './chargeField.js';
 import { chargeSign } from './chargeTypes.js';
 import { LINES_PER_UNIT_CHARGE, seedDirections, seedThresholds } from './seedDirections.js';
 import { objectSeeds, sinkGeometry, LINE_ROD_RADIUS } from './objectLines.js';
+import { circleDirections, cutObjectSeeds, pointLineCount } from './cutLines.js';
 
 // Step size bounds, in world units. Steps shrink near charges (where lines
 // curve sharply) down to MIN_STEP, and grow to MAX_STEP far from them.
@@ -204,7 +205,12 @@ const SURFACE_OFFSET = 1e-4;
 // thresholds are spread evenly over 0..1 (seedDirections.js's
 // seedThresholds; objectLines.js), so the fraction of lines still going
 // at any point is the fraction of flux still going there.
-function traceLine(start, startIndex, sources, sign, { halfExtent, chargeRadius }, sinks = [], u = 0.5) {
+//
+// With `cut` ({ axis, offset }, a valid 2D cut), the line is held exactly
+// in the cut: it starts in it, and the field there has no component across
+// it, so it would stay in it anyway, but each step is put back onto it so
+// rounding errors can't build up.
+function traceLine(start, startIndex, sources, sign, { halfExtent, chargeRadius, cut }, sinks = [], u = 0.5) {
   const points = [start];
   let p = start;
   let length = 0;
@@ -232,6 +238,7 @@ function traceLine(start, startIndex, sources, sign, { halfExtent, chargeRadius 
       if (!d) break; // the field vanished
       next = add(p, d, h);
     }
+    if (cut) next[cut.axis] = cut.offset;
     // A backstop for the null-point check above: stepping past a point
     // where the field vanishes, the direction comes back reversed, and the
     // line would jitter there until the length cap. A line can't otherwise
@@ -306,6 +313,9 @@ function fibonacciSphere(n) {
   return dirs;
 }
 const EXTRA_DIRECTIONS = fibonacciSphere(400);
+// The same for a point charge in a 2D cut: directions around a circle in
+// it.
+const EXTRA_CIRCLE_DIRECTIONS = (axis) => circleDirections(360, axis).directions;
 // How many extra directions a short negative charge tries before giving
 // up. When none of that many well-spread directions escapes, the charge's
 // field comes (almost) entirely from positive charges, and more tries
@@ -372,11 +382,22 @@ function farthestFrom(candidates, taken) {
 //      count to make up: the lines that arrive at it end throughout it in
 //      proportion to its charge (traceLine), and those it adds itself come
 //      from wherever no positive charge supplies them.
-export function computeFieldLines(sources, { density, halfExtent, chargeRadius }) {
+//
+// With `cut` ({ axis, offset }, a valid 2D cut: see cutPlanes.js), only
+// the lines lying in the cut are traced: starting in directions around a
+// circle in it rather than over a sphere, and from the objects' seeds in
+// it (cutLines.js).
+export function computeFieldLines(sources, { density, halfExtent, chargeRadius, cut = null }) {
   const linesPerUnitCharge = LINES_PER_UNIT_CHARGE[density - 1];
-  const countFor = (source) => linesPerUnitCharge * Math.abs(source.q);
-  const seedsFor = (source) => seedDirections(countFor(source));
-  const options = { halfExtent, chargeRadius };
+  // A point charge's starting directions and their thresholds.
+  const directionsFor = (source) => {
+    if (cut) return circleDirections(pointLineCount(source.q, density), cut.axis);
+    const count = linesPerUnitCharge * Math.abs(source.q);
+    return { directions: seedDirections(count), thresholds: seedThresholds(count) };
+  };
+  const seedsOf = (obj) => (cut ? cutObjectSeeds(obj, cut, density, halfExtent) : objectSeeds(obj, linesPerUnitCharge, halfExtent));
+  const extraDirections = cut ? EXTRA_CIRCLE_DIRECTIONS(cut.axis) : EXTRA_DIRECTIONS;
+  const options = { halfExtent, chargeRadius, cut };
   // The objects a line can end in: negatively charged ones for lines
   // traced along E, positive ones for lines traced against it.
   const sinksFor = (sign) => sources
@@ -436,7 +457,7 @@ export function computeFieldLines(sources, { density, halfExtent, chargeRadius }
     return starts;
   };
   const traceObject = (i, sign, keep) => {
-    for (const seed of objectSeeds(sources[i], linesPerUnitCharge, halfExtent)) {
+    for (const seed of seedsOf(sources[i])) {
       for (const start of startsAt(seed, sign)) {
         if (!inside(start, halfExtent)) continue;
         const traced = traceLine(start, -1, sources, sign, options, sinks[sign], seed.u);
@@ -449,8 +470,8 @@ export function computeFieldLines(sources, { density, halfExtent, chargeRadius }
 
   sources.forEach((source, i) => {
     if (source.kind !== 'point' || !(source.q > 0)) return;
-    const us = seedThresholds(countFor(source));
-    seedsFor(source).forEach((dir, k) => {
+    const { directions, thresholds: us } = directionsFor(source);
+    directions.forEach((dir, k) => {
       const traced = trace(i, dir, +1, us[k]);
       if (traced) addForwardLine(traced);
     });
@@ -461,11 +482,10 @@ export function computeFieldLines(sources, { density, halfExtent, chargeRadius }
 
   sources.forEach((source, i) => {
     if (source.kind !== 'point' || !(source.q < 0)) return;
-    const seeds = seedsFor(source);
+    const { directions: seeds, thresholds: us } = directionsFor(source);
     const needed = seeds.length - arrivals[i].length;
     if (needed <= 0) return;
     // Backward-traced lines that don't end on a positive charge.
-    const us = seedThresholds(seeds.length);
     const ownLine = (dir, k) => {
       const traced = trace(i, dir, -1, k === undefined ? 0.5 : us[k]);
       if (!traced || endsOnPositive(traced.endsAt)) return null;
@@ -484,7 +504,7 @@ export function computeFieldLines(sources, { density, halfExtent, chargeRadius }
       while (chosen.length < needed) take(candidates.splice(farthestFrom(candidates, taken), 1)[0]);
     }
     // Still short: try extra directions, farthest from everything first.
-    const extra = EXTRA_DIRECTIONS.map((dir) => ({ dir }));
+    const extra = extraDirections.map((dir) => ({ dir }));
     for (let tries = 0; chosen.length < needed && tries < MAX_EXTRA_TRIES; tries++) {
       const { dir } = extra.splice(farthestFrom(extra, taken), 1)[0];
       const c = ownLine(dir);
