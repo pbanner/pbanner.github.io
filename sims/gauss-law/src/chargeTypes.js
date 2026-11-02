@@ -105,3 +105,23 @@ export function normalizePosition(charge) {
   }
   return charge;
 }
+
+// Point charges can't be stacked: a point charge can't be closer than
+// MIN_SEPARATION (two charge radii) to another point charge or to a thin
+// rod's axis. Two charges in one spot draw as one marker, and their lines
+// run straight into each other (a +2 and a -1 together drew the lines of
+// a +2, not of the +1 they add up to). Whether `candidate` would be too
+// close to any of `others` (the other charges; the candidate itself left
+// out):
+const MIN_SEPARATION = 0.3;
+const distanceToRodAxis = (p, rod) => Math.hypot(...p.map((v, k) => (k === rod.axis ? 0 : v - rod.position[k])));
+const isLineRod = (c) => c.kind === 'rod' && c.form === 'line';
+export function crowds(candidate, others) {
+  const near = (a, b) => {
+    if (a.kind === 'point' && b.kind === 'point') return Math.hypot(...a.position.map((v, k) => v - b.position[k])) < MIN_SEPARATION;
+    if (a.kind === 'point' && isLineRod(b)) return distanceToRodAxis(a.position, b) < MIN_SEPARATION;
+    if (isLineRod(a) && b.kind === 'point') return distanceToRodAxis(b.position, a) < MIN_SEPARATION;
+    return false;
+  };
+  return others.some((o) => near(candidate, o));
+}

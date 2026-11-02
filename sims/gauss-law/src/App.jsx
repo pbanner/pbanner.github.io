@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import Viewer from './Viewer.jsx';
 import ChargeSidebar from './ChargeSidebar.jsx';
 import ChargeIcon from './ChargeIcon.jsx';
 import DisplayOptionsPanel from './DisplayOptionsPanel.jsx';
 import PropertiesPanel, { CutPanel } from './PropertiesPanel.jsx';
 import CutInset from './CutInset.jsx';
-import { getChargeType, makeCharge, normalizePosition } from './chargeTypes.js';
+import { getChargeType, makeCharge, normalizePosition, crowds } from './chargeTypes.js';
 import { allowedCuts, defaultCutAxis, placeCut, keepInCut } from './cutPlanes.js';
 import { CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
 import './App.css';
@@ -109,16 +109,27 @@ export default function App() {
   // plane is perpendicular to it, and edits can't move anything out of it.
   const inCut = view2D && placedCut ? placedCut : null;
   const makeNew = (typeId, point) => makeCharge(typeId, point, inCut ? (c) => keepInCut(c, inCut, true) : undefined);
+  // Where a new charge can't go: on top of a point charge or a thin rod
+  // (crowds, in chargeTypes.js). Treated like a point off the grid -- the
+  // ghost isn't drawn there, and dropping there places nothing.
+  const placeable = (typeId, point) => point && !crowds(makeNew(typeId, point), charges);
   const addCharge = (typeId, position) => {
+    if (!placeable(typeId, position)) return;
     const id = nextChargeIdRef.current++;
     setCharges((prev) => [...prev, { id, ...makeNew(typeId, position) }]);
     setSelectedId(id);
   };
+  // Every edit -- dragging, a handle, the properties panel -- goes through
+  // here. One that would stack it on another charge is ignored, so a
+  // dragged charge stops at the last free spot, and a typed position that
+  // would stack it springs back.
   const updateCharge = (id, changes) => {
     setCharges((prev) => prev.map((c) => {
       if (c.id !== id) return c;
-      const next = inCut ? keepInCut({ ...c, ...changes }, inCut) : { ...c, ...changes };
-      return next ? normalizePosition(next) : c;
+      const changed = inCut ? keepInCut({ ...c, ...changes }, inCut) : { ...c, ...changes };
+      if (!changed) return c;
+      const next = normalizePosition(changed);
+      return crowds(next, prev.filter((o) => o.id !== id)) ? c : next;
     }));
   };
   const moveCharge = (id, position) => updateCharge(id, { position });
@@ -138,11 +149,13 @@ export default function App() {
 
   // Recomputes both ghosts for a pointer position. `modifiers` is the
   // event's { shiftKey, altKey }: Shift raises or lowers a lifted ghost,
-  // Alt skips grid snapping.
-  const updateGhost = (clientX, clientY, modifiers) => {
+  // Alt skips grid snapping. `typeId` is the armed type (passed in when
+  // it's only just been armed, before the state has caught up).
+  const updateGhost = (clientX, clientY, modifiers, typeId = armedTypeId) => {
     lastPointerRef.current = { x: clientX, y: clientY };
     setGhostPos({ x: clientX, y: clientY });
-    setGhostPoint(viewerRef.current?.placementAt(clientX, clientY, modifiers) ?? null);
+    const point = viewerRef.current?.placementAt(clientX, clientY, modifiers) ?? null;
+    setGhostPoint(typeId && placeable(typeId, point) ? point : null);
   };
 
   // A pointerdown on a sidebar charge starts a gesture that isn't yet
@@ -165,7 +178,7 @@ export default function App() {
     if (!wasAlreadyArmed) {
       setArmedTypeId(typeId);
       viewerRef.current?.startPlacement();
-      updateGhost(e.clientX, e.clientY, e);
+      updateGhost(e.clientX, e.clientY, e, typeId);
     }
 
     const onMove = (ev) => {
@@ -211,14 +224,19 @@ export default function App() {
   // Shift, and not the key's auto-repeat) is what lifts the ghost off the
   // floor; Viewer's liftPlacement ignores it unless the ghost has a floor
   // point to lift from.
+  //
+  // The listeners call updateGhost through an effect event, so they always
+  // see the current charges (for where the ghost can't go) without being
+  // re-added every time anything changes.
+  const ghostAt = useEffectEvent((clientX, clientY, modifiers) => updateGhost(clientX, clientY, modifiers));
   useEffect(() => {
     if (!armedTypeId) return;
-    const onMove = (e) => updateGhost(e.clientX, e.clientY, e);
+    const onMove = (e) => ghostAt(e.clientX, e.clientY, e);
     const onKey = (e) => {
       const last = lastPointerRef.current;
       if (!last || (e.key !== 'Shift' && e.key !== 'Alt')) return;
       if (e.type === 'keydown' && e.key === 'Shift' && !e.repeat) viewerRef.current?.liftPlacement();
-      updateGhost(last.x, last.y, e);
+      ghostAt(last.x, last.y, e);
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('keydown', onKey);
