@@ -85,3 +85,21 @@ export function placeCut(cut, allowed) {
     movable: a.kind === 'any',
   };
 }
+
+// A charge as edited or placed while the cut is viewed in 2D, kept
+// mirror-symmetric through the cut, so the cut stays valid: a point
+// charge's or sphere's center, or the axis of a rod lying in the cut, is
+// put back in the cut; a new rod crosses the cut at right angles and a new
+// charged plane is perpendicular to it (`placing`). Returns null for a
+// charged plane parallel to the cut, which can't be kept symmetric (the
+// panel doesn't offer that).
+export function keepInCut(charge, cut, placing = false) {
+  let c = charge;
+  if (placing && c.kind === 'rod') c = { ...c, axis: cut.axis };
+  if (placing && c.kind === 'plane' && c.axis === cut.axis) c = { ...c, axis: (cut.axis + 1) % 3 };
+  if (c.kind === 'plane') return c.axis === cut.axis ? null : c;
+  if (c.kind === 'rod' && c.axis === cut.axis) return c;
+  const position = [...c.position];
+  position[cut.axis] = cut.offset;
+  return { ...c, position };
+}

@@ -39,8 +39,14 @@ export function rayFromClient(camera, rect, clientX, clientY) {
 // Where the ray crosses the horizontal plane at height z, or null if it
 // never does (it points away from that plane, or runs parallel to it).
 export function intersectHorizontalPlane(ray, z) {
-  const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -z);
-  return ray.intersectPlane(plane, new THREE.Vector3());
+  return intersectAxisPlane(ray, 2, z);
+}
+
+// The same for any plane perpendicular to an axis (0, 1 or 2): where the
+// ray crosses the plane where that coordinate is `value`.
+export function intersectAxisPlane(ray, axis, value) {
+  const normal = new THREE.Vector3().setComponent(axis, 1);
+  return ray.intersectPlane(new THREE.Plane(normal, -value), new THREE.Vector3());
 }
 
 // Where the ray crosses the vertical plane through `point` that faces the
@@ -62,10 +68,6 @@ export function intersectVerticalPlane(ray, camera, point) {
 
 export function snapValue(v, step = SNAP_STEP) {
   return Math.round(v / step) * step;
-}
-
-export function isWithinFloor(x, y) {
-  return Math.abs(x) <= WORLD_HALF_EXTENT && Math.abs(y) <= WORLD_HALF_EXTENT;
 }
 
 export function clampToWorld(v) {

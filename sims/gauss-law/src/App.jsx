@@ -6,7 +6,7 @@ import DisplayOptionsPanel from './DisplayOptionsPanel.jsx';
 import PropertiesPanel, { CutPanel } from './PropertiesPanel.jsx';
 import CutInset from './CutInset.jsx';
 import { getChargeType, makeCharge, normalizePosition } from './chargeTypes.js';
-import { allowedCuts, defaultCutAxis, placeCut } from './cutPlanes.js';
+import { allowedCuts, defaultCutAxis, placeCut, keepInCut } from './cutPlanes.js';
 import { CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
 import './App.css';
 
@@ -103,13 +103,23 @@ export default function App() {
 
   const viewerRef = useRef(null);
 
+  // While the cut is viewed in 2D, everything placed or edited is kept
+  // mirror-symmetric through it (keepInCut), so the cut stays valid: new
+  // charges land in the cut, a new rod crosses it at right angles, a new
+  // plane is perpendicular to it, and edits can't move anything out of it.
+  const inCut = view2D && placedCut ? placedCut : null;
+  const makeNew = (typeId, point) => makeCharge(typeId, point, inCut ? (c) => keepInCut(c, inCut, true) : undefined);
   const addCharge = (typeId, position) => {
     const id = nextChargeIdRef.current++;
-    setCharges((prev) => [...prev, { id, ...makeCharge(typeId, position) }]);
+    setCharges((prev) => [...prev, { id, ...makeNew(typeId, position) }]);
     setSelectedId(id);
   };
   const updateCharge = (id, changes) => {
-    setCharges((prev) => prev.map((c) => (c.id === id ? normalizePosition({ ...c, ...changes }) : c)));
+    setCharges((prev) => prev.map((c) => {
+      if (c.id !== id) return c;
+      const next = inCut ? keepInCut({ ...c, ...changes }, inCut) : { ...c, ...changes };
+      return next ? normalizePosition(next) : c;
+    }));
   };
   const moveCharge = (id, position) => updateCharge(id, { position });
   const deleteCharge = (id) => {
@@ -248,7 +258,7 @@ export default function App() {
       <Viewer
         ref={viewerRef}
         charges={charges}
-        ghost={armedTypeId && ghostPoint ? makeCharge(armedTypeId, ghostPoint) : null}
+        ghost={armedTypeId && ghostPoint ? makeNew(armedTypeId, ghostPoint) : null}
         armedTypeId={armedTypeId}
         onPlaceClick={handlePlaceClick}
         removeMode={removeMode}
@@ -302,6 +312,7 @@ export default function App() {
       {selectedCharge && (
         <PropertiesPanel
           charge={selectedCharge}
+          lockedAxis={inCut ? inCut.axis : null}
           onChange={(changes) => updateCharge(selectedCharge.id, changes)}
           onDelete={() => deleteCharge(selectedCharge.id)}
           onClose={() => setSelectedId(null)}

@@ -83,7 +83,9 @@ const SHAPES = { dot: Dot, arrow: Arrow, move: Move };
 
 // charge: the selected object (or the 2D cut). hoveredId / activeId: the
 // id of the handle under the pointer, and of the one being dragged.
-export default function ObjectHandles({ charge, hoveredId, activeId }) {
+// isHidden(handle): whether to leave a handle out (in the 2D cut's view,
+// one that would move something out of the cut).
+export default function ObjectHandles({ charge, hoveredId, activeId, isHidden = () => false }) {
   const camera = useThree((state) => state.camera);
   const groups = useRef({});
   const direction = new THREE.Vector3();
@@ -100,7 +102,7 @@ export default function ObjectHandles({ charge, hoveredId, activeId }) {
     }
   });
 
-  return objectHandles(charge, camera).map((h) => {
+  return objectHandles(charge, camera).filter((h) => !isHidden(h)).map((h) => {
     const Shape = SHAPES[h.shape];
     return (
       // Placed and sized here too, for the first frame (useFrame keeps

@@ -174,7 +174,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   // placementAt() on every pointer move (and on release, to place it), and
   // liftPlacement() when Shift is pressed.
   const startPlacement = () => {
-    placementRef.current = new ChargeDrag();
+    placementRef.current = new ChargeDrag(null, view2D ? cut : null);
   };
 
   // Where a new charge dropped at this viewport point would land, or null
@@ -202,9 +202,10 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
 
   // Moves a placed charge, following the same ChargeDrag rules as a
   // placement once it's been lifted: drag to slide it horizontally,
-  // Shift+drag to raise or lower it.
+  // Shift+drag to raise or lower it -- or in the 2D cut's view, within
+  // the cut.
   const startDrag = (charge, downEvent) => {
-    const drag = new ChargeDrag(charge.position);
+    const drag = new ChargeDrag(charge.position, view2D ? cut : null);
     dragRef.current = { id: charge.id, drag };
     setDraggingId(charge.id);
 
@@ -265,8 +266,12 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   };
 
   // The selected sphere, rod, plane or 2D cut, whose handles (handles.js)
-  // are shown -- except while placing something or deleting.
-  const selectedObject = armedTypeId || removeMode ? null
+  // are shown -- except while placing something or deleting, and in the
+  // 2D cut's view, any that would move something out of the cut (a handle
+  // along the cut's axis; the move handle drags within the cut). The cut
+  // itself isn't shown in 2D.
+  const handleHidden = (h) => view2D && cut && h.shape !== 'move' && Math.abs(h.direction[cut.axis]) > 1e-9;
+  const selectedObject = armedTypeId || removeMode || (view2D && selectedId === 'cut') ? null
     : selectedId === 'cut' ? cutObject
     : objects.find((c) => c.id === selectedId) ?? null;
   // The handle under the pointer, and the one being dragged, if any: { id,
@@ -288,7 +293,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
     let best = null;
     let bestDist = HANDLE_HIT_PX;
     for (const h of objectHandles(selectedObject, camera)) {
-      if (h.disabled) continue;
+      if (h.disabled || handleHidden(h)) continue;
       const ndc = new THREE.Vector3(...h.position).project(camera);
       const x = rect.left + ((ndc.x + 1) / 2) * rect.width;
       const y = rect.top + ((1 - ndc.y) / 2) * rect.height;
@@ -532,7 +537,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
 
         {cut && !view2D && <CutPlane cut={cut} charges={charges} selected={selectedId === 'cut'} />}
 
-        {selectedObject && <ObjectHandles charge={selectedObject} hoveredId={hoveredHandleId} activeId={handleDrag?.id} />}
+        {selectedObject && <ObjectHandles charge={selectedObject} hoveredId={hoveredHandleId} activeId={handleDrag?.id} isHidden={handleHidden} />}
 
         {ghost && (ghost.kind === 'point'
           ? <ChargeMarker q={ghost.q} position={ghost.position} ghost showGuides />

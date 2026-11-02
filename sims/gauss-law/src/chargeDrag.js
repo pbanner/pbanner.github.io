@@ -15,6 +15,12 @@
 //     under the pointer), and pressing or releasing Shift re-anchors at
 //     the charge's current position, so switching never makes it jump.
 //
+// Given a 2D cut ({ axis, offset }, while it's being viewed), everything
+// happens in the cut instead: a new placement lands where the ray meets
+// the cut rather than the floor, and dragging slides the charge within
+// the cut (the plane through it perpendicular to the cut's axis); Shift
+// does nothing, since moving out of the cut would leave it.
+//
 // In the free phase it keeps two positions. `rawPosition` is where the
 // pointer's motion puts the charge, before snapping and before clamping to
 // the world's bounds, so it can be past the edge when the pointer is.
@@ -24,11 +30,18 @@
 // the gap between them into the new anchor, and the charge would follow
 // the pointer at that offset from then on.
 import * as THREE from 'three';
-import { intersectHorizontalPlane, intersectVerticalPlane, snapValue, isWithinFloor, clampToWorld } from './geometry.js';
+import { intersectAxisPlane, intersectVerticalPlane, snapValue, clampToWorld } from './geometry.js';
+import { WORLD_HALF_EXTENT } from './sceneConstants.js';
 
 export class ChargeDrag {
   // startPos: a placed charge's position, or null for a new placement.
-  constructor(startPos = null) {
+  // cut: the 2D cut being viewed, or null.
+  constructor(startPos = null, cut = null) {
+    this.cut = cut;
+    // The plane a new placement lands on and drags slide parallel to:
+    // the floor, or the cut.
+    this.planeAxis = cut ? cut.axis : 2;
+    this.planeOffset = cut ? cut.offset : 0;
     this.phase = startPos ? 'free' : 'floor';
     this.position = startPos;
     this.rawPosition = startPos;
@@ -44,7 +57,7 @@ export class ChargeDrag {
   // press happened before there was anything to fix. Returns whether it
   // lifted off.
   liftOff() {
-    if (this.phase !== 'floor' || !this.position) return false;
+    if (this.cut || this.phase !== 'floor' || !this.position) return false;
     this.phase = 'free';
     this.rawPosition = this.position;
     this.mode = null;
@@ -65,15 +78,15 @@ export class ChargeDrag {
   update({ ray, camera, shiftKey, altKey }) {
     const snap = altKey ? (v) => v : snapValue;
 
+    const a = this.planeAxis;
     if (this.phase === 'floor') {
-      const hit = intersectHorizontalPlane(ray, 0);
-      const x = hit && snap(hit.x);
-      const y = hit && snap(hit.y);
-      this.position = hit && isWithinFloor(x, y) ? [x, y, 0] : null;
+      const hit = intersectAxisPlane(ray, a, this.planeOffset);
+      const p = hit && hit.toArray().map((v, k) => (k === a ? this.planeOffset : snap(v)));
+      this.position = p && p.every((v) => Math.abs(v) <= WORLD_HALF_EXTENT) ? p : null;
       return this.position;
     }
 
-    const mode = shiftKey ? 'vertical' : 'horizontal';
+    const mode = shiftKey && !this.cut ? 'vertical' : 'horizontal';
     if (mode !== this.mode) {
       this.mode = mode;
       this.modeStartPos = this.rawPosition;
@@ -82,7 +95,7 @@ export class ChargeDrag {
     const start = this.modeStartPos;
     const hit = mode === 'vertical'
       ? intersectVerticalPlane(ray, camera, new THREE.Vector3(...start))
-      : intersectHorizontalPlane(ray, start[2]);
+      : intersectAxisPlane(ray, a, start[a]);
     if (!hit) return this.position; // e.g. the ray runs parallel to the plane
     if (!this.anchorHit) {
       this.anchorHit = hit;
@@ -90,8 +103,10 @@ export class ChargeDrag {
     }
     const raw = [...start];
     if (mode === 'horizontal') {
-      raw[0] += hit.x - this.anchorHit.x;
-      raw[1] += hit.y - this.anchorHit.y;
+      // (Horizontal, or across the cut's two axes.)
+      for (let k = 0; k < 3; k++) {
+        if (k !== a) raw[k] += hit.getComponent(k) - this.anchorHit.getComponent(k);
+      }
     } else {
       raw[2] += hit.z - this.anchorHit.z;
     }

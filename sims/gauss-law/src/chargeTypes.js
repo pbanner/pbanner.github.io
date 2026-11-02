@@ -83,10 +83,11 @@ export function getChargeType(id) {
 // A new charge of the given sidebar type dropped at `point` (no id yet).
 // A rod goes through the point along its axis (a new rod is vertical, so
 // through the point on the floor); a plane goes through it perpendicular
-// to its axis.
-export function makeCharge(typeId, point) {
+// to its axis. `adjust` can change it first, e.g. turning it to fit a 2D
+// cut (cutPlanes.js's keepInCut), before its position is normalized.
+export function makeCharge(typeId, point, adjust = (c) => c) {
   const type = getChargeType(typeId);
-  return normalizePosition({ kind: type.kind, position: point, ...type.defaults });
+  return normalizePosition(adjust({ kind: type.kind, position: point, ...type.defaults }));
 }
 
 // A rod's or plane's position with the coordinates that don't matter set

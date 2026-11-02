@@ -101,7 +101,11 @@ function nextSteps(steps, delta) {
 // charge: the selected charge (see chargeTypes.js).
 // onChange(changes): new values for some of its fields.
 // onDelete() / onClose(): delete it, or deselect.
-export default function PropertiesPanel({ charge, onChange, onDelete, onClose }) {
+// lockedAxis: while the 2D cut is viewed, its axis (0, 1 or 2): the
+//   coordinate across the cut is grayed out, and so is turning a charged
+//   plane parallel to the cut, since either would take the charge out of
+//   the cut's mirror symmetry.
+export default function PropertiesPanel({ charge, onChange, onDelete, onClose, lockedAxis = null }) {
   const { kind } = charge;
   const steps = chargeSteps(charge);
   // A rod's or plane's charge is a density: lambda, charge per length, or
@@ -164,7 +168,7 @@ export default function PropertiesPanel({ charge, onChange, onDelete, onClose })
       {kind === 'plane' && (
         <div className="property-row">
           <span>Parallel to</span>
-          <Segmented options={PLANE_NAMES.map((n, k) => [k, n])} value={charge.axis} onChange={setPlaneAxis} />
+          <Segmented options={PLANE_NAMES.map((n, k) => [k, n])} value={charge.axis} onChange={setPlaneAxis} isDisabled={(axis) => axis === lockedAxis} />
         </div>
       )}
 
@@ -178,6 +182,7 @@ export default function PropertiesPanel({ charge, onChange, onDelete, onClose })
               ticks={toTicks(charge.position[k])}
               min={-WORLD_LIMIT_TICKS}
               max={WORLD_LIMIT_TICKS}
+              disabled={k === lockedAxis}
               onCommit={(ticks) => setCoord(k, ticks)}
             />
           ))}
