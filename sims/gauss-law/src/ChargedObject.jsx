@@ -1,5 +1,5 @@
 import { DoubleSide, FrontSide } from 'three';
-import { Line } from '@react-three/drei';
+import { Billboard, Line } from '@react-three/drei';
 import { chargeColor } from './chargeTypes.js';
 import { WORLD_HALF_EXTENT, SELECTION_COLOR } from './sceneConstants.js';
 
@@ -13,9 +13,10 @@ import { WORLD_HALF_EXTENT, SELECTION_COLOR } from './sceneConstants.js';
 // the box, a plane's edges -- to show its shape. Rods and planes are
 // infinite, so they're drawn across the whole box.
 //
-// `selected` draws the outlines (and a sphere's extra meridians) in the
-// selection blue; `ghost` draws the whole thing fainter, for the placement
-// preview.
+// `selected` draws the outlines in the selection blue -- except a
+// sphere's: its equator stays as it is, and it gets a blue outline around
+// its edge as it looks from the camera, wherever that is -- and `ghost`
+// draws the whole thing fainter, for the placement preview.
 
 const SURFACE_OPACITY = 0.14; // shells and sheets
 const VOLUME_OPACITY = 0.3; // solids and slabs
@@ -73,12 +74,15 @@ function Sphere({ charge, color, outlineColor, selected, ghost }) {
       <Surface color={color} solid={form === 'solid'} ghost={ghost}>
         <sphereGeometry args={[radius, 48, 32]} />
       </Surface>
-      <Outline points={circlePoints(radius, 2)} color={outlineColor} selected={selected} />
+      <Outline points={circlePoints(radius, 2)} color={color} />
+      {/* A circle around the sphere, turned to face the camera every frame
+          (Billboard): its edge, as it looks from wherever the camera is.
+          (Strictly, in perspective the visible edge is a little smaller --
+          by under 5% even close up -- so this sits just outside it.) */}
       {selected && (
-        <>
-          <Outline points={circlePoints(radius, 0)} color={outlineColor} selected />
-          <Outline points={circlePoints(radius, 1)} color={outlineColor} selected />
-        </>
+        <Billboard>
+          <Outline points={circlePoints(radius, 2)} color={outlineColor} selected />
+        </Billboard>
       )}
     </group>
   );
