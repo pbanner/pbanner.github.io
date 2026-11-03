@@ -31,6 +31,9 @@ const ARROW = { shaftRadius: 0.028, headRadius: 0.07, headLength: 0.2 };
 // drawn (it's 0, or as good as).
 const COMPONENT_ARROW = { shaftRadius: 0.014, headRadius: 0.042, headLength: 0.13 };
 const SHORTEST_COMPONENT = 0.02;
+// The charges' contributions' arrows, and the longest one can be.
+const CONTRIBUTION_ARROW = { shaftRadius: 0.018, headRadius: 0.05, headLength: 0.15 };
+const LONGEST_CONTRIBUTION = 1.5;
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -84,12 +87,25 @@ function arrowLength(magnitude) {
 // arrows from the center, in the axes' colors. They're drawn on the same
 // scale as the field's arrow -- each as long as the arrow times its share
 // of the field -- so, laid tip to tail, they'd make up the arrow exactly.
-export default function ProbeMarker({ position, label = null, reading, ghost = false, highlighted = false, selected = false, showGuides = false, showComponents = false }) {
+//
+// `contributions` ([{ id, field, color }], or null) are each charge's own
+// field at the probe, drawn as arrows from the center in its color (red
+// positive, blue negative) -- superposition: they add up to the field's
+// arrow, so they're drawn on its scale too. But they can be far stronger
+// than the field they add up to (two charges' fields nearly canceling),
+// so that scale is shrunk, if need be, for the longest of them to be
+// LONGEST_CONTRIBUTION long; the field's arrow is then shorter than usual,
+// and where the field vanishes altogether, there's no arrow at all, just
+// the contributions canceling.
+export default function ProbeMarker({ position, label = null, reading, ghost = false, highlighted = false, selected = false, showGuides = false, showComponents = false, contributions = null }) {
   const opacity = ghost ? 0.5 : 1;
   const field = reading?.field;
   const magnitude = field ? Math.hypot(...field) : 0;
   // How long a drawn arrow is per unit of field.
-  const scale = magnitude > 0 ? arrowLength(magnitude) / magnitude : 0;
+  const largest = contributions ? Math.max(0, ...contributions.map((c) => Math.hypot(...c.field))) : 0;
+  let scale = magnitude > 0 ? arrowLength(magnitude) / magnitude : Infinity;
+  if (largest > 0) scale = Math.min(scale, LONGEST_CONTRIBUTION / largest);
+  if (!Number.isFinite(scale)) scale = 0;
   const arrow = useMemo(() => (scale > 0 ? field.map((c) => c * scale) : null), [field, scale]);
   const components = useMemo(() => {
     if (!showComponents || !(scale > 0)) return [];
@@ -116,6 +132,10 @@ export default function ProbeMarker({ position, label = null, reading, ghost = f
         {components.map(({ k, vector }) => (
           <VectorArrow key={k} vector={vector} color={AXIS_COLORS[k]} opacity={opacity} {...COMPONENT_ARROW} />
         ))}
+        {scale > 0 && contributions?.map((c) => {
+          const vector = c.field.map((v) => v * scale);
+          return Math.hypot(...vector) >= SHORTEST_COMPONENT && <VectorArrow key={c.id} vector={vector} color={c.color} {...CONTRIBUTION_ARROW} />;
+        })}
         {selected && (
           <Billboard>
             <mesh>

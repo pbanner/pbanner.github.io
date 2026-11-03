@@ -6,6 +6,8 @@ import { ChargeDrag } from './chargeDrag.js';
 import ChargeMarker from './ChargeMarker.jsx';
 import ProbeMarker, { ProbeFieldLine } from './ProbeMarker.jsx';
 import { probeReading, probeInCut } from './probes.js';
+import { objectField } from './chargeField.js';
+import { chargeColor } from './chargeTypes.js';
 import ChargedObject from './ChargedObject.jsx';
 import ObjectHandles from './ObjectHandles.jsx';
 import CutPlane from './CutPlane.jsx';
@@ -575,6 +577,10 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
 
         {shownProbes.map((probe) => {
           const reading = probeReading(charges, probe.position);
+          // Each charge's own field there, where the field is defined.
+          const contributions = probe.showContributions && reading.field
+            ? charges.map((c) => ({ id: c.id, field: objectField(c, probe.position), color: chargeColor(c) }))
+            : null;
           return (
             <group key={probe.id}>
               <ProbeMarker
@@ -585,6 +591,7 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
                 selected={probe.id === selectedId}
                 showGuides={probe.id === draggingId}
                 showComponents={probe.showComponents}
+                contributions={contributions}
               />
               {/* Where the field has no single value, neither does its
                   line. */}

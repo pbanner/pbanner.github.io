@@ -267,6 +267,10 @@ export function ProbePanel({ probe, onChange, onDelete, onClose, lockedAxis = nu
         <input type="checkbox" checked={probe.showFieldLine} onChange={(e) => onChange({ showFieldLine: e.target.checked })} />
         Show field line through it
       </label>
+      <label>
+        <input type="checkbox" checked={probe.showContributions} onChange={(e) => onChange({ showContributions: e.target.checked })} />
+        Show each charge&apos;s contribution
+      </label>
       <button type="button" className="control-button panel-delete-button" onClick={onDelete}>
         Delete
       </button>
