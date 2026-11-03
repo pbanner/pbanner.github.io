@@ -6,6 +6,7 @@
 // Vite's Fast Refresh can still hot-swap this file.
 
 import { useState } from 'react';
+import NumberInput from './NumberInput';
 import { SG_OPTION_LABELS, SG_OPTION_BASES, RAD_TO_DEG, DEG_TO_RAD, roundDeg } from './axisOptions';
 import { PHI_LOCKED } from './queryParams';
 
@@ -27,8 +28,7 @@ export function AxisStepper({ label, value, advanced, onStep, onSetAdvanced, onS
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <label style={{ width: '12px' }}>θ</label>
-            <input
-              type="number"
+            <NumberInput
               min={0}
               max={180}
               step={1}
@@ -47,8 +47,7 @@ export function AxisStepper({ label, value, advanced, onStep, onSetAdvanced, onS
           {!PHI_LOCKED && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <label style={{ width: '12px' }}>ϕ</label>
-              <input
-                type="number"
+              <NumberInput
                 min={0}
                 max={360}
                 step={1}
@@ -118,14 +117,19 @@ export function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, ma
           style={{ flex: 1 }}
           disabled={disabled}
         />
-        <input
-          type="number"
+        <NumberInput
           min={min}
           max={max}
           step={step}
           value={displayValue}
           onFocus={() => { setTextValue(valueNum); setEditing(true); }}
-          onChange={(e) => setTextValue(e.target.value)}
+          // Typing is saved once it's finished (on leaving the box, or
+          // Enter); a step with an arrow or the up or down key -- a change
+          // with no inputType -- is saved at once.
+          onChange={(e) => {
+            setTextValue(e.target.value);
+            if (!e.nativeEvent.inputType) commitText(e.target.value);
+          }}
           onBlur={() => { setEditing(false); commitText(textValue); }}
           onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
           style={{ width: '70px', padding: '2px' }}
