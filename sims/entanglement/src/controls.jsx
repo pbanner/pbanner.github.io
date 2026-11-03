@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { SG_OPTION_LABELS, SG_OPTION_BASES, RAD_TO_DEG, DEG_TO_RAD, roundDeg } from './axisOptions';
 import { PHI_LOCKED } from './queryParams';
+import NumberInput from './NumberInput.jsx';
 
 // A plain <input type="number"> whose displayed text, while focused, is a
 // local buffer rather than always mirroring the committed numeric value --
@@ -24,18 +25,27 @@ import { PHI_LOCKED } from './queryParams';
 // (Source Controls' weights, the direction list's angles, an instruction
 // row's weight, an axis stepper's "Set by angles" boxes) can share it
 // instead of re-implementing the same editing/textValue pair each time.
+// It's a NumberInput, which draws its own up and down arrows (Safari on an
+// iPad or iPhone draws none). A step -- an arrow, or the up or down key --
+// is a change with no inputType, and is committed at once rather than on
+// blur: there's nothing half-typed about it.
 export function NumberField({ value, onCommit, parse = parseFloat, ...inputProps }) {
   const [editing, setEditing] = useState(false);
   const [textValue, setTextValue] = useState('');
   const displayValue = editing ? textValue : value;
 
   return (
-    <input
-      type="number"
+    <NumberInput
       {...inputProps}
       value={displayValue}
       onFocus={() => { setTextValue(String(value)); setEditing(true); }}
-      onChange={(e) => setTextValue(e.target.value)}
+      onChange={(e) => {
+        setTextValue(e.target.value);
+        if (!e.nativeEvent.inputType) {
+          const v = parse(e.target.value);
+          if (!Number.isNaN(v)) onCommit(v);
+        }
+      }}
       onBlur={() => {
         setEditing(false);
         const v = parse(textValue);

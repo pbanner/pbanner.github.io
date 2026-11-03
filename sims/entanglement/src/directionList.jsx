@@ -13,6 +13,13 @@ import { MAX_DIRECTIONS } from './directionListData';
 import { NumberField } from './controls';
 import { PHI_LOCKED } from './queryParams';
 
+// The editor's theta and phi boxes: room for three digits (0 to 360) beside
+// their up and down arrows. Kept that narrow -- with 1px of padding either
+// side, not 2px -- so the row being edited still fits beside its Delete
+// button; any wider and the whole Set Analyzer Direction panel would widen
+// while a direction is being edited.
+const DEGREE_BOX_STYLE = { width: '42px', padding: '2px 1px', fontSize: '12px' };
+
 // One direction, shown as plain "Direction N: [theta]°, [phi]°" text until
 // clicked, at which point the numbers become two small whole-degree inputs
 // in place of themselves -- each NumberField commits on blur (or Enter,
@@ -40,10 +47,15 @@ function DirectionLabel({ index, direction, onEdit, disabled }) {
     );
   }
 
+  // Pressing a box's up or down arrow keeps focus where it was (its
+  // mousedown does nothing): browsers differ over whether a clicked button
+  // takes focus -- Safari's doesn't -- and focus going nowhere would close
+  // this editor before the click could step the box.
   return (
     <span
       style={{ display: 'inline-flex', gap: '3px', alignItems: 'center', fontSize: '13px', whiteSpace: 'nowrap' }}
       onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setEditing(false); }}
+      onMouseDown={(e) => { if (e.target.closest('.number-input-arrows')) e.preventDefault(); }}
     >
       <strong>{prefix}</strong>
       <NumberField
@@ -54,7 +66,7 @@ function DirectionLabel({ index, direction, onEdit, disabled }) {
         value={direction.thetaDeg}
         autoFocus
         onCommit={(v) => onEdit(v, direction.phiDeg)}
-        style={{ width: '36px', padding: '2px', fontSize: '12px' }}
+        style={DEGREE_BOX_STYLE}
       />
       °
       {!PHI_LOCKED && (
@@ -67,7 +79,7 @@ function DirectionLabel({ index, direction, onEdit, disabled }) {
             parse={(raw) => parseInt(raw, 10)}
             value={direction.phiDeg}
             onCommit={(v) => onEdit(direction.thetaDeg, v)}
-            style={{ width: '36px', padding: '2px', fontSize: '12px' }}
+            style={DEGREE_BOX_STYLE}
           />
           °
         </>

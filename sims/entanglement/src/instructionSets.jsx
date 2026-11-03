@@ -62,12 +62,14 @@ function InstructionRow({ row, directions, readOnly, disabled, isDuplicate, isHi
           );
         })}
         <td style={{ ...cellStyle, padding: '2px 4px', borderLeft: '2px solid #999' }}>
+          {/* 60px wide: 46px of box (room for a weight like 0.333) plus
+              its up and down arrows. */}
           <NumberField
             step="0.01"
             value={soleRow ? 1 : row.weight}
             onCommit={onChangeWeight}
             disabled={readOnly || disabled || soleRow}
-            style={{ width: '46px', padding: '2px', fontSize: '12px' }}
+            style={{ width: '60px', padding: '2px', fontSize: '12px' }}
           />
         </td>
       </tr>
@@ -134,7 +136,8 @@ function SheetPanel({ sheet, setSheet, readOnly, noteText, disabled, resetDataCo
       <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: '12px' }}>
         <colgroup>
           {displayed.map((dir) => <col key={dir.id} />)}
-          <col style={{ width: '60px' }} />
+          {/* Room for the weight box and its arrows (see InstructionRow). */}
+          <col style={{ width: '74px' }} />
         </colgroup>
         <thead>
           <tr>
