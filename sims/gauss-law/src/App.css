@@ -567,7 +567,7 @@ input[type="range"]::-moz-range-track {
 /* As wide as the box was without arrows, plus room for the arrows (the
    browser's own, about 15 px), so the number never hides behind them. */
 .number-field input {
-  width: 3.6em;
+  width: 4.0em;
   padding: 2px 4px;
   border: 1px solid #bbb;
   border-radius: 4px;
