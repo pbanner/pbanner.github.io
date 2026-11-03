@@ -25,7 +25,7 @@ export default function App() {
   const [charges, setCharges] = useState([]);
   const nextChargeIdRef = useRef(1);
 
-  // The field probes, each { id, label, position } (see probes.js). They're
+  // The field probes, each { id, label, position, ... } (see probes.js). They're
   // placed and moved like point charges, but kept apart from the charges:
   // they read the field without adding to it.
   const [probes, setProbes] = useState([]);
@@ -136,7 +136,7 @@ export default function App() {
     if (!placeable(typeId, position)) return;
     if (isProbeType(typeId)) {
       const id = `probe-${nextProbeIdRef.current++}`;
-      setProbes((prev) => [...prev, { id, label: nextProbeLabel(prev), position }]);
+      setProbes((prev) => [...prev, { id, label: nextProbeLabel(prev), position, showComponents: false }]);
       setSelectedId(id);
       return;
     }

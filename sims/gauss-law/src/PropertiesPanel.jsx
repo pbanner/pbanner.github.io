@@ -223,7 +223,8 @@ export default function PropertiesPanel({ charge, onChange, onDelete, onClose, l
   );
 }
 
-// A field probe's panel: where it is, and what it shows besides its arrow.
+// A field probe's panel: where it is, and what it shows besides its arrow
+// (each a checkbox, kept with the probe).
 // probe: the selected probe (see probes.js). onChange(changes) /
 // onDelete() / onClose(): as for a charge's panel; so is lockedAxis (a
 // probe in the 2D cut's view stays in the cut). Its reading is in the
@@ -258,6 +259,10 @@ export function ProbePanel({ probe, onChange, onDelete, onClose, lockedAxis = nu
           ))}
         </div>
       </div>
+      <label>
+        <input type="checkbox" checked={probe.showComponents} onChange={(e) => onChange({ showComponents: e.target.checked })} />
+        Show components
+      </label>
       <button type="button" className="control-button panel-delete-button" onClick={onDelete}>
         Delete
       </button>

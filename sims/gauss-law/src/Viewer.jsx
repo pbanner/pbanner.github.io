@@ -582,6 +582,7 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
             highlighted={probe.id === draggingId || (draggingId == null && probe.id === hoveredId)}
             selected={probe.id === selectedId}
             showGuides={probe.id === draggingId}
+            showComponents={probe.showComponents}
           />
         ))}
 

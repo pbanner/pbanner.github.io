@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Billboard, Html } from '@react-three/drei';
 import * as THREE from 'three';
-import { SELECTION_COLOR } from './sceneConstants.js';
+import { AXIS_COLORS, SELECTION_COLOR } from './sceneConstants.js';
 import { fieldStrengthFraction } from './fieldArrows.js';
 import { PositionGuides } from './ChargeMarker.jsx';
 
@@ -26,6 +26,10 @@ const RING_ROTATIONS = [[0, 0, 0], [0, Math.PI / 2, 0], [Math.PI / 2, 0, 0]];
 const SHORTEST_ARROW = 0.35;
 const LONGEST_ARROW = 1.6;
 const ARROW = { shaftRadius: 0.028, headRadius: 0.07, headLength: 0.2 };
+// The components' arrows are thinner, and one shorter than this isn't
+// drawn (it's 0, or as good as).
+const COMPONENT_ARROW = { shaftRadius: 0.014, headRadius: 0.042, headLength: 0.13 };
+const SHORTEST_COMPONENT = 0.02;
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -74,14 +78,24 @@ function arrowLength(magnitude) {
 // `highlighted` enlarges it slightly (hovered or dragged); `selected`
 // circles it with a blue ring that faces the camera; `showGuides` adds the
 // PositionGuides, while it's being placed or dragged.
-export default function ProbeMarker({ position, label = null, reading, ghost = false, highlighted = false, selected = false, showGuides = false }) {
+//
+// `showComponents` adds the field's x, y and z components as thinner
+// arrows from the center, in the axes' colors. They're drawn on the same
+// scale as the field's arrow -- each as long as the arrow times its share
+// of the field -- so, laid tip to tail, they'd make up the arrow exactly.
+export default function ProbeMarker({ position, label = null, reading, ghost = false, highlighted = false, selected = false, showGuides = false, showComponents = false }) {
   const opacity = ghost ? 0.5 : 1;
   const field = reading?.field;
   const magnitude = field ? Math.hypot(...field) : 0;
-  const arrow = useMemo(
-    () => (magnitude > 0 ? field.map((c) => (c / magnitude) * arrowLength(magnitude)) : null),
-    [field, magnitude],
-  );
+  // How long a drawn arrow is per unit of field.
+  const scale = magnitude > 0 ? arrowLength(magnitude) / magnitude : 0;
+  const arrow = useMemo(() => (scale > 0 ? field.map((c) => c * scale) : null), [field, scale]);
+  const components = useMemo(() => {
+    if (!showComponents || !(scale > 0)) return [];
+    return [0, 1, 2]
+      .map((k) => ({ k, vector: [0, 1, 2].map((j) => (j === k ? field[k] * scale : 0)) }))
+      .filter(({ vector, k }) => Math.abs(vector[k]) >= SHORTEST_COMPONENT);
+  }, [showComponents, field, scale]);
   return (
     <>
       <group position={position}>
@@ -98,6 +112,9 @@ export default function ProbeMarker({ position, label = null, reading, ghost = f
           ))}
         </group>
         {arrow && <VectorArrow vector={arrow} color={PROBE_COLOR} opacity={opacity} {...ARROW} />}
+        {components.map(({ k, vector }) => (
+          <VectorArrow key={k} vector={vector} color={AXIS_COLORS[k]} opacity={opacity} {...COMPONENT_ARROW} />
+        ))}
         {selected && (
           <Billboard>
             <mesh>

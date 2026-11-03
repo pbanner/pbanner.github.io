@@ -17,6 +17,10 @@ export const CHARGE_RADIUS = 0.15;
 // a little outside its rings.
 export const PROBE_PICK_RADIUS = 0.15;
 
+// The x, y and z axes' colors, in the scene and the corner axis gizmo (so
+// the two read as one system), and for a field probe's components.
+export const AXIS_COLORS = ['#ff2060', '#20b870', '#2080ff'];
+
 // What's selected for the properties panel is marked in this blue, the
 // sidebar's "armed" color.
 export const SELECTION_COLOR = '#3498db';

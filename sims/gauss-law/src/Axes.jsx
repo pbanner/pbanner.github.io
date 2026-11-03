@@ -2,15 +2,13 @@ import { useEffect, useMemo } from 'react';
 import { Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { SNAP_STEP } from './geometry.js';
-import { WORLD_HALF_EXTENT } from './sceneConstants.js';
+import { WORLD_HALF_EXTENT, AXIS_COLORS } from './sceneConstants.js';
 
 const AXIS_DIRECTIONS = [
   new THREE.Vector3(1, 0, 0),
   new THREE.Vector3(0, 1, 0),
   new THREE.Vector3(0, 0, 1),
 ];
-// Same colors as the corner axis gizmo, so the two read as one system.
-const AXIS_COLORS = ['#ff2060', '#20b870', '#2080ff'];
 const AXIS_NAMES = ['x', 'y', 'z'];
 const ORIGIN_RADIUS = 0.08;
 const TICK_RADIUS = 0.04;
