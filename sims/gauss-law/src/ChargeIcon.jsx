@@ -1,6 +1,7 @@
 // Flat 2D picture of something the sidebar places: a shaded disc with a
-// white + or − for a point charge, or a small drawing of a sphere, rod or
-// plane, in the color of its (initially positive) charge. Used for the
+// white + or − for a point charge, a small drawing of a sphere, rod or
+// plane, in the color of its (initially positive) charge, or of a field
+// probe (probes.js's PROBE_TYPE). Used for the
 // sidebar buttons and for the placement ghost while it's off the floor
 // grid (once it's over the grid, the 3D ghost in the scene takes over).
 // Drawn as inline SVG rather than PNG assets so the colors always match
@@ -36,6 +37,16 @@ export default function ChargeIcon({ type, size = 32 }) {
       {/* An upright rod, as a new one is placed. */}
       {type.kind === 'rod' && (
         <rect x="12" y="3" width="8" height="26" rx="2" fill={`url(#${gradientId})`} stroke="rgba(0,0,0,0.35)" strokeWidth="1" />
+      )}
+      {/* A field probe, as ProbeMarker.jsx draws it: a black ball inside
+          three rings -- one seen face on, two edge on. */}
+      {type.kind === 'probe' && (
+        <g fill="none" stroke="#222" strokeWidth="1.4">
+          <circle cx="16" cy="16" r="11" />
+          <ellipse cx="16" cy="16" rx="11" ry="4" />
+          <ellipse cx="16" cy="16" rx="4" ry="11" />
+          <circle cx="16" cy="16" r="5" fill="#151515" stroke="none" />
+        </g>
       )}
       {/* A plane seen at an angle: a parallelogram. */}
       {type.kind === 'plane' && (

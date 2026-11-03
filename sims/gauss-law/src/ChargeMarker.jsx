@@ -43,14 +43,8 @@ function useChargeLabelTexture(q) {
 // placement preview; `highlighted` enlarges it slightly (hovered/dragged);
 // `selected` circles it with a blue ring that faces the camera.
 //
-// `showGuides` (while the charge is being placed or dragged) adds black
-// dashed coordinate guides (see chargeGuideSegments): a drop line to the
-// charge's foot on the xy plane, marked with a black dot; lines from the
-// foot to the x and y axes; and a line from the charge to the z axis. On a
-// 2D screen a charge floating above one point looks just like a charge
-// sitting at a different point further back; the guides show which one it
-// actually is, and read its x, y and z off the axis ticks. They're hidden
-// otherwise to keep the scene uncluttered.
+// `showGuides` (while the charge is being placed or dragged) adds its
+// PositionGuides.
 export default function ChargeMarker({ q, position, ghost = false, highlighted = false, selected = false, showGuides = false }) {
   const barLength = CHARGE_RADIUS * 1.1;
   const barWidth = CHARGE_RADIUS * 0.24;
@@ -59,10 +53,6 @@ export default function ChargeMarker({ q, position, ghost = false, highlighted =
   const signDepth = CHARGE_RADIUS * 1.02;
   const opacity = ghost ? 0.5 : 1;
   const labelTexture = useChargeLabelTexture(q);
-  const [x, y, z] = position;
-  const guideSegments = showGuides ? chargeGuideSegments(position) : [];
-  // A charge on the xy plane covers its own foot, so it gets no dot.
-  const showFootDot = showGuides && Math.abs(z) > 1e-9;
   return (
     <>
       <group position={position}>
@@ -104,11 +94,30 @@ export default function ChargeMarker({ q, position, ghost = false, highlighted =
         )}
       </group>
 
-      {/* The guides sit outside the positioned group, so their endpoints are
-          plain world coordinates. `segments` draws each consecutive pair of
-          points as its own separate line. */}
-      {guideSegments.length > 0 && (
-        <Line segments points={guideSegments.flat()} color="#000" lineWidth={1.5} dashed dashSize={0.12} gapSize={0.08} />
+      {showGuides && <PositionGuides position={position} />}
+    </>
+  );
+}
+
+// Black dashed coordinate guides for something being placed or dragged
+// (see chargeGuideSegments): a drop line to its foot on the xy plane,
+// marked with a black dot; lines from the foot to the x and y axes; and a
+// line from it to the z axis. On a 2D screen a charge floating above one
+// point looks just like a charge sitting at a different point further
+// back; the guides show which one it actually is, and read its x, y and z
+// off the axis ticks. They're hidden otherwise to keep the scene
+// uncluttered.
+export function PositionGuides({ position }) {
+  const [x, y, z] = position;
+  const segments = chargeGuideSegments(position);
+  // Something on the xy plane covers its own foot, so it gets no dot.
+  const showFootDot = Math.abs(z) > 1e-9;
+  return (
+    <>
+      {/* `segments` draws each consecutive pair of points as its own
+          separate line. */}
+      {segments.length > 0 && (
+        <Line segments points={segments.flat()} color="#000" lineWidth={1.5} dashed dashSize={0.12} gapSize={0.08} />
       )}
       {showFootDot && (
         <mesh position={[x, y, 0]}>

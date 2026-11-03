@@ -6,6 +6,7 @@ import DisplayOptionsPanel from './DisplayOptionsPanel.jsx';
 import PropertiesPanel, { CutPanel } from './PropertiesPanel.jsx';
 import CutInset from './CutInset.jsx';
 import { getChargeType, makeCharge, normalizePosition, crowds } from './chargeTypes.js';
+import { PROBE_TYPE, MAX_PROBES, isProbeId, nextProbeLabel, probeInCut } from './probes.js';
 import { allowedCuts, defaultCutAxis, placeCut, keepInCut } from './cutPlanes.js';
 import { CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
 import './App.css';
@@ -23,8 +24,14 @@ export default function App() {
   const [charges, setCharges] = useState([]);
   const nextChargeIdRef = useRef(1);
 
+  // The field probes, each { id, label, position } (see probes.js). They're
+  // placed and moved like point charges, but kept apart from the charges:
+  // they read the field without adding to it.
+  const [probes, setProbes] = useState([]);
+  const nextProbeIdRef = useRef(1);
+
   // The charge selected for editing in the properties panel -- or 'cut',
-  // the 2D cut -- or null. Clicking a charge (or starting to drag a point
+  // the 2D cut, or a probe's id -- or null. Clicking a charge (or starting to drag a point
   // charge) selects it; a newly placed one is selected right away, so the
   // panel shows what can be changed.
   const [selectedId, setSelectedId] = useState(null);
@@ -62,16 +69,18 @@ export default function App() {
   // back to 3D.
   const [view2D, setView2D] = useState(false);
   if (view2D && !placedCut?.valid) setView2D(false);
+  // A probe off the cut is hidden in its view, so it's deselected too.
   const viewCut = () => {
     if (!placedCut?.valid) return;
     disarm();
     setRemoveMode(false);
-    setSelectedId((prev) => (prev === 'cut' ? null : prev));
+    const hiddenProbe = (id) => probes.some((p) => p.id === id && !probeInCut(p, placedCut));
+    setSelectedId((prev) => (prev === 'cut' || hiddenProbe(prev) ? null : prev));
     setView2D(true);
   };
 
   // The charge type armed for placement (from a sidebar click, or during a
-  // drag out of the sidebar), or null.
+  // drag out of the sidebar) -- or PROBE_TYPE's id, for a probe -- or null.
   const [armedTypeId, setArmedTypeId] = useState(null);
   // Where the pointer is while armed, in viewport (client) coordinates...
   const [ghostPos, setGhostPos] = useState(null);
@@ -108,13 +117,28 @@ export default function App() {
   // charges land in the cut, a new rod crosses it at right angles, a new
   // plane is perpendicular to it, and edits can't move anything out of it.
   const inCut = view2D && placedCut ? placedCut : null;
-  const makeNew = (typeId, point) => makeCharge(typeId, point, inCut ? (c) => keepInCut(c, inCut, true) : undefined);
+  // What the sidebar's type `typeId` would place at `point`: a charge, or
+  // a probe, { kind: 'probe', position } (a placement in the cut is already
+  // in it).
+  const isProbeType = (typeId) => typeId === PROBE_TYPE.id;
+  const makeNew = (typeId, point) => (isProbeType(typeId)
+    ? { kind: 'probe', position: point }
+    : makeCharge(typeId, point, inCut ? (c) => keepInCut(c, inCut, true) : undefined));
   // Where a new charge can't go: on top of a point charge or a thin rod
   // (crowds, in chargeTypes.js). Treated like a point off the grid -- the
-  // ghost isn't drawn there, and dropping there places nothing.
-  const placeable = (typeId, point) => point && !crowds(makeNew(typeId, point), charges);
+  // ghost isn't drawn there, and dropping there places nothing. A probe
+  // can go anywhere (on a charge, it reads "undefined"), up to MAX_PROBES.
+  const placeable = (typeId, point) => point && (isProbeType(typeId)
+    ? probes.length < MAX_PROBES
+    : !crowds(makeNew(typeId, point), charges));
   const addCharge = (typeId, position) => {
     if (!placeable(typeId, position)) return;
+    if (isProbeType(typeId)) {
+      const id = `probe-${nextProbeIdRef.current++}`;
+      setProbes((prev) => [...prev, { id, label: nextProbeLabel(prev), position }]);
+      setSelectedId(id);
+      return;
+    }
     const id = nextChargeIdRef.current++;
     setCharges((prev) => [...prev, { id, ...makeNew(typeId, position) }]);
     setSelectedId(id);
@@ -133,9 +157,18 @@ export default function App() {
     }));
   };
   const moveCharge = (id, position) => updateCharge(id, { position });
+  const moveProbe = (id, position) => setProbes((prev) => prev.map((p) => (p.id === id ? { ...p, position } : p)));
+  const deleteProbe = (id) => {
+    setProbes((prev) => prev.filter((p) => p.id !== id));
+    setSelectedId((prev) => (prev === id ? null : prev));
+  };
   const deleteCharge = (id) => {
     if (id === 'cut') {
       removeCut();
+      return;
+    }
+    if (isProbeId(id)) {
+      deleteProbe(id);
       return;
     }
     setCharges((prev) => prev.filter((c) => c.id !== id));
@@ -268,7 +301,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  const armedType = armedTypeId ? getChargeType(armedTypeId) : null;
+  const armedType = !armedTypeId ? null : isProbeType(armedTypeId) ? PROBE_TYPE : getChargeType(armedTypeId);
   const selectedCharge = charges.find((c) => c.id === selectedId) ?? null;
 
   return (
@@ -276,6 +309,9 @@ export default function App() {
       <Viewer
         ref={viewerRef}
         charges={charges}
+        probes={probes}
+        onMoveProbe={moveProbe}
+        onDeleteProbe={deleteProbe}
         ghost={armedTypeId && ghostPoint ? makeNew(armedTypeId, ghostPoint) : null}
         armedTypeId={armedTypeId}
         onPlaceClick={handlePlaceClick}
@@ -384,7 +420,7 @@ export default function App() {
           nothing else on screen hints that Shift and Alt do anything. */}
       <div className="interaction-hint">
         {removeMode
-          ? 'Click a charge or object to delete it. Esc to stop deleting.'
+          ? 'Click a charge, object or probe to delete it. Esc to stop deleting.'
           : view2D
             ? 'Viewing the 2D cut · Drag a charge in from the sidebar · Click one to edit it · Drag a point charge to move it · Drag empty space to pan, scroll to zoom · Back to 3D in the lower left'
             : 'Drag a charge or object in from the sidebar · Click one to edit it · Drag a point charge to move it · Shift+drag to raise or lower · Hold Alt to turn off snapping · Drag onto the trash to delete'}

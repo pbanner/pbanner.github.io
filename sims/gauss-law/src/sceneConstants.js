@@ -13,6 +13,10 @@ export const WORLD_HALF_EXTENT = 5;
 
 export const CHARGE_RADIUS = 0.15;
 
+// How close to a field probe's center (ProbeMarker.jsx) a press grabs it:
+// a little outside its rings.
+export const PROBE_PICK_RADIUS = 0.15;
+
 // What's selected for the properties panel is marked in this blue, the
 // sidebar's "armed" color.
 export const SELECTION_COLOR = '#3498db';

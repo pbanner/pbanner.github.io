@@ -1,4 +1,5 @@
 import { CHARGE_TYPES } from './chargeTypes.js';
+import { PROBE_TYPE } from './probes.js';
 import ChargeIcon from './ChargeIcon.jsx';
 
 // One icon in the sidebar's column. Reports its own hover in and out (as
@@ -39,9 +40,13 @@ function TrashIcon({ size = 28, color = '#333' }) {
 // pointerdown (onButtonPointerDown) -- a plain click arms click-to-place,
 // a real drag drops the charge wherever the pointer is released.
 //
-// Below them, the trash can works two ways, also like the optics lab's:
-// click it to toggle delete mode (then click charges to delete them), or
-// drag a placed charge onto it (Viewer.jsx looks for its
+// Below them, set apart, the field probe's button works the same way (a
+// probe is placed like a point charge, but measures the field instead of
+// making it).
+//
+// At the bottom, the trash can works two ways, also like the optics lab's:
+// click it to toggle delete mode (then click charges or probes to delete
+// them), or drag a placed charge or probe onto it (Viewer.jsx looks for its
 // data-role="trash-target" under the pointer on release).
 export default function ChargeSidebar({ armedTypeId, onButtonPointerDown, removeMode, onToggleRemoveMode, onHoverButton }) {
   return (
@@ -61,6 +66,16 @@ export default function ChargeSidebar({ armedTypeId, onButtonPointerDown, remove
           </SidebarIconButton>
         ))}
       </div>
+      <div className="sidebar-divider" />
+      <SidebarIconButton
+        label={PROBE_TYPE.label}
+        active={armedTypeId === PROBE_TYPE.id}
+        ariaLabel={`Add ${PROBE_TYPE.label}`}
+        onPointerDown={(e) => onButtonPointerDown(PROBE_TYPE.id, e)}
+        onHoverButton={onHoverButton}
+      >
+        <ChargeIcon type={PROBE_TYPE} />
+      </SidebarIconButton>
       <div className="sidebar-divider" />
       <SidebarIconButton
         label="Delete"

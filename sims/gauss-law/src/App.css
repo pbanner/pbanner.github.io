@@ -189,6 +189,33 @@
    every frame, starting from the viewer's top-left corner, and stays
    hidden until that has happened once. Tabular digits keep the numbers
    from shifting sideways as they change. */
+/* A field probe's letter, up and to the right of it in the scene
+   (ProbeMarker.jsx; drei's Html puts the corner of the box it wraps this
+   in on the probe). In the selection blue while the probe is selected.
+   Positioned absolutely, so that box has no size of its own and doesn't
+   cover the probe -- a press there must reach the canvas, to grab it --
+   and the letter itself lets presses through. */
+.probe-label {
+  position: absolute;
+  left: 9px;
+  top: -26px;
+  pointer-events: none;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #151515;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 17px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.probe-label.selected {
+  background: #3498db;
+  color: #fff;
+}
+
 .coordinate-readout {
   position: absolute;
   left: 0;

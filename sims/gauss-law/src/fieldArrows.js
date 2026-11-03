@@ -32,6 +32,15 @@ const STRONGEST_FIELD = 2;
 // says nothing the charge itself doesn't.
 const MIN_DISTANCE_FROM_CHARGE = 0.35;
 
+// Where a field strength falls on that scale: 0 at FAINTEST_FIELD (or
+// weaker), 1 at STRONGEST_FIELD (or stronger), and each doubling of the
+// field the same step in between. A field probe's arrow (ProbeMarker.jsx)
+// uses it too, so it's as long as an arrow here for the same field.
+const LOG_RANGE = Math.log(STRONGEST_FIELD / FAINTEST_FIELD);
+export function fieldStrengthFraction(magnitude) {
+  return Math.min(1, Math.max(0, Math.log(magnitude / FAINTEST_FIELD) / LOG_RANGE));
+}
+
 // The spacing between neighboring arrows at a density setting, in world
 // units (FieldArrows.jsx sizes the arrows from it).
 export function arrowSpacing(density, halfExtent) {
@@ -50,7 +59,6 @@ export function computeFieldArrows(sources, { density, halfExtent, cut = null })
   const n = ARROWS_PER_AXIS[density - 1];
   const spacing = arrowSpacing(density, halfExtent);
   const minDistance = MIN_DISTANCE_FROM_CHARGE * spacing;
-  const logRange = Math.log(STRONGEST_FIELD / FAINTEST_FIELD);
   const arrows = [];
   for (let i = 0; i < n; i++) {
     for (let j = 0; j < n; j++) {
@@ -69,8 +77,7 @@ export function computeFieldArrows(sources, { density, halfExtent, cut = null })
         const e = fieldAt(position, sources);
         const magnitude = Math.hypot(...e);
         if (!(magnitude > 0)) continue; // exactly where the field vanishes: no direction to show
-        const strength = Math.min(1, Math.max(0, Math.log(magnitude / FAINTEST_FIELD) / logRange));
-        arrows.push({ position, direction: e.map((c) => c / magnitude), strength });
+        arrows.push({ position, direction: e.map((c) => c / magnitude), strength: fieldStrengthFraction(magnitude) });
       }
     }
   }

@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import { OrbitControls, GizmoHelper } from '@react-three/drei';
 import { ChargeDrag } from './chargeDrag.js';
 import ChargeMarker from './ChargeMarker.jsx';
+import ProbeMarker from './ProbeMarker.jsx';
+import { probeReading, probeInCut } from './probes.js';
 import ChargedObject from './ChargedObject.jsx';
 import ObjectHandles from './ObjectHandles.jsx';
 import CutPlane from './CutPlane.jsx';
@@ -15,7 +17,7 @@ import FieldLines from './FieldLines.jsx';
 import FieldArrows from './FieldArrows.jsx';
 import { CoordinateReadoutPanel, CoordinateReadoutTracker } from './CoordinateReadout.jsx';
 import { rayFromClient, pickCharge, pickObject, snapValue, clampToWorld, SNAP_STEP } from './geometry.js';
-import { WORLD_HALF_EXTENT, CHARGE_RADIUS, INITIAL_CAMERA_POSITION, INITIAL_CAMERA_TARGET, CAMERA_FOV, CLICK_MOVE_THRESHOLD, VIEW_CONTROLS_GIZMO_MARGIN } from './sceneConstants.js';
+import { WORLD_HALF_EXTENT, CHARGE_RADIUS, PROBE_PICK_RADIUS, INITIAL_CAMERA_POSITION, INITIAL_CAMERA_TARGET, CAMERA_FOV, CLICK_MOVE_THRESHOLD, VIEW_CONTROLS_GIZMO_MARGIN } from './sceneConstants.js';
 
 // A directional light that rides along with the camera, so whatever side of
 // the scene is facing the viewer is always the lit side -- same approach as
@@ -75,8 +77,13 @@ const CUT_VIEW_DURATION = 1.0;
 //   a re-render for anything else (e.g. the hover highlight) doesn't
 //   recompute the field. The placement ghost isn't a source: only placed
 //   charges make a field.
-// ghost: the charge that click- or drag-to-place would add (see
-//   chargeTypes.js's makeCharge), drawn as a translucent preview, or null
+// probes: the field probes, [{ id, label, position }] (see probes.js),
+//   picked and dragged like point charges (onMoveProbe(id, position),
+//   onDeleteProbe(id)). In the 2D cut's view, only those in the cut are
+//   shown.
+// ghost: the charge -- or probe, { kind: 'probe', position } -- that click-
+//   or drag-to-place would add (see chargeTypes.js's makeCharge), drawn as
+//   a translucent preview, or null
 // armedTypeId: the charge type waiting for click-to-place's second click
 // onPlaceClick(clientX, clientY, modifiers): that second click, on the canvas
 // removeMode: the sidebar's delete tool is on, so clicking a charge deletes it
@@ -91,7 +98,7 @@ const CUT_VIEW_DURATION = 1.0;
 //   its perspective, and only the cut's field lines (or arrows) are drawn.
 // showGrid / showAxes / showField / fieldStyle ('lines' or 'arrows') /
 //   fieldDensity: the Display Options panel's settings
-export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, cut, onMoveCut, view2D, showGrid, showAxes, showField, fieldStyle, fieldDensity }) {
+export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProbe, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, cut, onMoveCut, view2D, showGrid, showAxes, showField, fieldStyle, fieldDensity }) {
   const wrapperRef = useRef();
   const controlsRef = useRef();
   const cameraAnimatorRef = useRef();
@@ -220,8 +227,8 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   // Moves a placed charge, following the same ChargeDrag rules as a
   // placement once it's been lifted: drag to slide it horizontally,
   // Shift+drag to raise or lower it -- or in the 2D cut's view, within
-  // the cut.
-  const startDrag = (charge, downEvent) => {
+  // the cut. A probe moves the same way, with its own onMove and onDelete.
+  const startDrag = (charge, downEvent, { onMove = onMoveCharge, onDelete = onDeleteCharge } = {}) => {
     const drag = new ChargeDrag(charge.position, view2D ? cut : null);
     dragRef.current = { id: charge.id, drag };
     setDraggingId(charge.id);
@@ -234,7 +241,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
       const ray = rayFromClient(controls.object, wrapperRef.current.getBoundingClientRect(), ev.clientX, ev.clientY);
       const before = drag.position;
       const after = drag.update({ ray, camera: controls.object, shiftKey: ev.shiftKey, altKey: ev.altKey });
-      if (after !== before) onMoveCharge(charge.id, after);
+      if (after !== before) onMove(charge.id, after);
     };
     const onUp = (ev) => {
       window.removeEventListener('pointermove', update);
@@ -245,7 +252,7 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
       setDraggingId(null);
       // Dropping a charge on the sidebar's trash can deletes it.
       if (d && document.elementFromPoint(ev.clientX, ev.clientY)?.closest('[data-role="trash-target"]')) {
-        onDeleteCharge(d.id);
+        onDelete(d.id);
       }
     };
     window.addEventListener('pointermove', update);
@@ -259,17 +266,23 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   // charged spheres, rods and planes ("objects") as ChargedObjects.
   const pointCharges = charges.filter((c) => c.kind === 'point');
   const objects = charges.filter((c) => c.kind !== 'point');
+  const shownProbes = view2D && cut ? probes.filter((p) => probeInCut(p, cut)) : probes;
+  const probeHandlers = { onMove: onMoveProbe, onDelete: onDeleteProbe };
 
   // The 2D cut, as something to pick and give handles to, like an object.
   const cutObject = cut && { kind: 'cut', id: 'cut', ...cut };
 
-  // What's under a viewport point, if anything: { charge, isPoint }. A
-  // point charge wins over an object, even one in front of it -- a charge
-  // inside a shell would otherwise be impossible to reach -- and an object
-  // over the 2D cut, which crosses the whole box.
+  // What's under a viewport point, if anything: { charge, isPoint,
+  // isProbe }. A probe wins over everything -- it's small, and often sits
+  // right on or inside something charged -- a point charge over an object,
+  // even one in front of it -- a charge inside a shell would otherwise be
+  // impossible to reach -- and an object over the 2D cut, which crosses
+  // the whole box. A probe is picked and dragged like a point charge.
   const pickAt = (clientX, clientY) => {
     const ray = rayAt(clientX, clientY);
     if (!ray) return null;
+    const probe = pickCharge(ray, shownProbes, PROBE_PICK_RADIUS);
+    if (probe) return { charge: probe, isPoint: true, isProbe: true };
     const point = pickCharge(ray, pointCharges, CHARGE_RADIUS);
     if (point) return { charge: point, isPoint: true };
     const obj = pickObject(ray, objects);
@@ -450,11 +463,11 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
     pressRef.current = { target: 'point', ...at };
     e.stopPropagation();
     if (removeMode) {
-      onDeleteCharge(picked.charge.id);
+      (picked.isProbe ? onDeleteProbe : onDeleteCharge)(picked.charge.id);
       setHoveredId(null);
     } else {
       onSelect(picked.charge.id);
-      startDrag(picked.charge, e);
+      startDrag(picked.charge, e, picked.isProbe ? probeHandlers : undefined);
     }
   };
 
@@ -484,17 +497,18 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
   if (handleDrag) {
     readout = handleDrag;
   } else {
-    const position = charges.find((c) => c.id === draggingId)?.position ?? ghost?.position ?? null;
+    const dragged = charges.find((c) => c.id === draggingId) ?? probes.find((p) => p.id === draggingId);
+    const position = dragged?.position ?? ghost?.position ?? null;
     if (position) readout = { position };
   }
 
-  // Over a point charge or a handle: grab (it can be dragged). Over an
-  // object: a pointing hand (it can be clicked).
+  // Over a point charge, probe or handle: grab (it can be dragged). Over
+  // an object: a pointing hand (it can be clicked).
   let cursor;
   if (draggingId != null || handleDrag) cursor = 'grabbing';
   else if (hoveredHandleId) cursor = 'grab';
   else if (hoveredId != null && !armedTypeId) {
-    const isPoint = pointCharges.some((c) => c.id === hoveredId);
+    const isPoint = pointCharges.some((c) => c.id === hoveredId) || probes.some((p) => p.id === hoveredId);
     cursor = removeMode || !isPoint ? 'pointer' : 'grab';
   }
 
@@ -559,13 +573,27 @@ export default function Viewer({ ref, charges, ghost, armedTypeId, onPlaceClick,
           <ChargedObject key={obj.id} charge={obj} selected={obj.id === selectedId} />
         ))}
 
+        {shownProbes.map((probe) => (
+          <ProbeMarker
+            key={probe.id}
+            position={probe.position}
+            label={probe.label}
+            reading={probeReading(charges, probe.position)}
+            highlighted={probe.id === draggingId || (draggingId == null && probe.id === hoveredId)}
+            selected={probe.id === selectedId}
+            showGuides={probe.id === draggingId}
+          />
+        ))}
+
         {cut && !view2D && <CutPlane cut={cut} charges={charges} selected={selectedId === 'cut'} />}
 
         {selectedObject && <ObjectHandles charge={selectedObject} hoveredId={hoveredHandleId} activeId={handleDrag?.id} isHidden={handleHidden} />}
 
-        {ghost && (ghost.kind === 'point'
-          ? <ChargeMarker q={ghost.q} position={ghost.position} ghost showGuides />
-          : <ChargedObject charge={ghost} ghost />)}
+        {ghost && (ghost.kind === 'probe'
+          ? <ProbeMarker position={ghost.position} reading={probeReading(charges, ghost.position)} ghost showGuides />
+          : ghost.kind === 'point'
+            ? <ChargeMarker q={ghost.q} position={ghost.position} ghost showGuides />
+            : <ChargedObject charge={ghost} ghost />)}
 
         {/* makeDefault registers these as the scene's controls. Left-drag
             rotates, scroll/pinch zooms, and right-drag (or two-finger drag)
