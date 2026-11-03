@@ -45,10 +45,11 @@ function formatCoordinate(worldValue) {
 // in `axes`, for something that can only move in those (a plane along its
 // normal: "x = −4 cm"; a rod across itself: "(y, z) = (2, 0) cm") -- or,
 // given a `label`, that label and a single length `value` instead (e.g.
-// "r = 3 cm", while a handle drags a sphere's radius).
+// "Radius = 3 cm", while a handle drags a sphere's radius), or the label
+// alone ("Radius", while the pointer is over the handle).
 const AXIS_NAMES = ['x', 'y', 'z'];
 function readoutText(position, axes, label, value) {
-  if (label) return `${label} = ${formatCoordinate(value)} cm`;
+  if (label) return value === undefined ? label : `${label} = ${formatCoordinate(value)} cm`;
   const names = axes.map((k) => AXIS_NAMES[k]);
   const values = axes.map((k) => formatCoordinate(position[k]));
   if (axes.length === 1) return `${names[0]} = ${values[0]} cm`;

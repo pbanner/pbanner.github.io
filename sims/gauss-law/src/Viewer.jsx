@@ -366,10 +366,12 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
   // the cut).
   const handleHidden = (h) => view2D && cut && Math.abs(h.direction[cut.axis]) > 1e-9;
   const selectedObject = armedTypeId || removeMode ? null : objects.find((c) => c.id === selectedId) ?? null;
-  // The handle under the pointer, and the one being dragged, if any: { id,
-  // label, value, position } -- the readout shows label = value, floating
-  // above the handle's position.
-  const [hoveredHandleId, setHoveredHandleId] = useState(null);
+  // The handle under the pointer (handles.js's { id, position, ... }), and
+  // the one being dragged, { id, label, value, position } -- if any. The
+  // readout labels a hovered handle ("Radius"), and shows a dragged one's
+  // label and value ("Radius = 3 cm"), floating above the handle.
+  const [hoveredHandle, setHoveredHandle] = useState(null);
+  const hoveredHandleId = hoveredHandle?.id ?? null;
   const [handleDrag, setHandleDrag] = useState(null);
 
   // The selected object's handle under a viewport point, if any. Handles
@@ -413,13 +415,13 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
     if (handle.id === 'radius') {
       drag = new LineDrag(handle.position, handle.direction, obj.radius);
       apply = (v) => ({ radius: size(v) });
-      [label, valueOf] = ['r', (o) => o.radius];
+      [label, valueOf] = ['Radius', (o) => o.radius];
     } else {
       // Thickness: the face moves half as far as the thickness changes, so
       // the thickness is snapped rather than the face's position.
       drag = new LineDrag(handle.position, handle.direction, obj.thickness / 2, (v) => v);
       apply = (v, altKey) => ({ thickness: size(altKey ? 2 * v : snapValue(2 * v)) });
-      [label, valueOf] = ['thickness', (o) => o.thickness];
+      [label, valueOf] = ['Thickness', (o) => o.thickness];
     }
 
     const update = (ev) => {
@@ -518,20 +520,25 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
 
   const handlePointerMove = (e) => {
     if (dragRef.current || handleDrag || armedTypeId) return;
-    const handleId = pickHandle(e.clientX, e.clientY)?.id ?? null;
-    if (handleId !== hoveredHandleId) setHoveredHandleId(handleId);
-    const id = handleId ? null : pickAt(e.clientX, e.clientY)?.charge.id ?? null;
+    const handle = pickHandle(e.clientX, e.clientY);
+    if ((handle?.id ?? null) !== hoveredHandleId) setHoveredHandle(handle);
+    const id = handle ? null : pickAt(e.clientX, e.clientY)?.charge.id ?? null;
     if (id !== hoveredId) setHoveredId(id);
   };
 
-  // The readout: while a handle drags a single value, that value (e.g.
-  // "r = 3"), floating above the handle; otherwise the coordinates of the
-  // charge or object being dragged, or else of the placement ghost.
+  // The object (or cut) being dragged, if any, for its guides.
   const draggedObject = draggingId == null ? null : objects.find((c) => c.id === draggingId) ?? (draggingId === 'cut' ? cutObject : null);
 
+  // The readout: while a handle drags a single value, its name and value
+  // ("Radius = 3 cm"), floating above the handle, and while the pointer is
+  // over one, just its name; otherwise the coordinates of whatever's being
+  // dragged (dragReadout), or else of the placement ghost.
+  const HANDLE_LABELS = { radius: 'Radius', thickness: 'Thickness' };
   let readout = null;
   if (handleDrag) {
     readout = handleDrag;
+  } else if (hoveredHandle && selectedObject) {
+    readout = { position: hoveredHandle.position, label: HANDLE_LABELS[hoveredHandle.id] };
   } else if (draggingId != null) {
     const dragged = charges.find((c) => c.id === draggingId) ?? probes.find((p) => p.id === draggingId) ?? (draggingId === 'cut' ? cutObject : null);
     if (dragged) readout = dragReadout(dragged, dragGrab);
@@ -575,7 +582,7 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
       onPointerMove={handlePointerMove}
       onPointerLeave={() => {
         setHoveredId(null);
-        setHoveredHandleId(null);
+        setHoveredHandle(null);
       }}
     >
       <Canvas
