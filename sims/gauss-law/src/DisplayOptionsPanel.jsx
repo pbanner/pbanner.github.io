@@ -4,6 +4,7 @@
 // displayOptions state.
 import { FIELD_LINE_DENSITY_LEVELS } from './fieldLines.js';
 import { FIELD_ARROW_DENSITY_LEVELS } from './fieldArrows.js';
+import Segmented from './Segmented.jsx';
 
 // The electric field is shown as field lines or as a grid of arrows, with
 // one density slider (1-5) for both: it steps through the field lines'
@@ -11,8 +12,9 @@ import { FIELD_ARROW_DENSITY_LEVELS } from './fieldArrows.js';
 // charge), or the arrow grids in fieldArrows.js (3 to 11 arrows along each
 // axis). The value is shown in the label rather than in a separate number
 // box (as the optics lab's SliderPlusTextboxControl does) to keep the panel
-// thin. The style choice and the slider are dimmed while the field is
-// hidden.
+// thin. The style is chosen with joined toggle buttons (Segmented), like
+// the properties panel's choices. It and the slider are dimmed, and can't
+// be changed, while the field is hidden.
 if (FIELD_LINE_DENSITY_LEVELS !== FIELD_ARROW_DENSITY_LEVELS) {
   throw new Error('Field lines and arrows must have the same number of density levels');
 }
@@ -38,18 +40,12 @@ export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions,
         Electric field
       </label>
       <div className={`control-group field-style${displayOptions.showField ? '' : ' disabled'}`}>
-        {[['lines', 'Lines'], ['arrows', 'Arrows']].map(([style, label]) => (
-          <label key={style}>
-            <input
-              type="radio"
-              name="field-style"
-              checked={displayOptions.fieldStyle === style}
-              onChange={() => setOption('fieldStyle', style)}
-              disabled={!displayOptions.showField}
-            />
-            {label}
-          </label>
-        ))}
+        <Segmented
+          options={[['lines', 'Lines'], ['arrows', 'Arrows']]}
+          value={displayOptions.fieldStyle}
+          onChange={(style) => setOption('fieldStyle', style)}
+          isDisabled={() => !displayOptions.showField}
+        />
       </div>
       <div className={`control-group${displayOptions.showField ? '' : ' disabled'}`}>
         <label htmlFor="field-density">Density: {displayOptions.fieldDensity}</label>

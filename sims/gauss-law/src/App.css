@@ -291,9 +291,9 @@
 
 /* The Lines / Arrows choice: side by side, indented under the "Electric
    field" checkbox it belongs to. */
+/* The field's style (Lines / Arrows), set in under its checkbox. */
 .control-group.field-style {
   flex-direction: row;
-  gap: 14px;
   padding-left: 21px;
 }
 
@@ -304,6 +304,12 @@
 .control-group.disabled label,
 .control-group.disabled input {
   cursor: default;
+}
+
+/* A dimmed group dims its toggle buttons itself, so they aren't dimmed
+   twice over. */
+.control-group.disabled .segmented button:disabled {
+  opacity: 1;
 }
 
 /* Slider look from the optics lab: one dark track color on both sides of
@@ -575,7 +581,7 @@ input[type="range"]::-moz-range-track {
   cursor: default;
 }
 
-.segmented button:disabled:hover {
+.segmented button:disabled:hover:not(.active) {
   background: #fff;
 }
 

@@ -10,6 +10,7 @@
 import { useState } from 'react';
 import { CHARGE_SETTINGS, MAX_CHARGE_STEPS, chargeSteps, withChargeSteps } from './chargeTypes.js';
 import { CM } from './geometry.js';
+import Segmented from './Segmented.jsx';
 import { WORLD_HALF_EXTENT } from './sceneConstants.js';
 
 const TITLES = { point: 'Point Charge', sphere: 'Charged Sphere', rod: 'Charged Rod', plane: 'Charged Plane' };
@@ -85,20 +86,6 @@ function NumberField({ label, cm, min, max, onCommit, disabled = false, stepBase
         }}
       />
     </label>
-  );
-}
-
-// A choice among a few options, as a row of joined toggle buttons;
-// isDisabled(option) grays out the options that can't be chosen.
-function Segmented({ options, value, onChange, isDisabled = () => false }) {
-  return (
-    <div className="segmented">
-      {options.map(([v, label]) => (
-        <button type="button" key={v} className={v === value ? 'active' : ''} disabled={isDisabled(v)} onClick={() => onChange(v)}>
-          {label}
-        </button>
-      ))}
-    </div>
   );
 }
 
