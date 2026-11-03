@@ -444,10 +444,10 @@ export default function App() {
           nothing else on screen hints that Shift and Alt do anything. */}
       <div className="interaction-hint">
         {removeMode
-          ? 'Click a charge, object or probe to delete it. Esc to stop deleting.'
+          ? 'Click an object to delete it · Press Escape, or click the trash can again, to stop deleting'
           : view2D
-            ? 'Viewing the 2D cut · Drag a charge in from the sidebar · Click one to edit it · Drag a point charge to move it · Drag empty space to pan, scroll to zoom · Back to 3D in the lower left'
-            : 'Drag a charge or object in from the sidebar · Click one to edit it · Drag a point charge to move it · Shift+drag to raise or lower · Hold Alt to turn off snapping · Drag onto the trash to delete'}
+            ? 'Viewing the 2D cut! · Add objects from the sidebar · Click an object to edit it · Drag an object to move it · Drag empty space to pan, scroll to zoom · Back to 3D in the lower left'
+            : 'Add objects from the sidebar · Click an object to edit it · Drag an object to change its position, Shift+drag to raise or lower, Alt+drag to turn off snapping'}
       </div>
 
       {/* While armed: a flat 2D icon follows the pointer whenever the charge
