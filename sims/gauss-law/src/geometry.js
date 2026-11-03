@@ -132,8 +132,12 @@ function rayHitDistance(ray, obj) {
     return hit ? hit.distanceTo(ray.origin) : null;
   }
   if (obj.kind === 'rod') {
-    // Seen along the rod's axis, the rod is a circle: solve
-    // |(o - c) + t d|^2 = R^2 using only the other two coordinates.
+    // The rod as it's drawn: a cylinder across the box, ending at two of
+    // its faces. A ray can enter it through its side -- where, seen along
+    // the rod's axis (where it's a circle), it crosses the circle: solve
+    // |(o - c) + t d|^2 = R^2 using only the other two coordinates -- or
+    // through one of its ends, at a face of the box: looking along the
+    // rod, as the 2D cut's view does at a rod crossing it, the only way in.
     const R = obj.form === 'line' ? LINE_ROD_PICK_RADIUS : obj.radius;
     const [u, v] = [0, 1, 2].filter((k) => k !== obj.axis);
     const ou = o[u] - c[u];
@@ -142,11 +146,20 @@ function rayHitDistance(ray, obj) {
     const b = 2 * (ou * d[u] + ov * d[v]);
     const cc = ou * ou + ov * ov - R * R;
     const disc = b * b - 4 * a * cc;
-    if (a === 0 || disc < 0) return null;
-    for (const t of [(-b - Math.sqrt(disc)) / (2 * a), (-b + Math.sqrt(disc)) / (2 * a)]) {
-      if (t > 0 && Math.abs(o[obj.axis] + t * d[obj.axis]) <= H) return t;
+    const hits = [];
+    if (a > 0 && disc >= 0) {
+      for (const t of [(-b - Math.sqrt(disc)) / (2 * a), (-b + Math.sqrt(disc)) / (2 * a)]) {
+        if (t > 0 && Math.abs(o[obj.axis] + t * d[obj.axis]) <= H) hits.push(t);
+      }
     }
-    return null;
+    if (d[obj.axis] !== 0) {
+      for (const end of [-H, H]) {
+        const t = (end - o[obj.axis]) / d[obj.axis];
+        const [pu, pv] = [ou + t * d[u], ov + t * d[v]];
+        if (t > 0 && pu * pu + pv * pv <= R * R) hits.push(t);
+      }
+    }
+    return hits.length ? Math.min(...hits) : null;
   }
   if (obj.kind === 'plane') {
     const min = [-H, -H, -H];

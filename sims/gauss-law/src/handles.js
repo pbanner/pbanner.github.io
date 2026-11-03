@@ -1,38 +1,24 @@
-// The handles on a selected charged sphere, rod or plane: where they are,
-// what dragging each one changes, and the drag along a line that most of
-// them use. Plain JS (three.js math only, no React); ObjectHandles.jsx
-// draws them and Viewer.jsx picks and drags them.
+// The handles on a selected charged sphere, rod or slab, which change its
+// size -- its position changes by dragging the object itself (Viewer.jsx)
+// -- and the drag along a line that they, and dragging a plane, use.
+// Plain JS (three.js math only, no React); ObjectHandles.jsx draws them
+// and Viewer.jsx picks and drags them.
 //
-// Each handle is { id, shape, position, direction }:
-//   'move'      (shape 'move', four arrows) at a sphere's center or on a
-//               rod's axis: drags it sideways, like dragging a point
-//               charge (with Shift, up and down).
-//   'lift'      (shape 'arrow', a double arrow along z) above a sphere, or
-//               a rod that isn't vertical: drags it up and down.
-//   'radius'    (shape 'dot') on a sphere's or rod's surface, on the side
-//               facing the camera's right: drags the radius.
-//   'position'  (shape 'arrow', along the normal) at a plane's middle:
-//               slides the plane along its normal.
-//   'thickness' (shape 'dot') on a slab's face: drags the face out or in,
-//               the other face following, so the slab stays centered.
-// The 2D cut plane, passed as { kind: 'cut', axis, offset, movable } (see
-// cutPlanes.js), has a 'position' handle too, which slides it along its
-// axis -- `disabled` when the charges pin the cut where it is (they allow
-// it at only one position).
-// `direction` is the line the handle moves along (for the 'arrow' and
-// 'dot' shapes) or, for 'move', the normal of the plane it moves in.
-// Where they are depends on the camera (the radius and thickness handles
-// sit on the side facing it), so they're recomputed whenever it moves.
+// Each handle is { id, position, direction }:
+//   'radius'    on a sphere's or rod's surface, on the side facing the
+//               camera's right: drags the radius.
+//   'thickness' on a slab's face: drags the face out or in, the other
+//               face following, so the slab stays centered.
+// `direction` is the line the handle moves along. Where they are depends
+// on the camera (they sit on the side facing it), so they're recomputed
+// whenever it moves.
 import * as THREE from 'three';
 import { snapValue } from './geometry.js';
 
-// How far above a sphere's or rod's top the lift handle sits, and how far
-// along the plane from the position handle the thickness handle sits.
-const LIFT_GAP = 0.6;
+// How far along a slab from its middle the thickness handle sits.
 const THICKNESS_HANDLE_OFFSET = 1.5;
 
-const Z = [0, 0, 1];
-const unitAxis = (axis) => [0, 1, 2].map((k) => (k === axis ? 1 : 0));
+export const unitAxis = (axis) => [0, 1, 2].map((k) => (k === axis ? 1 : 0));
 const add = (p, d, s) => p.map((v, k) => v + s * d[k]);
 
 // The camera's screen-right direction with any component along `axis`
@@ -50,41 +36,23 @@ export function objectHandles(obj, camera) {
   const c = obj.position;
   if (obj.kind === 'sphere') {
     const r = rightAcross(camera, null);
-    return [
-      { id: 'move', shape: 'move', position: c, direction: Z },
-      { id: 'lift', shape: 'arrow', position: add(c, Z, obj.radius + LIFT_GAP), direction: Z },
-      { id: 'radius', shape: 'dot', position: add(c, r, obj.radius), direction: r },
-    ];
+    return [{ id: 'radius', position: add(c, r, obj.radius), direction: r }];
   }
-  if (obj.kind === 'rod') {
-    const handles = [{ id: 'move', shape: 'move', position: c, direction: unitAxis(obj.axis) }];
-    const radius = obj.form === 'line' ? 0 : obj.radius;
-    if (obj.axis !== 2) handles.push({ id: 'lift', shape: 'arrow', position: add(c, Z, radius + LIFT_GAP), direction: Z });
-    if (obj.form !== 'line') {
-      const r = rightAcross(camera, obj.axis);
-      handles.push({ id: 'radius', shape: 'dot', position: add(c, r, obj.radius), direction: r });
-    }
-    return handles;
+  if (obj.kind === 'rod' && obj.form !== 'line') {
+    const r = rightAcross(camera, obj.axis);
+    return [{ id: 'radius', position: add(c, r, obj.radius), direction: r }];
   }
-  if (obj.kind === 'cut') {
-    const position = [0, 0, 0];
-    position[obj.axis] = obj.offset;
-    return [{ id: 'position', shape: 'arrow', position, direction: unitAxis(obj.axis), disabled: !obj.movable }];
-  }
-  if (obj.kind === 'plane') {
+  if (obj.kind === 'plane' && obj.form === 'slab') {
     const n = unitAxis(obj.axis);
-    const handles = [{ id: 'position', shape: 'arrow', position: c, direction: n }];
-    if (obj.form === 'slab') {
-      const along = rightAcross(camera, obj.axis);
-      handles.push({ id: 'thickness', shape: 'dot', position: add(add(c, n, obj.thickness / 2), along, THICKNESS_HANDLE_OFFSET), direction: n });
-    }
-    return handles;
+    const along = rightAcross(camera, obj.axis);
+    return [{ id: 'thickness', position: add(add(c, n, obj.thickness / 2), along, THICKNESS_HANDLE_OFFSET), direction: n }];
   }
   return [];
 }
 
-// Dragging a value along a line in space: the line through `origin` along
-// the unit vector `direction`, starting at `startValue`. Each pointer ray
+// Dragging a value along a line in space -- a handle, or a plane along its
+// normal: the line through `origin` along the unit vector `direction`,
+// starting at `startValue`. Each pointer ray
 // is turned into a distance along the line -- that of the line's point
 // closest to the ray -- and the value moves by however far that's moved
 // since the drag began (so grabbing a handle off-center doesn't make it

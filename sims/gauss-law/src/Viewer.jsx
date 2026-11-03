@@ -11,14 +11,14 @@ import { chargeColor } from './chargeTypes.js';
 import ChargedObject from './ChargedObject.jsx';
 import ObjectHandles from './ObjectHandles.jsx';
 import CutPlane from './CutPlane.jsx';
-import { objectHandles, LineDrag } from './handles.js';
+import { objectHandles, LineDrag, unitAxis } from './handles.js';
 import Axes from './Axes.jsx';
 import { AxisGizmo, CameraAnimator } from './AxisGizmo.jsx';
 import { axisViewOrientation, stopMomentum } from './cameraViews.js';
 import FieldLines from './FieldLines.jsx';
 import FieldArrows from './FieldArrows.jsx';
 import { CoordinateReadoutPanel, CoordinateReadoutTracker } from './CoordinateReadout.jsx';
-import { rayFromClient, pickCharge, pickObject, snapValue, clampToWorld, SNAP_STEP } from './geometry.js';
+import { rayFromClient, intersectAxisPlane, pickCharge, pickObject, snapValue, clampToWorld, SNAP_STEP } from './geometry.js';
 import { WORLD_HALF_EXTENT, CHARGE_RADIUS, PROBE_PICK_RADIUS, INITIAL_CAMERA_POSITION, INITIAL_CAMERA_TARGET, CAMERA_FOV, CLICK_MOVE_THRESHOLD, VIEW_CONTROLS_GIZMO_MARGIN } from './sceneConstants.js';
 
 // A directional light that rides along with the camera, so whatever side of
@@ -73,6 +73,26 @@ const PAN_TOUCHES = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
 const FLAT_HEIGHT = 12.5;
 const CUT_VIEW_DURATION = 1.0;
 
+// The coordinate readout while something's dragged (CoordinateReadout.jsx):
+// { position, axes } -- the coordinates that can change, floating over
+// where it was grabbed (`grab`, from the drag's start). A rod moves only
+// across itself, so it shows the two coordinates across it, at the point
+// along it where it was grabbed; a plane or the 2D cut moves only along
+// its normal, so it shows that one coordinate, at the point grabbed.
+function dragReadout(item, grab) {
+  if (item.kind === 'rod') {
+    const position = [...item.position];
+    position[item.axis] = grab?.along ?? 0;
+    return { position, axes: [0, 1, 2].filter((k) => k !== item.axis) };
+  }
+  if (item.kind === 'plane' || item.kind === 'cut') {
+    const position = [...(grab?.point ?? [0, 0, 0])];
+    position[item.axis] = item.kind === 'cut' ? item.offset : item.position[item.axis];
+    return { position, axes: [item.axis] };
+  }
+  return { position: item.position };
+}
+
 // charges: everything placed, [{ id, kind, ... }] (see chargeField.js).
 //   They're also the field's sources, as they are, and since App.jsx only
 //   makes a new array when a charge changes,
@@ -93,9 +113,9 @@ const CUT_VIEW_DURATION = 1.0;
 //   panel. Pressing on a charge selects it; clicking empty space deselects.
 // onMoveCharge(id, position) / onUpdateCharge(id, changes) /
 //   onDeleteCharge(id): edits to placed charges ('cut' for the 2D cut)
-// cut: the 2D cut, where it is (cutPlanes.js's placeCut), or null.
-//   Selected as 'cut', it has a handle that slides it along its axis
-//   (onMoveCut(offset)), when the charges allow that.
+// cut: the 2D cut, where it is (cutPlanes.js's placeCut), or null. It's
+//   selected as 'cut', and dragged along its axis (onMoveCut(offset)) when
+//   the charges allow that.
 // view2D: showing the cut in 2D: the camera turns to face it and flattens
 //   its perspective, and only the cut's field lines (or arrows) are drawn.
 // showGrid / showAxes / showField / fieldStyle ('lines' or 'arrows') /
@@ -116,6 +136,9 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
   const [hoveredId, setHoveredId] = useState(null);
   const [draggingId, setDraggingId] = useState(null);
   const dragRef = useRef(null);
+  // Where the dragged rod, plane or cut was grabbed, for the readout (see
+  // dragReadout): { along } for a rod, { point } for a plane or the cut.
+  const [dragGrab, setDragGrab] = useState(null);
   const readoutPanelRef = useRef(null);
 
 
@@ -226,42 +249,80 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
   // renders under the axis gizmo.
   useImperativeHandle(ref, () => ({ startPlacement, placementAt, liftPlacement, resetView }));
 
-  // Moves a placed charge, following the same ChargeDrag rules as a
-  // placement once it's been lifted: drag to slide it horizontally,
-  // Shift+drag to raise or lower it -- or in the 2D cut's view, within
-  // the cut. A probe moves the same way, with its own onMove and onDelete.
-  const startDrag = (charge, downEvent, { onMove = onMoveCharge, onDelete = onDeleteCharge } = {}) => {
-    const drag = new ChargeDrag(charge.position, view2D ? cut : null);
-    dragRef.current = { id: charge.id, drag };
-    setDraggingId(charge.id);
+  // The pointer's ray for a drag. Deliberately not rayAt(): a drag should
+  // keep working even while the pointer passes over an overlay (e.g. on
+  // its way to the trash).
+  const rayFor = (ev) => rayFromClient(controlsRef.current.object, wrapperRef.current.getBoundingClientRect(), ev.clientX, ev.clientY);
 
-    const update = (ev) => {
-      const controls = controlsRef.current;
-      if (!dragRef.current || !controls) return;
-      // Deliberately not rayAt(): the drag should keep working even while
-      // the pointer passes over an overlay (e.g. on its way to the trash).
-      const ray = rayFromClient(controls.object, wrapperRef.current.getBoundingClientRect(), ev.clientX, ev.clientY);
-      const before = drag.position;
-      const after = drag.update({ ray, camera: controls.object, shiftKey: ev.shiftKey, altKey: ev.altKey });
-      if (after !== before) onMove(charge.id, after);
-    };
+  // Calls update(event) for every pointer move until the button's released,
+  // then onRelease(event) -- and once straight away, with the press itself,
+  // so the drag anchors there and the very first pixels of movement count.
+  const followPointer = (downEvent, update, onRelease) => {
     const onUp = (ev) => {
       window.removeEventListener('pointermove', update);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
-      const d = dragRef.current;
-      dragRef.current = null;
-      setDraggingId(null);
-      // Dropping a charge on the sidebar's trash can deletes it.
-      if (d && document.elementFromPoint(ev.clientX, ev.clientY)?.closest('[data-role="trash-target"]')) {
-        onDelete(d.id);
-      }
+      onRelease(ev);
     };
     window.addEventListener('pointermove', update);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
-    // Anchor at the press itself, so the very first pixels of movement count.
     update(downEvent);
+  };
+  // The end of a drag. Whatever was dragged onto the sidebar's trash can is
+  // deleted (onDelete(id)).
+  const endDrag = (ev, onDelete) => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    setDraggingId(null);
+    setDragGrab(null);
+    if (d && document.elementFromPoint(ev.clientX, ev.clientY)?.closest('[data-role="trash-target"]')) onDelete(d.id);
+  };
+
+  // Moves a placed charge, following the same ChargeDrag rules as a
+  // placement once it's been lifted: drag to slide it horizontally,
+  // Shift+drag to raise or lower it -- or in the 2D cut's view, within
+  // the cut. A probe moves the same way, with its own onMove and onDelete,
+  // and so do a charged sphere and rod. A rod's position has no coordinate
+  // along its own length (normalizePosition drops it), so it moves only
+  // across itself: one along x slides along y, and with Shift, along z.
+  const startDrag = (charge, downEvent, { onMove = onMoveCharge, onDelete = onDeleteCharge } = {}) => {
+    const drag = new ChargeDrag(charge.position, view2D ? cut : null);
+    dragRef.current = { id: charge.id, drag };
+    setDraggingId(charge.id);
+    if (charge.kind === 'rod') {
+      const along = new LineDrag(charge.position, unitAxis(charge.axis), 0).along(rayFor(downEvent));
+      setDragGrab({ along: along === null ? 0 : clampToWorld(along) });
+    }
+    followPointer(downEvent, (ev) => {
+      if (!dragRef.current || !controlsRef.current) return;
+      const before = drag.position;
+      const after = drag.update({ ray: rayFor(ev), camera: controlsRef.current.object, shiftKey: ev.shiftKey, altKey: ev.altKey });
+      if (after !== before) onMove(charge.id, after);
+    }, (ev) => endDrag(ev, onDelete));
+  };
+
+  // Moves a charged plane, or the 2D cut, the one way it can go: along its
+  // normal (with or without Shift). It's dragged along the normal through
+  // the point grabbed, so that point follows the pointer (LineDrag); kept
+  // in the box, and snapped to whole cm unless Alt is held. (Looking
+  // straight along the normal, the pointer can't say how far along it it
+  // means, and the plane stays put.)
+  const startNormalDrag = (item, downEvent) => {
+    const { axis } = item;
+    const start = item.kind === 'cut' ? item.offset : item.position[axis];
+    const hit = intersectAxisPlane(rayFor(downEvent), axis, start);
+    const grab = hit ? hit.toArray() : unitAxis(axis).map((u) => (u ? start : 0));
+    const drag = new LineDrag(grab, unitAxis(axis), start);
+    dragRef.current = { id: item.id, drag };
+    setDraggingId(item.id);
+    setDragGrab({ point: grab });
+    followPointer(downEvent, (ev) => {
+      if (!dragRef.current) return;
+      const value = clampToWorld(drag.update(rayFor(ev), ev.altKey));
+      if (item.kind === 'cut') onMoveCut(value);
+      else onUpdateCharge(item.id, { position: unitAxis(axis).map((u) => (u ? value : 0)) });
+    }, (ev) => endDrag(ev, onDeleteCharge));
   };
 
   // Point charges are picked, dragged and drawn as ChargeMarkers; the
@@ -299,15 +360,12 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
     return null;
   };
 
-  // The selected sphere, rod, plane or 2D cut, whose handles (handles.js)
-  // are shown -- except while placing something or deleting, and in the
-  // 2D cut's view, any that would move something out of the cut (a handle
-  // along the cut's axis; the move handle drags within the cut). The cut
-  // itself isn't shown in 2D.
-  const handleHidden = (h) => view2D && cut && h.shape !== 'move' && Math.abs(h.direction[cut.axis]) > 1e-9;
-  const selectedObject = armedTypeId || removeMode || (view2D && selectedId === 'cut') ? null
-    : selectedId === 'cut' ? cutObject
-    : objects.find((c) => c.id === selectedId) ?? null;
+  // The selected sphere, rod or slab, whose size handles (handles.js) are
+  // shown -- except while placing something or deleting, and in the 2D
+  // cut's view, any that would take it out of the cut (one moving across
+  // the cut).
+  const handleHidden = (h) => view2D && cut && Math.abs(h.direction[cut.axis]) > 1e-9;
+  const selectedObject = armedTypeId || removeMode ? null : objects.find((c) => c.id === selectedId) ?? null;
   // The handle under the pointer, and the one being dragged, if any: { id,
   // label, value, position } -- the readout shows label = value, floating
   // above the handle's position.
@@ -340,18 +398,10 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
     return best;
   };
 
-  // Drags one of the selected object's handles. The move handle drags the
-  // object like a point charge (startDrag: sideways, or with Shift up and
-  // down, and onto the trash to delete it); the others drag a single value
-  // along their line (LineDrag), kept within the box and at least
-  // MIN_SIZE for a radius or thickness.
+  // Drags one of the selected object's size handles: a single value along
+  // its line (LineDrag), kept within the box and at least MIN_SIZE.
   const MIN_SIZE = SNAP_STEP / 2;
   const startHandleDrag = (obj, handle, downEvent) => {
-    if (handle.id === 'move') {
-      startDrag(obj, downEvent);
-      return;
-    }
-    const axis = obj.axis;
     const size = (v) => Math.min(2 * WORLD_HALF_EXTENT, Math.max(MIN_SIZE, v));
     // For each handle: where its line starts from and the value it drags,
     // how a new value changes the object, and the readout's label and
@@ -360,26 +410,10 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
     let apply;
     let label;
     let valueOf;
-    if (obj.kind === 'cut') {
-      drag = new LineDrag(handle.position, handle.direction, obj.offset);
-      apply = (v) => ({ offset: clampToWorld(v) });
-      [label, valueOf] = [['x', 'y', 'z'][axis], (o) => o.offset];
-    } else if (handle.id === 'lift') {
-      drag = new LineDrag(handle.position, handle.direction, obj.position[2]);
-      apply = (v) => ({ position: [obj.position[0], obj.position[1], clampToWorld(v)] });
-      [label, valueOf] = ['z', (o) => o.position[2]];
-    } else if (handle.id === 'radius') {
+    if (handle.id === 'radius') {
       drag = new LineDrag(handle.position, handle.direction, obj.radius);
       apply = (v) => ({ radius: size(v) });
       [label, valueOf] = ['r', (o) => o.radius];
-    } else if (handle.id === 'position') {
-      drag = new LineDrag(handle.position, handle.direction, obj.position[axis]);
-      apply = (v) => {
-        const position = [0, 0, 0];
-        position[axis] = clampToWorld(v);
-        return { position };
-      };
-      [label, valueOf] = [['x', 'y', 'z'][axis], (o) => o.position[axis]];
     } else {
       // Thickness: the face moves half as far as the thickness changes, so
       // the thickness is snapped rather than the face's position.
@@ -393,8 +427,7 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
       if (!controls) return;
       const ray = rayFromClient(controls.object, wrapperRef.current.getBoundingClientRect(), ev.clientX, ev.clientY);
       const changes = apply(drag.update(ray, ev.altKey), ev.altKey);
-      if (obj.kind === 'cut') onMoveCut(changes.offset);
-      else onUpdateCharge(obj.id, changes);
+      onUpdateCharge(obj.id, changes);
       const moved = { ...obj, ...changes };
       const h = objectHandles(moved, controls.object).find((x) => x.id === handle.id);
       setHandleDrag({ id: handle.id, label, value: valueOf(moved), position: h.position });
@@ -414,20 +447,16 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
   // Runs in the *capture* phase -- on the way down from the outer page
   // to the canvas, before the event reaches OrbitControls, which listens
   // on an element inside this wrapper. That ordering is what lets one
-  // left-drag mean two different things: on a point charge,
+  // left-drag mean two different things: on a charge, object or probe,
   // stopPropagation() here keeps OrbitControls from ever seeing the press,
-  // so the charge moves and the camera doesn't; on empty space it passes
-  // through untouched and the camera orbits.
+  // so it's selected and moves, and the camera doesn't; on empty space it
+  // passes through untouched and the camera orbits. (So does a press on
+  // the 2D cut where the charges pin it in place: it can't move, and it's
+  // only selected if the press turns out to be a click -- see
+  // handlePointerUp.)
   //
-  // An object isn't moved by dragging it (a big sphere or a plane covers
-  // so much of the view that the camera could hardly be turned), so a
-  // press on one passes through to OrbitControls too, and it's only
-  // selected (or, in delete mode, deleted) if the press turns out to be a
-  // click -- see handlePointerUp.
-  //
-  // Instead, a selected object has handles, which come first: a press on
-  // one is kept from OrbitControls, like a press on a point charge, and
-  // drags it.
+  // The selected object's size handles come first: a press on one drags
+  // it.
   //
   // While a charge is armed, this just records the press for
   // click-to-place's second click, which is likewise acted on at pointerup
@@ -458,18 +487,21 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
       pressRef.current = { target: 'empty', ...at };
       return;
     }
-    if (!picked.isPoint) {
-      pressRef.current = { target: 'object', id: picked.charge.id, ...at };
+    const item = picked.charge;
+    if (item.kind === 'cut' && !item.movable && !removeMode) {
+      pressRef.current = { target: 'object', id: item.id, ...at };
       return;
     }
-    pressRef.current = { target: 'point', ...at };
+    pressRef.current = { target: 'grabbed', ...at };
     e.stopPropagation();
     if (removeMode) {
-      (picked.isProbe ? onDeleteProbe : onDeleteCharge)(picked.charge.id);
+      (picked.isProbe ? onDeleteProbe : onDeleteCharge)(item.id);
       setHoveredId(null);
     } else {
-      onSelect(picked.charge.id);
-      startDrag(picked.charge, e, picked.isProbe ? probeHandlers : undefined);
+      onSelect(item.id);
+      if (picked.isProbe) startDrag(item, e, probeHandlers);
+      else if (item.kind === 'plane' || item.kind === 'cut') startNormalDrag(item, e);
+      else startDrag(item, e);
     }
   };
 
@@ -498,20 +530,22 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
   let readout = null;
   if (handleDrag) {
     readout = handleDrag;
-  } else {
-    const dragged = charges.find((c) => c.id === draggingId) ?? probes.find((p) => p.id === draggingId);
-    const position = dragged?.position ?? ghost?.position ?? null;
-    if (position) readout = { position };
+  } else if (draggingId != null) {
+    const dragged = charges.find((c) => c.id === draggingId) ?? probes.find((p) => p.id === draggingId) ?? (draggingId === 'cut' ? cutObject : null);
+    if (dragged) readout = dragReadout(dragged, dragGrab);
+  } else if (ghost) {
+    readout = { position: ghost.position };
   }
 
-  // Over a point charge, probe or handle: grab (it can be dragged). Over
-  // an object: a pointing hand (it can be clicked).
+  // Over anything that can be dragged -- a charge, object, probe or handle
+  // -- grab. Over the 2D cut where the charges pin it, or while deleting,
+  // a pointing hand (it can be clicked).
   let cursor;
   if (draggingId != null || handleDrag) cursor = 'grabbing';
   else if (hoveredHandleId) cursor = 'grab';
   else if (hoveredId != null && !armedTypeId) {
-    const isPoint = pointCharges.some((c) => c.id === hoveredId) || probes.some((p) => p.id === hoveredId);
-    cursor = removeMode || !isPoint ? 'pointer' : 'grab';
+    const pinnedCut = hoveredId === 'cut' && !cut?.movable;
+    cursor = removeMode || pinnedCut ? 'pointer' : 'grab';
   }
 
   const handlePointerUp = (e) => {
@@ -637,7 +671,7 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
         )}
       </Canvas>
 
-      {readout && <CoordinateReadoutPanel panelRef={readoutPanelRef} position={readout.position} label={readout.label} value={readout.value} />}
+      {readout && <CoordinateReadoutPanel panelRef={readoutPanelRef} position={readout.position} axes={readout.axes} label={readout.label} value={readout.value} />}
     </div>
   );
 }

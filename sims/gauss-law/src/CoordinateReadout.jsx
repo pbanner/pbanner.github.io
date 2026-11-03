@@ -41,14 +41,24 @@ function formatCoordinate(worldValue) {
 // tracker reveals it once it has been positioned, so it never flashes at
 // the corner of the screen for a frame.
 //
-// The panel shows `position` as (x, y, z) cm -- or, given a `label`, that
-// label and a single length `value` instead (e.g. "r = 3 cm", while a
-// handle drags a sphere's radius).
-export function CoordinateReadoutPanel({ panelRef, position, label, value }) {
-  const [x, y, z] = position.map(formatCoordinate);
+// The panel shows `position` as (x, y, z) cm -- or only the coordinates
+// in `axes`, for something that can only move in those (a plane along its
+// normal: "x = −4 cm"; a rod across itself: "(y, z) = (2, 0) cm") -- or,
+// given a `label`, that label and a single length `value` instead (e.g.
+// "r = 3 cm", while a handle drags a sphere's radius).
+const AXIS_NAMES = ['x', 'y', 'z'];
+function readoutText(position, axes, label, value) {
+  if (label) return `${label} = ${formatCoordinate(value)} cm`;
+  const names = axes.map((k) => AXIS_NAMES[k]);
+  const values = axes.map((k) => formatCoordinate(position[k]));
+  if (axes.length === 1) return `${names[0]} = ${values[0]} cm`;
+  if (axes.length === 2) return `(${names.join(', ')}) = (${values.join(', ')}) cm`;
+  return `(${values.join(', ')}) cm`;
+}
+export function CoordinateReadoutPanel({ panelRef, position, axes = [0, 1, 2], label, value }) {
   return (
     <div ref={panelRef} className="coordinate-readout">
-      {label ? `${label} = ${formatCoordinate(value)} cm` : `(${x}, ${y}, ${z}) cm`}
+      {readoutText(position, axes, label, value)}
     </div>
   );
 }
