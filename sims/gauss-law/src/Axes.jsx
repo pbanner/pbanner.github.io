@@ -24,12 +24,12 @@ function AxisLabel({ text, color, position }) {
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 128;
     const ctx = canvas.getContext('2d');
-    ctx.font = 'italic bold 96px "Times New Roman", Times, serif';
+    ctx.font = 'italic bold 128px "Palatino Linotype", Times, serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.lineWidth = 10;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'; // white halo for legibility over whatever is behind it
-    ctx.strokeText(text, 64, 64);
+    //ctx.lineWidth = 0;
+    //ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'; // white halo for legibility over whatever is behind it
+    //ctx.strokeText(text, 64, 64);
     ctx.fillStyle = color;
     ctx.fillText(text, 64, 64);
     const t = new THREE.CanvasTexture(canvas);
