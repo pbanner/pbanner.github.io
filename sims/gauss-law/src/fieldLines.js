@@ -136,6 +136,29 @@ function rk4Step(p, sources, sign, h) {
   return [0, 1, 2].map((i) => p[i] + (h / 6) * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]));
 }
 
+// The first of the sinks' surfaces (shells and sheets) that a straight
+// step from p along the unit direction d crosses within length h, as
+// { distance, reached }: how far along it is, and whether the line
+// reaches it -- whether, just short of where the step crosses it, the
+// field (times sign) points into it. Null if the step crosses none.
+function surfaceAhead(p, d, h, sinks, sources, sign) {
+  const end = add(p, d, h);
+  let first = null;
+  for (const { geometry } of sinks) {
+    if (!geometry.surface) continue;
+    const { level, normal } = geometry.surface;
+    const [g0, g1] = [level(p), level(end)];
+    if (g0 < 0 === g1 < 0) continue;
+    const distance = (h * g0) / (g0 - g1);
+    if (first && first.distance <= distance) continue;
+    const crossing = add(p, d, distance);
+    const n = normal(crossing).map((c) => (g1 > g0 ? c : -c)); // along the step
+    const reached = sign * dot(fieldAt(add(crossing, n, -SURFACE_OFFSET), sources), n) > 0;
+    first = { distance, reached };
+  }
+  return first;
+}
+
 // The point straight ahead of p, along the unit direction d, where the
 // field stops pointing forward along d (E . d changes sign) -- the point
 // where the field vanishes that a line stopping at p was heading into --
@@ -180,6 +203,8 @@ function clipToCube(a, b, half) {
 // How far either side of a surface the field is sampled, to compare it
 // on the two sides.
 const SURFACE_OFFSET = 1e-4;
+// How close to a surface counts as on it.
+const ON_SURFACE = 1e-9;
 
 // Traces one line from `start`, along E if sign is +1, against it if -1.
 // Returns { points, endsAt }, where endsAt is the index of the charge the
@@ -228,16 +253,30 @@ function traceLine(start, startIndex, sources, sign, { halfExtent, chargeRadius,
       }
       break;
     }
-    const h = Math.max(MIN_STEP, Math.min(MAX_STEP, STEP_PER_DISTANCE * nearest, NULL_STEP_FACTOR * ratio));
-    // If the field vanishes somewhere RK4 samples it -- say just past a
-    // charged surface with no field beyond it, like a capacitor's plate --
-    // a plain straight step still carries the line across, so it can end
-    // on that surface (below).
-    let next = rk4Step(p, sources, sign, h);
-    if (!next) {
-      const d = directionAt(p, sources, sign);
-      if (!d) break; // the field vanished
-      next = add(p, d, h);
+    let h = Math.max(MIN_STEP, Math.min(MAX_STEP, STEP_PER_DISTANCE * nearest, NULL_STEP_FACTOR * ratio));
+    const ahead = directionAt(p, sources, sign);
+    if (!ahead) break; // the field vanished
+    // A charged surface the line could end on, within a step. An RK4 step
+    // would sample the field on both sides of it, and the field jumps
+    // there; where it points into the surface from both sides (so the
+    // surface takes in every line that reaches it), the samples' parts
+    // across it cancel, and the line would skate along the surface instead
+    // of reaching it. So if the line does reach it -- the field just short
+    // of it points into it -- step straight to just past it, and let the
+    // check below decide whether the line ends there. If not, the line
+    // turns away before it: take a step short of it.
+    const surface = surfaceAhead(p, ahead, h, sinks, sources, sign);
+    if (surface && !surface.reached) h = Math.max(MIN_STEP, 0.9 * surface.distance);
+    let next;
+    let stepLength = h;
+    if (surface?.reached) {
+      stepLength = surface.distance + SURFACE_OFFSET;
+      next = add(p, ahead, stepLength);
+    } else {
+      // If the field vanishes somewhere RK4 samples it -- say just past a
+      // charged surface with no field beyond it, like a capacitor's plate
+      // -- a plain straight step still carries the line on.
+      next = rk4Step(p, sources, sign, h) ?? add(p, ahead, h);
     }
     if (cut) next[cut.axis] = cut.offset;
     // A backstop for the null-point check above: stepping past a point
@@ -250,8 +289,10 @@ function traceLine(start, startIndex, sources, sign, { halfExtent, chargeRadius,
     // A step that leaves the box is cut short at the box's face first, so
     // a line ending inside an object on the way out still ends in the box.
     const leaving = !inside(next, halfExtent);
-    if (leaving) next = clipToCube(p, next, halfExtent);
-    const stepLength = leaving ? Math.hypot(...sub(next, p)) : h;
+    if (leaving) {
+      next = clipToCube(p, next, halfExtent);
+      stepLength = Math.hypot(...sub(next, p));
+    }
     for (const { index, geometry } of sinks) {
       if (geometry.line) {
         // A thin rod: lines end on its axis, like on a point charge.
@@ -262,6 +303,21 @@ function traceLine(start, startIndex, sources, sign, { halfExtent, chargeRadius,
       } else if (geometry.surface) {
         const { level, normal } = geometry.surface;
         const [g0, g1] = [level(p), level(next)];
+        if (Math.abs(g0) < ON_SURFACE && Math.abs(g1) < ON_SURFACE) {
+          // Running along the surface itself: it started on it, and
+          // nothing pushes it off (the arrangement is symmetric about it).
+          // If the field on both sides points into the surface, the
+          // surface takes in this line's flux right here.
+          const n = normal(p);
+          const alongNormal = (q) => sign * dot(fieldAt(q, sources), n);
+          const intoFromFront = alongNormal(add(p, n, SURFACE_OFFSET)) < 0; // on the normal's side, pointing back
+          const intoFromBack = alongNormal(add(p, n, -SURFACE_OFFSET)) > 0; // on the other side, pointing at it
+          if (intoFromFront && intoFromBack) {
+            points.push(next);
+            return { points, endsAt: index };
+          }
+          continue;
+        }
         if (g0 < 0 === g1 < 0) continue; // didn't cross it
         const crossing = add(p, sub(next, p), g0 / (g0 - g1));
         const n = normal(crossing).map((c) => (g1 > g0 ? c : -c)); // along the line's travel
@@ -287,7 +343,7 @@ function traceLine(start, startIndex, sources, sign, { halfExtent, chargeRadius,
     }
     points.push(next);
     p = next;
-    length += h;
+    length += stepLength;
     // Ran into a charge? (The starting charge counts too, in case a line
     // loops back to it, but only once the line has actually left it.)
     for (let j = 0; j < sources.length; j++) {
