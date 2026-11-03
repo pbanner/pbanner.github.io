@@ -4,6 +4,7 @@ import { OrbitControls, Line } from '@react-three/drei';
 import ThickArrowHelper from './ThickArrowHelper.jsx';
 import { ketWidth, drawKet } from './ket.js';
 import Histogram from './Histogram.jsx';
+import NumberInput from './NumberInput.jsx';
 import * as THREE from 'three';
 import './App.css';
 
@@ -253,14 +254,19 @@ function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, max, step
           style={{ flex: 1 }}
           disabled={disabled}
         />
-        <input
-          type="number"
+        {/* Typing is saved once it's finished (on leaving the box, or
+            Enter); a step with an arrow or the up or down key -- a change
+            with no inputType -- is saved at once. */}
+        <NumberInput
           min={min}
           max={max}
           step={step}
           value={displayValue}
           onFocus={() => { setTextValue(valueNum); setEditing(true); }}
-          onChange={(e) => setTextValue(e.target.value)}
+          onChange={(e) => {
+            setTextValue(e.target.value);
+            if (!e.nativeEvent.inputType) commitText(e.target.value);
+          }}
           onBlur={() => { setEditing(false); commitText(textValue); }}
           onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
           style={{ width: '70px', padding: '2px' }}
