@@ -2,6 +2,7 @@ import React, { useLayoutEffect, useEffect, useMemo, useRef, useState } from 're
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line } from '@react-three/drei';
 import ThickArrowHelper from './ThickArrowHelper.jsx';
+import NumberInput from '../NumberInput.jsx';
 import * as THREE from 'three';
 
 // ---- Physical parameters ----
@@ -155,8 +156,7 @@ function AngleSliderRow({ label, valueDeg, onChangeDeg, min, max }) {
         onChange={(e) => onChangeDeg(parseFloat(e.target.value))}
         style={{ flex: 1 }}
       />
-      <input
-        type="number"
+      <NumberInput
         value={valueDeg}
         min={min}
         max={max}

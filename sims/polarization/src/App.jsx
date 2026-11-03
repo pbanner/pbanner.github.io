@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import './App.css';
 import Panel2 from './panels/Panel2';
 import Panel3 from './panels/Panel3';
+import NumberInput from './NumberInput';
 
 const toDeg = (rad) => rad * (180 / Math.PI);
 const toRad = (deg) => deg * (Math.PI / 180);
@@ -29,14 +30,19 @@ function AngleControl({ label, valueDeg, onChangeDeg, min, max, step }) {
           onChange={(e) => onChangeDeg(parseFloat(e.target.value))}
           style={{ flex: 1 }}
         />
-        <input
-          type="number"
+        {/* Typing is saved once it's finished (on leaving the box, or
+            Enter); a step with an arrow or the up or down key -- a change
+            with no inputType -- is saved at once. */}
+        <NumberInput
           min={min}
           max={max}
           step={step}
           value={displayValue}
           onFocus={() => { setTextValue(valueDeg); setEditing(true); }}
-          onChange={(e) => setTextValue(e.target.value)}
+          onChange={(e) => {
+            setTextValue(e.target.value);
+            if (!e.nativeEvent.inputType) commitText(e.target.value);
+          }}
           onBlur={() => { setEditing(false); commitText(textValue); }}
           onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
           style={{ width: '70px', padding: '2px' }}
