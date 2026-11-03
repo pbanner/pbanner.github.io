@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from 'react';
+import NumberInput from './NumberInput.jsx';
 
 // Layout -- all tunable
 const RULER_WIDTH = 66;
@@ -186,13 +187,19 @@ export default function WaveplateAngleControl({ angle, onChangeAngle, onSweepCli
             Sweep Angle…
           </button>
         )}
-        <input
-          type="number"
-          step="0.1"
+        {/* Its arrows (and the up and down keys) step a whole degree;
+            typing is still saved to a tenth. Typing is saved once it's
+            finished (on leaving the box, or Enter); a step -- a change with
+            no inputType -- is saved at once. */}
+        <NumberInput
+          step="1"
           className="waveplate-angle-readout"
           value={displayValue}
           onFocus={() => { setTextValue(angle.toFixed(1)); setEditing(true); }}
-          onChange={(e) => setTextValue(e.target.value)}
+          onChange={(e) => {
+            setTextValue(e.target.value);
+            if (!e.nativeEvent.inputType) commitText(e.target.value);
+          }}
           onBlur={() => { setEditing(false); commitText(textValue); }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') e.currentTarget.blur();

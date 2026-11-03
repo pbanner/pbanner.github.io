@@ -10,6 +10,7 @@ import { getComponentType } from './componentTypes.js';
 import { PC_COLORS } from './colors.js';
 import { StopIcon } from './controls.jsx';
 import { compileTrialFunction } from './sweepMath.js';
+import NumberInput from './NumberInput.jsx';
 
 const SWEEP_MAX_POINTS = 2000; // a hard backstop against a typo (e.g. a near-zero step) hanging the browser, not a pedagogical limit -- see SweepSpecModal's own comment
 const SWEEP_MAX_SHOTS_PER_POINT = 10000;
@@ -97,21 +98,21 @@ export function SweepSpecModal({ component, initialConfig, onCancel, onStart }) 
             <label className="sweep-modal-field">
               <span>Start</span>
               <div className="sweep-modal-field-input">
-                <input type="number" value={start} onChange={(e) => setStart(e.target.value)} placeholder="0" />
+                <NumberInput value={start} onChange={(e) => setStart(e.target.value)} placeholder="0" />
                 <span style={{ fontSize: '18px' }}>°</span>
               </div>
             </label>
             <label className="sweep-modal-field">
               <span>Stop</span>
               <div className="sweep-modal-field-input">
-                <input type="number" value={stop} onChange={(e) => setStop(e.target.value)} placeholder="360" />
+                <NumberInput value={stop} onChange={(e) => setStop(e.target.value)} placeholder="360" />
                 <span style={{ fontSize: '18px' }}>°</span>
               </div>
             </label>
             <label className="sweep-modal-field">
               <span>Step</span>
               <div className="sweep-modal-field-input">
-                <input type="number" value={step} onChange={(e) => setStep(e.target.value)} placeholder="10" />
+                <NumberInput value={step} onChange={(e) => setStep(e.target.value)} placeholder="10" />
                 <span style={{ fontSize: '18px' }}>°</span>
               </div>
             </label>
@@ -125,7 +126,7 @@ export function SweepSpecModal({ component, initialConfig, onCancel, onStart }) 
 
         <label className="sweep-modal-field sweep-modal-shots-field">
           <span>Shots per point</span>
-          <input type="number" min="1" step="1" value={shotsText} onChange={(e) => setShotsText(e.target.value)} />
+          <NumberInput min="1" step="1" value={shotsText} onChange={(e) => setShotsText(e.target.value)} />
         </label>
 
         <p className="sweep-modal-readout">

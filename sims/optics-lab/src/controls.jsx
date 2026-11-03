@@ -2,6 +2,8 @@
 // their own module (mirroring the Stern-Gerlach sim's controls.jsx) so any
 // panel can reuse them without the panels importing each other's internals.
 
+import NumberInput from './NumberInput.jsx';
+
 // `vertical` swaps the default label-above-(slider+textbox side by side)
 // layout for label-above-slider-above-textbox, with the slider itself
 // running top-to-bottom over `verticalLength` px (see .vertical-range-wrap
@@ -23,8 +25,7 @@ export function SliderPlusTextboxControl({ label, valueNum, onChangeNum, min, ma
     />
   );
   const textbox = (
-    <input
-      type="number"
+    <NumberInput
       min={min}
       max={max}
       step={step}
