@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
-import { Billboard, Html } from '@react-three/drei';
+import { Billboard, Html, Line } from '@react-three/drei';
 import * as THREE from 'three';
-import { AXIS_COLORS, SELECTION_COLOR } from './sceneConstants.js';
+import { AXIS_COLORS, SELECTION_COLOR, WORLD_HALF_EXTENT, CHARGE_RADIUS } from './sceneConstants.js';
 import { fieldStrengthFraction } from './fieldArrows.js';
+import { fieldLineThrough } from './fieldLines.js';
 import { PositionGuides } from './ChargeMarker.jsx';
 
 // Sizes, in world units (1 world unit = 2 cm). The rings sit just outside
@@ -135,4 +136,18 @@ export default function ProbeMarker({ position, label = null, reading, ghost = f
       {showGuides && <PositionGuides position={position} />}
     </>
   );
+}
+
+// The field line through a probe (fieldLines.js's fieldLineThrough), in
+// the probe's color and thicker than the other field lines, so it stands
+// out among them; the probe's arrow lies along it. Traced again only when
+// the probe or the charges move. sources: everything charged. cut: the 2D
+// cut while it's viewed (the line is held in it), or null.
+export function ProbeFieldLine({ position, sources, cut = null }) {
+  const points = useMemo(
+    () => fieldLineThrough(position, sources, { halfExtent: WORLD_HALF_EXTENT, chargeRadius: CHARGE_RADIUS, cut }),
+    [position, sources, cut],
+  );
+  if (!points) return null;
+  return <Line points={points} color={PROBE_COLOR} lineWidth={3} />;
 }

@@ -3,11 +3,11 @@
 // panel lists their readings. Plain JS, no React.
 //
 // A probe isn't a charge: it doesn't add to the field, and no field lines
-// start or end on it. Each is { id, label, position, showComponents }: id
-// 'probe-1', 'probe-2', ... (charges' ids are numbers, so the two never
-// clash in the one selection), label a letter from A to Z, position in
-// world units, placed and dragged just like a point charge, and what it
-// shows besides its arrow, set in its properties panel.
+// start or end on it. Each is { id, label, position, showComponents,
+// showFieldLine }: id 'probe-1', 'probe-2', ... (charges' ids are numbers,
+// so the two never clash in the one selection), label a letter from A to
+// Z, position in world units, placed and dragged just like a point charge,
+// and what it shows besides its arrow, set in its properties panel.
 import { fieldAt } from './chargeField.js';
 
 // What the sidebar's probe button places (in the same form as

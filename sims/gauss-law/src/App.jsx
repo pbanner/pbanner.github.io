@@ -136,7 +136,7 @@ export default function App() {
     if (!placeable(typeId, position)) return;
     if (isProbeType(typeId)) {
       const id = `probe-${nextProbeIdRef.current++}`;
-      setProbes((prev) => [...prev, { id, label: nextProbeLabel(prev), position, showComponents: false }]);
+      setProbes((prev) => [...prev, { id, label: nextProbeLabel(prev), position, showComponents: false, showFieldLine: false }]);
       setSelectedId(id);
       return;
     }

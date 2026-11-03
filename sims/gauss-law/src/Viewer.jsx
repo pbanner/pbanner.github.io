@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { OrbitControls, GizmoHelper } from '@react-three/drei';
 import { ChargeDrag } from './chargeDrag.js';
 import ChargeMarker from './ChargeMarker.jsx';
-import ProbeMarker from './ProbeMarker.jsx';
+import ProbeMarker, { ProbeFieldLine } from './ProbeMarker.jsx';
 import { probeReading, probeInCut } from './probes.js';
 import ChargedObject from './ChargedObject.jsx';
 import ObjectHandles from './ObjectHandles.jsx';
@@ -573,18 +573,25 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
           <ChargedObject key={obj.id} charge={obj} selected={obj.id === selectedId} />
         ))}
 
-        {shownProbes.map((probe) => (
-          <ProbeMarker
-            key={probe.id}
-            position={probe.position}
-            label={probe.label}
-            reading={probeReading(charges, probe.position)}
-            highlighted={probe.id === draggingId || (draggingId == null && probe.id === hoveredId)}
-            selected={probe.id === selectedId}
-            showGuides={probe.id === draggingId}
-            showComponents={probe.showComponents}
-          />
-        ))}
+        {shownProbes.map((probe) => {
+          const reading = probeReading(charges, probe.position);
+          return (
+            <group key={probe.id}>
+              <ProbeMarker
+                position={probe.position}
+                label={probe.label}
+                reading={reading}
+                highlighted={probe.id === draggingId || (draggingId == null && probe.id === hoveredId)}
+                selected={probe.id === selectedId}
+                showGuides={probe.id === draggingId}
+                showComponents={probe.showComponents}
+              />
+              {/* Where the field has no single value, neither does its
+                  line. */}
+              {probe.showFieldLine && reading.field && <ProbeFieldLine position={probe.position} sources={charges} cut={view2D ? cut : null} />}
+            </group>
+          );
+        })}
 
         {cut && !view2D && <CutPlane cut={cut} charges={charges} selected={selectedId === 'cut'} />}
 

@@ -415,6 +415,14 @@ const unit = (v) => {
 // the lines lying in the cut are traced: starting in directions around a
 // circle in it rather than over a sphere, and from the objects' seeds in
 // it (cutLines.js).
+// The objects a line can end in: negatively charged ones for lines traced
+// along E (sign +1), positive ones for lines traced against it (-1).
+function sinksFor(sources, sign) {
+  return sources
+    .map((source, index) => ({ index, geometry: source.kind !== 'point' && chargeSign(source) === -sign ? sinkGeometry(source) : null }))
+    .filter((s) => s.geometry);
+}
+
 export function computeFieldLines(sources, { density, halfExtent, chargeRadius, cut = null }) {
   const linesPerUnitCharge = LINES_PER_UNIT_CHARGE[density - 1];
   // A point charge's starting directions and their thresholds.
@@ -468,12 +476,7 @@ export function computeFieldLines(sources, { density, halfExtent, chargeRadius, 
     }
     return extraFor[i];
   };
-  // The objects a line can end in: negatively charged ones for lines
-  // traced along E, positive ones for lines traced against it.
-  const sinksFor = (sign) => sources
-    .map((source, index) => ({ index, geometry: source.kind !== 'point' && chargeSign(source) === -sign ? sinkGeometry(source) : null }))
-    .filter((s) => s.geometry);
-  const sinks = { [+1]: sinksFor(+1), [-1]: sinksFor(-1) };
+  const sinks = { [+1]: sinksFor(sources, +1), [-1]: sinksFor(sources, -1) };
   const lines = [];
   // For each charge, the directions (from its center) of the lines arriving
   // at it from positive charges.
@@ -686,4 +689,22 @@ export function arrowheadsAlong(lines, spacing) {
     }
   }
   return arrows;
+}
+
+// The field line through a point -- a field probe's (see probes.js) --
+// traced both ways from it: back against E to where it starts, and on
+// along E to where it ends, as one line, ordered along E. It's the true
+// field line through that point, not one of the drawn lines with its
+// share of the flux, so it doesn't end partway into a charged object the
+// way a drawn line can (its threshold, traceLine's u, is as low as it
+// goes): only on a point charge or thin rod, on a charged surface that
+// takes in everything reaching it, where the field vanishes, or at the
+// box's edge. Null if it goes nowhere (the field vanishes at the point).
+const TRUE_LINE_THRESHOLD = 1e-9;
+export function fieldLineThrough(point, sources, { halfExtent, chargeRadius, cut = null }) {
+  const options = { halfExtent, chargeRadius, cut };
+  const along = traceLine(point, -1, sources, +1, options, sinksFor(sources, +1), TRUE_LINE_THRESHOLD).points;
+  const against = traceLine(point, -1, sources, -1, options, sinksFor(sources, -1), TRUE_LINE_THRESHOLD).points;
+  if (along.length < 2 && against.length < 2) return null;
+  return [...against.reverse(), ...along.slice(1)];
 }
