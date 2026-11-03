@@ -46,19 +46,24 @@ function RowLabel({ text, unit = 'cm' }) {
   );
 }
 
-// A number box with up and down arrows -- the browser's own number box,
-// as in the other sims -- in cm. Typing is a draft, shown just as typed,
-// until Enter or leaving the box commits it (committing every keystroke
-// would move a charge to 1 on the way to 12); text that isn't a number
-// puts the old value back. A step with the arrows, or the up and down
-// keys, commits at once: those are the changes with no inputType, which
-// only typing, pasting and deleting have. Either way the value is kept to
-// [min, max].
+// A number box with up and down arrows, in cm. The box itself is the
+// browser's own number box -- so the up and down keys step it, and a
+// tablet or phone offers a keyboard with digits -- but its arrows are drawn
+// here: Safari on an iPad or iPhone doesn't draw a number box's arrows at
+// all, so the browser's are hidden (App.css) and these stand in for them
+// everywhere.
 //
-// The arrows step by 1 cm, to whole multiples of it counted from
-// `stepBase` (the box's own min, as far as the browser knows: 0 for a
-// size, so a radius steps 1, 2, 3 rather than from its least, 0.5).
-// `disabled` grays it out.
+// Typing is a draft, shown just as typed, until Enter or leaving the box
+// commits it (committing every keystroke would move a charge to 1 on the
+// way to 12); text that isn't a number puts the old value back. A step --
+// an arrow, or the up or down key -- commits at once. (The keys change the
+// box with no inputType, which only typing, pasting and deleting have.)
+// Either way the value is kept to [min, max].
+//
+// A step is 1 cm, to the next whole multiple of it counted from
+// `stepBase`, as the browser's own arrows would step: 0 for a size, so a
+// radius steps 1, 2, 3 rather than from its least, 0.5, and 2.75 steps up
+// to 3 or down to 2. `disabled` grays it out.
 function NumberField({ label, cm, min, max, onCommit, disabled = false, stepBase = min }) {
   const [draft, setDraft] = useState(null);
   const commitValue = (text) => {
@@ -66,26 +71,47 @@ function NumberField({ label, cm, min, max, onCommit, disabled = false, stepBase
     setDraft(null);
     if (Number.isFinite(value)) onCommit(Math.min(max, Math.max(min, value)));
   };
+  const stepBy = (direction) => {
+    const current = Number.parseFloat(draft ?? formatCm(cm));
+    if (!Number.isFinite(current)) return;
+    const steps = current - stepBase;
+    const next = stepBase + (direction > 0 ? Math.floor(steps + 1e-9) + 1 : Math.ceil(steps - 1e-9) - 1);
+    commitValue(String(next));
+  };
   return (
-    <label className="number-field">
-      <span>{label}</span>
-      <input
-        type="number"
-        min={stepBase}
-        max={max}
-        step={1}
-        value={draft ?? formatCm(cm)}
-        disabled={disabled}
-        onChange={(e) => {
-          if (e.nativeEvent.inputType) setDraft(e.target.value);
-          else commitValue(e.target.value);
-        }}
-        onBlur={() => { if (draft !== null) commitValue(draft); }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur();
-        }}
-      />
-    </label>
+    <span className="number-field">
+      <label>
+        <span>{label}</span>
+        <input
+          type="number"
+          min={stepBase}
+          max={max}
+          step={1}
+          value={draft ?? formatCm(cm)}
+          disabled={disabled}
+          onChange={(e) => {
+            if (e.nativeEvent.inputType) setDraft(e.target.value);
+            else commitValue(e.target.value);
+          }}
+          onBlur={() => { if (draft !== null) commitValue(draft); }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur();
+          }}
+        />
+      </label>
+      {/* Outside the label, so the arrows aren't read out as part of the
+          box's name; and left out of the Tab order (the up and down keys
+          step a focused box). */}
+      <span className="number-arrows">
+        {[[+1, 'Increase'], [-1, 'Decrease']].map(([direction, action]) => (
+          <button key={direction} type="button" tabIndex={-1} aria-label={`${action} ${label}`.trim()} disabled={disabled} onClick={() => stepBy(direction)}>
+            <svg width="8" height="5" viewBox="0 0 8 5" aria-hidden="true" style={{ display: 'block', transform: direction > 0 ? undefined : 'rotate(180deg)' }}>
+              <path d="M0 5 4 0 8 5Z" fill="currentColor" />
+            </svg>
+          </button>
+        ))}
+      </span>
+    </span>
   );
 }
 

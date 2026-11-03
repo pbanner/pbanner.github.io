@@ -559,21 +559,91 @@ input[type="range"]::-moz-range-track {
   gap: 6px;
 }
 
-.overlay-controls .number-field {
+/* A number box (PropertiesPanel.jsx's NumberField): its axis name and
+   box, in a label, then its up and down arrows, joined to the box's right
+   side. */
+.number-field {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.overlay-controls .number-field label {
   gap: 3px;
   cursor: default;
 }
 
-/* As wide as the box was without arrows, plus room for the arrows (the
-   browser's own, about 15 px), so the number never hides behind them. */
+/* The box and its arrows together are 4em wide; the arrows take 16 px.
+   `appearance: textfield` hides Firefox's own arrows, and the rule below
+   the other browsers': NumberField draws its own, since Safari on an iPad
+   or iPhone has none. */
 .number-field input {
-  width: 4.0em;
+  width: calc(4em - 16px);
   padding: 2px 4px;
   border: 1px solid #bbb;
-  border-radius: 4px;
+  border-radius: 4px 0 0 4px;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   text-align: left;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.number-field input::-webkit-inner-spin-button,
+.number-field input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* The arrows: a column of two buttons as tall as the box. */
+.number-arrows {
+  display: flex;
+  flex-direction: column;
+}
+
+.number-arrows button {
+  flex: 1;
+  width: 16px;
+  padding: 0;
+  border: 1px solid #bbb;
+  border-left: none;
+  background: #f4f5f7;
+  color: #555;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.number-arrows button:first-child {
+  border-radius: 0 4px 0 0;
+}
+
+.number-arrows button:last-child {
+  border-top: none;
+  border-radius: 0 0 4px 0;
+}
+
+.number-arrows button:hover:not(:disabled) {
+  background: #e4e7eb;
+  color: #222;
+}
+
+.number-arrows button:active:not(:disabled) {
+  background: #d6dade;
+}
+
+.number-arrows button:disabled {
+  color: #c3c7cc;
+  cursor: default;
+}
+
+/* On a touchscreen, taller boxes, so each arrow is a bigger target for a
+   finger. */
+@media (pointer: coarse) {
+  .number-field input {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
 }
 
 .segmented button:disabled {
