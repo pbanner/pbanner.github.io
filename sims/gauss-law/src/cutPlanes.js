@@ -33,7 +33,7 @@
 // plane containing a -- the whole arrangement is the same all along a, so
 // every such cut shows exactly the same picture.
 
-// Offsets closer than this are the same (positions are snapped to ticks,
+// Offsets closer than this are the same (positions are snapped to the grid,
 // but a charge placed with Alt can be anywhere).
 const SAME_OFFSET = 1e-6;
 

@@ -88,7 +88,7 @@ export function objectHandles(obj, camera) {
 // is turned into a distance along the line -- that of the line's point
 // closest to the ray -- and the value moves by however far that's moved
 // since the drag began (so grabbing a handle off-center doesn't make it
-// jump). Snapped to whole ticks unless Alt is held, like everything else
+// jump). Snapped to whole cm unless Alt is held, like everything else
 // -- or with `snap`, some other way (a slab's face moves half as far as
 // its thickness changes, so its thickness is snapped instead).
 export class LineDrag {

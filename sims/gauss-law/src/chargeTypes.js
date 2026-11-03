@@ -3,19 +3,20 @@
 //
 // Everything placed is { id, kind, position: [x, y, z], ... } (chargeField.js
 // computes each kind's field):
-//   point   { q }                            q in units of q
+//   point   { q }                            q in nC
 //   sphere  { radius, form, q }              form 'shell' or 'solid'; q is
-//                                            its total charge
+//                                            its total charge, in nC
 //   rod     { axis, radius, form, lambda }   infinite, along axis 0, 1 or
 //                                            2 (x, y or z); form 'line',
 //                                            'shell' or 'solid'; lambda in
-//                                            q per tick of length
+//                                            nC per cm of length
 //   plane   { axis, thickness, form, sigma } infinite, perpendicular to
 //                                            axis 0, 1 or 2; form 'sheet'
-//                                            or 'slab'; sigma in q per
-//                                            tick^2 of area
+//                                            or 'slab'; sigma in nC per
+//                                            cm^2 of area
 // Lengths (position, radius, thickness) are in world units, like every
-// position in the scene; the properties panel shows them in ticks. A rod's
+// position in the scene; the properties panel shows them in cm (see
+// geometry.js's CM). A rod's
 // position is where its axis crosses the plane perpendicular to it (the
 // axis coordinate is always 0), and a plane's is where it crosses its
 // axis (the other two coordinates are always 0).
@@ -24,15 +25,15 @@ export const MAX_CHARGE_STEPS = 5;
 // Each kind's charge comes in whole steps, from -MAX_CHARGE_STEPS to
 // +MAX_CHARGE_STEPS but never 0 (no charge at all). Rods and planes are
 // infinite, so their charge is set as a density; its step is chosen so
-// the part of the rod (20 ticks long) or plane (20 x 20 ticks) inside the
-// box holds a whole number of q: 1 q per step for a rod, 2 q for a plane.
+// the part of the rod (20 cm long) or plane (20 x 20 cm) inside the box
+// holds a whole number of nC: 1 nC per step for a rod, 2 nC for a plane.
 // Field lines are drawn in proportion to charge, so that keeps their
 // counts whole.
 export const CHARGE_SETTINGS = {
-  point: { key: 'q', step: 1, unit: 'q' },
-  sphere: { key: 'q', step: 1, unit: 'q' },
-  rod: { key: 'lambda', step: 0.05, unit: 'q/tick' },
-  plane: { key: 'sigma', step: 0.005, unit: 'q/tick²' },
+  point: { key: 'q', step: 1, unit: 'nC' },
+  sphere: { key: 'q', step: 1, unit: 'nC' },
+  rod: { key: 'lambda', step: 0.05, unit: 'nC/cm' },
+  plane: { key: 'sigma', step: 0.005, unit: 'nC/cm²' },
 };
 
 // A charge's setting in whole steps (+3, -1, ...), and a copy of it with
@@ -67,7 +68,7 @@ export function chargeSignText(q) {
 
 // The sidebar's buttons. A new point charge is +1 or -1; a new object is
 // positively charged, one step's worth, sized and turned as below
-// (lengths in world units: 1 world unit is 2 ticks).
+// (lengths in world units: 1 world unit is 2 cm).
 export const CHARGE_TYPES = [
   { id: 'positive', label: 'Positive Charge', kind: 'point', defaults: { q: +1 } },
   { id: 'negative', label: 'Negative Charge', kind: 'point', defaults: { q: -1 } },

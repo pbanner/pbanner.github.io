@@ -26,9 +26,9 @@
 //     N lambda / pi lines per unit length on each side of it;
 //   - a charged plane crossing the cut along a line: its field is 2 pi
 //     sigma, so N r0 sigma lines per unit length on each side.
-// (Lambda and sigma per world unit here, converted from the per-tick
+// (Lambda and sigma per world unit here, converted from the per-cm
 // settings.)
-import { SNAP_STEP } from './geometry.js';
+import { CM } from './geometry.js';
 import { spreadOrder } from './seedDirections.js';
 
 // Lines per unit charge at each density setting (1-5). Multiples of 4, so
@@ -36,8 +36,7 @@ import { spreadOrder } from './seedDirections.js';
 // keeps the quarter-turn and mirror symmetries a charge in the cut has.
 export const LINES_PER_UNIT_CHARGE_2D = [4, 8, 12, 16, 20];
 
-const REFERENCE_DISTANCE = 2.5; // world units: 5 ticks, half way to the box's edge
-const TICK = SNAP_STEP;
+const REFERENCE_DISTANCE = 2.5; // world units: 5 cm, half way to the box's edge
 const LINE_ROD_START = 0.06; // where a thin rod's lines start (objectLines.js's LINE_ROD_RADIUS)
 const GOLDEN = 0.6180339887498949;
 const PLASTIC = 0.7548776662466927;
@@ -115,7 +114,7 @@ export function cutObjectSeeds(obj, cut, density, halfExtent) {
   if (obj.kind === 'rod' && obj.axis === axis) {
     // 2 N r0 lambda lines, rounded to a multiple of 4 to keep the cut's
     // symmetry.
-    const lambda = Math.abs(obj.lambda) / TICK;
+    const lambda = Math.abs(obj.lambda) / CM;
     const count = 4 * Math.max(1, Math.round((2 * perUnit * REFERENCE_DISTANCE * lambda) / 4));
     if (obj.form === 'line') radial(count, LINE_ROD_START, 0, true);
     else radial(count, obj.radius, obj.form === 'solid' ? 2 : 0);
@@ -147,7 +146,7 @@ export function cutObjectSeeds(obj, cut, density, halfExtent) {
     // Lying in the cut: N lambda / pi lines per unit length each side, so
     // a seed on each side at that spacing (on the surface, or for a solid
     // cylinder at mirror-image depths enclosing a fraction of its charge).
-    const lambda = Math.abs(obj.lambda) / TICK;
+    const lambda = Math.abs(obj.lambda) / CM;
     const side = [0, 1, 2].find((k) => k !== axis && k !== obj.axis);
     along(obj.axis, (perUnit * lambda) / Math.PI, (base, fold) => {
       for (const s of [-1, 1]) {
@@ -168,7 +167,7 @@ export function cutObjectSeeds(obj, cut, density, halfExtent) {
     // objectLines.js), a lone sheet starts a line both ways from every
     // point of the first row and none from the second. A slab's come in
     // mirror-image pairs, a depth d either side of its middle.
-    const sigma = Math.abs(obj.sigma) / (TICK * TICK);
+    const sigma = Math.abs(obj.sigma) / (CM * CM);
     const perSide = perUnit * REFERENCE_DISTANCE * sigma;
     const dir = [0, 1, 2].find((k) => k !== axis && k !== obj.axis);
     center[obj.axis] = obj.position[obj.axis];

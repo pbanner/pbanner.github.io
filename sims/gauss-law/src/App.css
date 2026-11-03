@@ -318,7 +318,7 @@ input[type="range"]::-moz-range-track {
 
 /* Upper-right corner: the properties panel for whatever is selected
    (PropertiesPanel.jsx), in the same style as Display Options, wide
-   enough for a charge density ("+0.010 q/tick²") and three coordinates. */
+   enough for a charge density ("+0.010 nC/cm²") and three coordinates. */
 .properties-panel {
   position: absolute;
   right: 16px;
@@ -447,6 +447,12 @@ input[type="range"]::-moz-range-track {
   background: #3498db;
   border-color: #3498db;
   color: #fff;
+}
+
+/* The unit after a row's label: "Radius (cm)". */
+.row-unit {
+  color: #888;
+  font-size: 12px;
 }
 
 /* Number boxes, each with its axis name to its left. */

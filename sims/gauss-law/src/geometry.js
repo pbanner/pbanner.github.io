@@ -20,6 +20,12 @@ import { WORLD_HALF_EXTENT } from './sceneConstants.js';
 // easy to build exactly.
 export const SNAP_STEP = 0.5;
 
+// The units shown and typed everywhere: lengths in centimeters, one grid
+// spacing (SNAP_STEP world units) being 1 cm, and charge in nanocoulombs
+// (nC). Positions in the scene stay in world units (1 world unit = 2 cm);
+// CM converts: a length in cm times CM is in world units.
+export const CM = SNAP_STEP;
+
 const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 

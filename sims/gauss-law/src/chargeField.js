@@ -3,11 +3,11 @@
 // three.js.
 //
 // Units: lengths in world units (the readout and the properties panel show
-// ticks, 1 tick = SNAP_STEP world units), and the Coulomb constant set to
-// 1, so a charge q gives E = q / r^2. The objects' charges are stored the
-// way the panel shows them, per tick: a rod's lambda in q per tick of
-// length, a plane's sigma in q per tick^2 of area. They're converted to
-// per world unit here.
+// cm, 1 cm = SNAP_STEP world units: see geometry.js's CM), charges in nC,
+// and the Coulomb constant set to 1, so a charge q gives E = q / r^2. The
+// objects' charges are stored the way the panel shows them, per cm: a
+// rod's lambda in nC per cm of length, a plane's sigma in nC per cm^2 of
+// area. They're converted to per world unit here.
 //
 // Every object is uniformly charged and fixed in place (an insulator), and
 // rods and planes are infinite, so each one's field has an exact formula
@@ -27,9 +27,7 @@
 //                            2 pi sigma (2 d / t), d the distance from
 //                            its middle
 // all pointing away from positive charge and toward negative.
-import { SNAP_STEP } from './geometry.js';
-
-const TICK = SNAP_STEP;
+import { CM } from './geometry.js';
 
 // An object's field at p, as [x, y, z].
 export function objectField(obj, p) {
@@ -71,7 +69,7 @@ function sphereField(obj, p) {
 
 function rodField(obj, p) {
   const { position: c, axis, radius: R, form, lambda } = obj;
-  const lam = lambda / TICK; // q per world unit of length
+  const lam = lambda / CM; // nC per world unit of length
   const d = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
   d[axis] = 0; // from the axis, straight out
   const s2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
@@ -84,7 +82,7 @@ function rodField(obj, p) {
 
 function planeField(obj, p) {
   const { position: c, axis, form, thickness, sigma } = obj;
-  const sig = sigma / (TICK * TICK); // q per world unit of area
+  const sig = sigma / (CM * CM); // nC per world unit of area
   const d = p[axis] - c[axis];
   let e;
   if (form === 'slab' && Math.abs(d) < thickness / 2) e = 2 * Math.PI * sig * ((2 * d) / thickness);

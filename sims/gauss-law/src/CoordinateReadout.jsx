@@ -1,7 +1,7 @@
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { CHARGE_RADIUS } from './sceneConstants.js';
-import { SNAP_STEP } from './geometry.js';
+import { CM } from './geometry.js';
 
 // Gap between the top of the charge (as drawn on screen) and the bottom
 // of the readout panel.
@@ -10,18 +10,16 @@ const PANEL_GAP_PX = 10;
 // measure its top from that size.
 const HIGHLIGHT_SCALE = 1.15;
 
-// The readout counts in ticks: one readout unit is one SNAP_STEP of world
-// distance, i.e. the spacing of the grid lines and the axis tick dots. So
-// a snapped charge always reads as whole numbers, and the world's edges
-// (at +/-5 world units) read as +/-10. Only the readout uses this scale;
-// positions in state stay in world units.
-const READOUT_UNITS_PER_WORLD_UNIT = 1 / SNAP_STEP;
-
-// Snapped coordinates are whole numbers on the readout's scale, so they're
-// shown without decimals; a coordinate placed freely (Alt) gets one. A
-// true minus sign reads better than a hyphen.
+// The readout is in cm: one cm is the spacing of the grid lines and the
+// axis tick dots (geometry.js's CM). So a snapped charge always reads as
+// whole numbers, and the world's edges (at +/-5 world units) read as
+// +/-10. Positions in state stay in world units.
+//
+// Snapped coordinates are whole numbers of cm, so they're shown without
+// decimals; a coordinate placed freely (Alt) gets two. A true minus sign
+// reads better than a hyphen.
 function formatCoordinate(worldValue) {
-  const v = worldValue * READOUT_UNITS_PER_WORLD_UNIT;
+  const v = worldValue / CM;
   const rounded = Math.round(v);
   const text = Math.abs(v - rounded) < 1e-6 ? String(rounded) : v.toFixed(2);
   return text.replace(/^-/, '−').replace(/^−0(\.0)?$/, '0');
@@ -43,14 +41,14 @@ function formatCoordinate(worldValue) {
 // tracker reveals it once it has been positioned, so it never flashes at
 // the corner of the screen for a frame.
 //
-// The panel shows `position` as (x, y, z) -- or, given a `label`, that
-// label and a single length `value` instead (e.g. "r = 3", while a handle
-// drags a sphere's radius), in the same units.
+// The panel shows `position` as (x, y, z) cm -- or, given a `label`, that
+// label and a single length `value` instead (e.g. "r = 3 cm", while a
+// handle drags a sphere's radius).
 export function CoordinateReadoutPanel({ panelRef, position, label, value }) {
   const [x, y, z] = position.map(formatCoordinate);
   return (
     <div ref={panelRef} className="coordinate-readout">
-      {label ? `${label} = ${formatCoordinate(value)}` : `(${x}, ${y}, ${z})`}
+      {label ? `${label} = ${formatCoordinate(value)} cm` : `(${x}, ${y}, ${z}) cm`}
     </div>
   );
 }

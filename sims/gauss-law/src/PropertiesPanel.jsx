@@ -4,11 +4,12 @@
 // Options panel (.overlay-controls in App.css). Purely presentational: the
 // selection and the charges live in App.jsx.
 //
-// Every length is shown and typed in ticks, like the coordinate readout
-// (positions in state are in world units; 1 tick = SNAP_STEP).
+// Every length is shown and typed in cm, like the coordinate readout
+// (positions in state are in world units; see geometry.js's CM), and
+// labeled "(cm)"; charges are in nC.
 import { useState } from 'react';
 import { CHARGE_SETTINGS, MAX_CHARGE_STEPS, chargeSteps, withChargeSteps } from './chargeTypes.js';
-import { SNAP_STEP } from './geometry.js';
+import { CM } from './geometry.js';
 import { WORLD_HALF_EXTENT } from './sceneConstants.js';
 
 const TITLES = { point: 'Point Charge', sphere: 'Charged Sphere', rod: 'Charged Rod', plane: 'Charged Plane' };
@@ -22,23 +23,32 @@ const AXIS_NAMES = ['x', 'y', 'z'];
 // two axes other than its own.
 const PLANE_NAMES = ['yz', 'xz', 'xy'];
 
-const WORLD_LIMIT_TICKS = WORLD_HALF_EXTENT / SNAP_STEP; // the box's edges, +/-10
-const SIZE_LIMITS_TICKS = { min: 0.5, max: WORLD_LIMIT_TICKS }; // radii, thicknesses
+const WORLD_LIMIT_CM = WORLD_HALF_EXTENT / CM; // the box's edges, +/-10
+const SIZE_LIMITS_CM = { min: 0.5, max: WORLD_LIMIT_CM }; // radii, thicknesses
 
-const toTicks = (world) => world / SNAP_STEP;
-const toWorld = (ticks) => ticks * SNAP_STEP;
+const toCm = (world) => world / CM;
+const toWorld = (cm) => cm * CM;
 
-// A number of ticks as text: whole numbers plainly, others to 2 decimals
+// A length in cm as text: whole numbers plainly, others to 2 decimals
 // (trailing zeros dropped), with a true minus sign.
-function formatTicks(ticks) {
-  const rounded = Math.round(ticks * 100) / 100;
+function formatCm(cm) {
+  const rounded = Math.round(cm * 100) / 100;
   return String(rounded).replace(/^-/, '−');
+}
+
+// A row's label, with the unit of what's in it after it: "Radius (cm)".
+function RowLabel({ text, unit = 'cm' }) {
+  return (
+    <span>
+      {text} <span className="row-unit">({unit})</span>
+    </span>
+  );
 }
 
 // A number box. While it's being typed in, it shows the draft text; Enter
 // or leaving the box commits it (clamped to [min, max]), and text that
 // isn't a number puts the old value back. `disabled` grays it out.
-function NumberField({ label, ticks, min, max, onCommit, disabled = false }) {
+function NumberField({ label, cm, min, max, onCommit, disabled = false }) {
   const [draft, setDraft] = useState(null);
   const commit = () => {
     if (draft === null) return;
@@ -52,7 +62,7 @@ function NumberField({ label, ticks, min, max, onCommit, disabled = false }) {
       <input
         type="text"
         inputMode="decimal"
-        value={draft ?? formatTicks(ticks)}
+        value={draft ?? formatCm(cm)}
         disabled={disabled}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
@@ -78,15 +88,15 @@ function Segmented({ options, value, onChange, isDisabled = () => false }) {
   );
 }
 
-// The charge (or charge density) setting's value: "+3 q", "−0.10 q/tick",
-// "+0.010 q/tick²". The q is italic, as the symbol for the unit charge.
+// The charge (or charge density) setting's value: "+3 nC", "−0.10 nC/cm",
+// "+0.010 nC/cm²".
 function ChargeValue({ charge }) {
   const { key, step, unit } = CHARGE_SETTINGS[charge.kind];
   const decimals = Math.max(0, -Math.floor(Math.log10(step) + 1e-9));
   const value = charge[key];
   return (
     <span className="stepper-value">
-      {value > 0 ? '+' : '−'}{Math.abs(value).toFixed(decimals)} <i>q</i>{unit.slice(1)}
+      {value > 0 ? '+' : '−'}{Math.abs(value).toFixed(decimals)} {unit}
     </span>
   );
 }
@@ -117,9 +127,9 @@ export default function PropertiesPanel({ charge, onChange, onDelete, onClose, l
   let coords = [0, 1, 2];
   if (kind === 'rod') coords = coords.filter((k) => k !== charge.axis);
   if (kind === 'plane') coords = [charge.axis];
-  const setCoord = (k, ticks) => {
+  const setCoord = (k, cm) => {
     const position = [...charge.position];
-    position[k] = toWorld(ticks);
+    position[k] = toWorld(cm);
     onChange({ position });
   };
   // Turning a plane keeps its distance from the origin: x = 2 becomes
@@ -173,17 +183,17 @@ export default function PropertiesPanel({ charge, onChange, onDelete, onClose, l
       )}
 
       <div className="property-row">
-        <span>{kind === 'rod' ? 'Through' : kind === 'plane' ? 'At' : kind === 'sphere' ? 'Center' : 'Position'}</span>
+        <RowLabel text={kind === 'rod' ? 'Through' : kind === 'plane' ? 'At' : kind === 'sphere' ? 'Center' : 'Position'} />
         <div className="number-fields">
           {coords.map((k) => (
             <NumberField
               key={`${k}-${charge.id}`}
               label={AXIS_NAMES[k]}
-              ticks={toTicks(charge.position[k])}
-              min={-WORLD_LIMIT_TICKS}
-              max={WORLD_LIMIT_TICKS}
+              cm={toCm(charge.position[k])}
+              min={-WORLD_LIMIT_CM}
+              max={WORLD_LIMIT_CM}
               disabled={k === lockedAxis}
-              onCommit={(ticks) => setCoord(k, ticks)}
+              onCommit={(cm) => setCoord(k, cm)}
             />
           ))}
         </div>
@@ -191,17 +201,17 @@ export default function PropertiesPanel({ charge, onChange, onDelete, onClose, l
 
       {(kind === 'sphere' || (kind === 'rod' && charge.form !== 'line')) && (
         <div className="property-row">
-          <span>Radius</span>
+          <RowLabel text="Radius" />
           <div className="number-fields">
-            <NumberField key={`radius-${charge.id}`} label="" ticks={toTicks(charge.radius)} {...SIZE_LIMITS_TICKS} onCommit={(ticks) => onChange({ radius: toWorld(ticks) })} />
+            <NumberField key={`radius-${charge.id}`} label="" cm={toCm(charge.radius)} {...SIZE_LIMITS_CM} onCommit={(cm) => onChange({ radius: toWorld(cm) })} />
           </div>
         </div>
       )}
       {kind === 'plane' && charge.form === 'slab' && (
         <div className="property-row">
-          <span>Thickness</span>
+          <RowLabel text="Thickness" />
           <div className="number-fields">
-            <NumberField key={`thickness-${charge.id}`} label="" ticks={toTicks(charge.thickness)} {...SIZE_LIMITS_TICKS} onCommit={(ticks) => onChange({ thickness: toWorld(ticks) })} />
+            <NumberField key={`thickness-${charge.id}`} label="" cm={toCm(charge.thickness)} {...SIZE_LIMITS_CM} onCommit={(cm) => onChange({ thickness: toWorld(cm) })} />
           </div>
         </div>
       )}
@@ -241,16 +251,16 @@ export function CutPanel({ cut, allowed, onChangeAxis, onChangeOffset, onView, o
         />
       </div>
       <div className="property-row">
-        <span>At</span>
+        <RowLabel text="At" />
         <div className="number-fields">
           <NumberField
             key={`cut-${cut.axis}`}
             label={AXIS_NAMES[cut.axis]}
-            ticks={toTicks(cut.offset)}
-            min={-WORLD_LIMIT_TICKS}
-            max={WORLD_LIMIT_TICKS}
+            cm={toCm(cut.offset)}
+            min={-WORLD_LIMIT_CM}
+            max={WORLD_LIMIT_CM}
             disabled={!cut.movable}
-            onCommit={(ticks) => onChangeOffset(toWorld(ticks))}
+            onCommit={(cm) => onChangeOffset(toWorld(cm))}
           />
         </div>
       </div>

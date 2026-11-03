@@ -16,9 +16,7 @@
 // get the same u, so the picture keeps the arrangement's symmetry.
 import { seedDirections, seedThresholds } from './seedDirections.js';
 import { CHARGE_SETTINGS } from './chargeTypes.js';
-import { SNAP_STEP } from './geometry.js';
-
-const TICK = SNAP_STEP;
+import { CM } from './geometry.js';
 
 // A thin rod's lines start this far from its axis -- just outside it as
 // drawn (ChargedObject.jsx's LINE_ROD_RADIUS) -- and a line reaching this
@@ -46,12 +44,12 @@ const r2 = (a, b) => (((R2_START + a * A1 + b * A2) % 1) + 1) % 1;
 // The two axes other than `axis`, in order.
 const across = (axis) => [0, 1, 2].filter((k) => k !== axis);
 
-// An object's charge in units of q, per world unit of length for a rod and
+// An object's charge in nC, per world unit of length for a rod and
 // per world unit of area for a plane.
 function chargeAmount(obj) {
   const { key } = CHARGE_SETTINGS[obj.kind];
-  if (obj.kind === 'rod') return Math.abs(obj[key]) / TICK;
-  if (obj.kind === 'plane') return Math.abs(obj[key]) / (TICK * TICK);
+  if (obj.kind === 'rod') return Math.abs(obj[key]) / CM;
+  if (obj.kind === 'plane') return Math.abs(obj[key]) / (CM * CM);
   return Math.abs(obj[key]);
 }
 
