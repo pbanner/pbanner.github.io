@@ -3,7 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { OrbitControls, GizmoHelper } from '@react-three/drei';
 import { ChargeDrag } from './chargeDrag.js';
-import ChargeMarker from './ChargeMarker.jsx';
+import ChargeMarker, { PositionGuides } from './ChargeMarker.jsx';
 import ProbeMarker, { ProbeFieldLine } from './ProbeMarker.jsx';
 import { probeReading, probeInCut } from './probes.js';
 import { objectField } from './chargeField.js';
@@ -18,7 +18,7 @@ import { axisViewOrientation, stopMomentum } from './cameraViews.js';
 import FieldLines from './FieldLines.jsx';
 import FieldArrows from './FieldArrows.jsx';
 import { CoordinateReadoutPanel, CoordinateReadoutTracker } from './CoordinateReadout.jsx';
-import { rayFromClient, intersectAxisPlane, pickCharge, pickObject, snapValue, clampToWorld, SNAP_STEP } from './geometry.js';
+import { rayFromClient, intersectAxisPlane, pickCharge, pickObject, objectGuideSegments, snapValue, clampToWorld, SNAP_STEP } from './geometry.js';
 import { WORLD_HALF_EXTENT, CHARGE_RADIUS, PROBE_PICK_RADIUS, INITIAL_CAMERA_POSITION, INITIAL_CAMERA_TARGET, CAMERA_FOV, CLICK_MOVE_THRESHOLD, VIEW_CONTROLS_GIZMO_MARGIN } from './sceneConstants.js';
 
 // A directional light that rides along with the camera, so whatever side of
@@ -527,6 +527,8 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
   // The readout: while a handle drags a single value, that value (e.g.
   // "r = 3"), floating above the handle; otherwise the coordinates of the
   // charge or object being dragged, or else of the placement ghost.
+  const draggedObject = draggingId == null ? null : objects.find((c) => c.id === draggingId) ?? (draggingId === 'cut' ? cutObject : null);
+
   let readout = null;
   if (handleDrag) {
     readout = handleDrag;
@@ -608,6 +610,16 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
         {objects.map((obj) => (
           <ChargedObject key={obj.id} charge={obj} selected={obj.id === selectedId} />
         ))}
+        {/* The dragged object's (or cut's) guides, for the coordinates it
+            can change. */}
+        {draggedObject && (
+          <PositionGuides
+            position={draggedObject.position ?? [0, 0, 0]}
+            segments={objectGuideSegments(draggedObject)}
+            footDot={draggedObject.kind === 'sphere'}
+            lineWidth={draggedObject.kind === 'plane' || draggedObject.kind === 'cut' ? 3 : undefined}
+          />
+        )}
 
         {shownProbes.map((probe) => {
           const reading = probeReading(charges, probe.position);

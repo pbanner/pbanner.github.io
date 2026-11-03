@@ -101,23 +101,28 @@ export default function ChargeMarker({ q, position, ghost = false, highlighted =
 
 // Black dashed coordinate guides for something being placed or dragged
 // (see chargeGuideSegments): a drop line to its foot on the xy plane,
-// marked with a black dot; lines from the foot to the x and y axes; and a
-// line from it to the z axis. On a 2D screen a charge floating above one
-// point looks just like a charge sitting at a different point further
-// back; the guides show which one it actually is, and read its x, y and z
-// off the axis ticks. They're hidden otherwise to keep the scene
-// uncluttered.
-export function PositionGuides({ position }) {
+// marked with a black dot, and lines from the foot to the x and y axes. On
+// a 2D screen a charge floating above one point looks just like a charge
+// sitting at a different point further back; the guides show which one it
+// actually is, and read its x, y and z off the axis ticks. They're hidden
+// otherwise to keep the scene uncluttered.
+//
+// A charged object being dragged passes its own `segments`
+// (objectGuideSegments, for the coordinates it can change) and, unless
+// it's a sphere, `footDot` false; a plane's guide runs right along an
+// axis, so it's drawn thicker (`lineWidth`), to show over it.
+export function PositionGuides({ position, segments = chargeGuideSegments(position), footDot = true, lineWidth = 1.5 }) {
   const [x, y, z] = position;
-  const segments = chargeGuideSegments(position);
   // Something on the xy plane covers its own foot, so it gets no dot.
-  const showFootDot = Math.abs(z) > 1e-9;
+  const showFootDot = footDot && Math.abs(z) > 1e-9;
   return (
     <>
       {/* `segments` draws each consecutive pair of points as its own
-          separate line. */}
+          separate line. Drawn over everything, depth or not: a guide can
+          run right along an axis (a plane's does), and would otherwise be
+          lost in it. */}
       {segments.length > 0 && (
-        <Line segments points={segments.flat()} color="#000" lineWidth={1.5} dashed dashSize={0.12} gapSize={0.08} />
+        <Line segments points={segments.flat()} color="#000" lineWidth={lineWidth} dashed dashSize={0.12} gapSize={0.08} depthTest={false} renderOrder={5} />
       )}
       {showFootDot && (
         <mesh position={[x, y, 0]}>

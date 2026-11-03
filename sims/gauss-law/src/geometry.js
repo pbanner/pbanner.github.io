@@ -212,3 +212,32 @@ export function chargeGuideSegments([x, y, z]) {
     return true;
   });
 }
+
+// The same for a charged sphere, rod or plane (or the 2D cut, { kind:
+// 'cut', axis, offset }) being dragged -- guides only for the coordinates
+// it can change. A sphere's are a point charge's, from its center. A rod's
+// position is where its axis crosses the plane across it through the
+// origin, and it gets a guide from there to each of the two axes in that
+// plane (for a vertical rod: from where it meets the floor to the x and y
+// axes). A plane's is one from the origin along its normal to it. As
+// above, a guide of zero length is left out.
+export function objectGuideSegments(obj) {
+  if (obj.kind === 'sphere') return chargeGuideSegments(obj.position);
+  const nonzero = (v) => Math.abs(v) > 1e-9;
+  if (obj.kind === 'rod') {
+    const p = obj.position;
+    return [0, 1, 2].filter((k) => k !== obj.axis && nonzero(p[k])).map((k) => {
+      const onAxis = [...p];
+      onAxis[k] = 0;
+      return [p, onAxis];
+    });
+  }
+  if (obj.kind === 'plane' || obj.kind === 'cut') {
+    const value = obj.kind === 'cut' ? obj.offset : obj.position[obj.axis];
+    if (!nonzero(value)) return [];
+    const foot = [0, 0, 0];
+    foot[obj.axis] = value;
+    return [[[0, 0, 0], foot]];
+  }
+  return [];
+}
