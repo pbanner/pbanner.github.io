@@ -84,6 +84,42 @@ const ORBIT_REPRESENTATIVES = {
 // multiple of 12 directions.)
 export const LINES_PER_UNIT_CHARGE = [6, 18, 30, 42, 54];
 
+// The order in which to take `directions` (unit vectors) so that those
+// taken first are spread out as evenly as possible: "farthest-point"
+// order -- starting from the first, each next one is whichever is
+// farthest from all those taken so far (its nearest one is farthest
+// away). A symmetric set has many ties for farthest, and they go to the
+// one least crowded overall: the smallest sum, over those taken, of
+// 1 / (1 - cos(angle)), a "repulsion" like that between charges. (Taking
+// the first in the list instead piled them up on one side: of 24 around
+// a circle, after the axes and diagonals, the next four all fell in one
+// quarter.) Returns each direction's rank: 0 for the first taken, 1 for
+// the next, ...
+const TIE = 1e-9;
+export function spreadOrder(directions) {
+  const n = directions.length;
+  const rank = new Array(n);
+  const closest = new Array(n).fill(-Infinity); // largest dot product with any direction taken so far
+  const repulsion = new Array(n).fill(0);
+  let next = 0;
+  for (let r = 0; r < n; r++) {
+    rank[next] = r;
+    const t = directions[next];
+    let best = -1;
+    for (let i = 0; i < n; i++) {
+      if (rank[i] !== undefined) continue;
+      const d = directions[i];
+      const c = d[0] * t[0] + d[1] * t[1] + d[2] * t[2];
+      closest[i] = Math.max(closest[i], c);
+      repulsion[i] += 1 / (1 - c + 1e-6);
+      if (best < 0 || closest[i] < closest[best] - TIE
+        || (closest[i] <= closest[best] + TIE && repulsion[i] < repulsion[best] - TIE)) best = i;
+    }
+    next = best;
+  }
+  return rank;
+}
+
 const cache = new Map();
 
 function build(count) {
@@ -94,23 +130,8 @@ function build(count) {
     const directions = orbits.flat();
     if (directions.length !== count) throw new Error(`Starting-direction set ${count} has ${directions.length} directions`);
     // Each direction's threshold (see seedThresholds): its place in
-    // "farthest-point" order -- starting from the first direction, each
-    // next one is whichever is farthest from all those before it -- as a
-    // fraction of the set.
-    const thresholds = new Array(count);
-    const closest = directions.map(() => -Infinity); // largest dot product with any direction taken so far
-    let next = 0;
-    for (let rank = 0; rank < count; rank++) {
-      thresholds[next] = (rank + 0.5) / count;
-      const taken = directions[next];
-      let best = -1;
-      directions.forEach((d, i) => {
-        if (thresholds[i] !== undefined) return;
-        closest[i] = Math.max(closest[i], d[0] * taken[0] + d[1] * taken[1] + d[2] * taken[2]);
-        if (best < 0 || closest[i] < closest[best]) best = i;
-      });
-      next = best;
-    }
+    // spreadOrder, as a fraction of the set.
+    const thresholds = spreadOrder(directions).map((rank) => (rank + 0.5) / count);
     cache.set(count, { directions, thresholds });
   }
   return cache.get(count);
@@ -129,9 +150,9 @@ export function seedDirections(count) {
 // fieldLines.js compares a line's threshold with the fraction of its flux
 // still going, to decide where it ends inside a negatively charged object;
 // so where some fraction of a charge's lines end, as many do as should,
-// and they're spread around evenly. (They can't always be exactly
-// symmetric: e.g. 30 of a 60-line set, whose orbits have 12, 24 and 24
-// directions.)
+// and they're spread around evenly, without favoring any side. (They
+// can't always be exactly symmetric: e.g. 30 of a 60-line set, whose
+// orbits have 12, 24 and 24 directions.)
 export function seedThresholds(count) {
   return build(count).thresholds;
 }

@@ -419,7 +419,7 @@ export function computeFieldLines(sources, { density, halfExtent, chargeRadius, 
   const linesPerUnitCharge = LINES_PER_UNIT_CHARGE[density - 1];
   // A point charge's starting directions and their thresholds.
   const directionsFor = (source) => {
-    if (cut) return circleDirections(pointLineCount(source.q, density), cut.axis);
+    if (cut) return circleDirections(pointLineCount(source.q, density), cut.axis, Math.abs(source.q));
     const count = linesPerUnitCharge * Math.abs(source.q);
     return { directions: seedDirections(count), thresholds: seedThresholds(count) };
   };

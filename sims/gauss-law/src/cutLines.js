@@ -29,6 +29,7 @@
 // (Lambda and sigma per world unit here, converted from the per-tick
 // settings.)
 import { SNAP_STEP } from './geometry.js';
+import { spreadOrder } from './seedDirections.js';
 
 // Lines per unit charge at each density setting (1-5). Multiples of 4, so
 // every set includes the four directions along the cut's own two axes and
@@ -44,11 +45,21 @@ const across = (axis) => [0, 1, 2].filter((k) => k !== axis);
 
 // n directions at equal angles in the cut perpendicular to `axis`,
 // starting along its first in-cut axis, with thresholds (see
-// seedDirections.js's seedThresholds): spread evenly over 0..1, in
-// farthest-point order around the circle.
+// seedDirections.js's seedThresholds) spread evenly over 0..1.
+//
+// For a charge of `units` units (n a multiple of it), every units-th
+// direction -- a regular polygon of n / units directions, one "level" --
+// gets its thresholds together, level after level. Then where a whole
+// number m of its units' worth of lines get through somewhere (a +2
+// charge inside a -1 shell: 1 of its 2), the lines that do are m whole,
+// evenly spaced polygons, as the field outside is even -- e.g. every
+// other line, not most of one side. The levels, and each polygon's
+// directions, go in spreadOrder's order.
 const circleCache = new Map();
-export function circleDirections(n, axis) {
-  const key = `${n}-${axis}`;
+const ring = (m) => Array.from({ length: m }, (_, j) => [Math.cos((2 * Math.PI * j) / m), Math.sin((2 * Math.PI * j) / m), 0]);
+export function circleDirections(n, axis, units = 1) {
+  const levels = n % units === 0 ? units : 1;
+  const key = `${n}-${axis}-${levels}`;
   if (!circleCache.has(key)) {
     const [u, v] = across(axis);
     const directions = Array.from({ length: n }, (_, j) => {
@@ -57,22 +68,10 @@ export function circleDirections(n, axis) {
       d[v] = Math.sin((2 * Math.PI * j) / n);
       return d;
     });
-    // Farthest-point order: each next angle is whichever is farthest
-    // (around the circle) from all those taken so far.
-    const thresholds = new Array(n);
-    const gap = (i, j) => Math.min(Math.abs(i - j), n - Math.abs(i - j));
-    const closest = new Array(n).fill(Infinity);
-    let next = 0;
-    for (let rank = 0; rank < n; rank++) {
-      thresholds[next] = (rank + 0.5) / n;
-      let best = -1;
-      for (let i = 0; i < n; i++) {
-        if (thresholds[i] !== undefined) continue;
-        closest[i] = Math.min(closest[i], gap(i, next));
-        if (best < 0 || closest[i] > closest[best]) best = i;
-      }
-      next = best;
-    }
+    const perLevel = n / levels;
+    const levelRank = spreadOrder(ring(levels));
+    const placeRank = spreadOrder(ring(perLevel));
+    const thresholds = directions.map((_, j) => (levelRank[j % levels] * perLevel + placeRank[Math.floor(j / levels)] + 0.5) / n);
     circleCache.set(key, { directions, thresholds });
   }
   return circleCache.get(key);
@@ -99,8 +98,8 @@ export function cutObjectSeeds(obj, cut, density, halfExtent) {
   // fraction u of its charge: (r / R)^3 = u for a ball, (r / R)^2 = u for
   // a cylinder's cross-section.
   // A thin rod's lines are drawn from its axis (see objectLines.js).
-  const radial = (count, startRadius, solidPower, fromCenter = false) => {
-    const { directions, thresholds } = circleDirections(count, axis);
+  const radial = (count, startRadius, solidPower, fromCenter = false, units = 1) => {
+    const { directions, thresholds } = circleDirections(count, axis, units);
     directions.forEach((d, i) => {
       const r = solidPower ? obj.radius * thresholds[i] ** (1 / solidPower) : startRadius;
       const point = center.map((x, k) => x + r * d[k]);
@@ -110,7 +109,7 @@ export function cutObjectSeeds(obj, cut, density, halfExtent) {
     });
   };
   if (obj.kind === 'sphere') {
-    radial(perUnit * Math.abs(obj.q), obj.radius, obj.form === 'solid' ? 3 : 0);
+    radial(perUnit * Math.abs(obj.q), obj.radius, obj.form === 'solid' ? 3 : 0, false, Math.abs(obj.q));
     return seeds;
   }
   if (obj.kind === 'rod' && obj.axis === axis) {
