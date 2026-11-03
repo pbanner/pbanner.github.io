@@ -345,13 +345,77 @@ input[type="range"]::-moz-range-track {
 
 /* Upper-right corner: the properties panel for whatever is selected
    (PropertiesPanel.jsx), in the same style as Display Options, wide
-   enough for a charge density ("+0.010 nC/cm²") and three coordinates. */
-.properties-panel {
+   enough for a charge density ("+0.010 nC/cm²") and three coordinates --
+   and under it the Field Probes panel (FieldProbesPanel.jsx), or that
+   alone, flush in the corner. They scroll rather than run into the
+   Display Options panel, about 200 px tall, in the lower-right corner --
+   and the stack is as wide as the panels, so a scrollbar goes beside them
+   rather than squeezing them (and it never scrolls sideways). */
+.upper-right-stack {
   position: absolute;
   right: 16px;
   top: 16px;
-  width: 270px;
+  max-height: calc(100dvh - 250px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   z-index: 10;
+}
+
+.upper-right-stack > .overlay-controls {
+  flex: none;
+  width: 270px;
+}
+
+/* The Field Probes panel's table: a row per probe, numbers lined up on
+   the right; the selected probe's row in a light selection blue, and
+   rows clickable to select their probes. */
+.probe-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: #333;
+}
+
+.probe-table th,
+.probe-table td {
+  padding: 2px 4px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.probe-table th {
+  font-weight: 600;
+  color: #555;
+  border-bottom: 1px solid #ddd;
+}
+
+.probe-table th:first-child,
+.probe-table td:first-child {
+  text-align: left;
+  font-weight: 600;
+}
+
+.probe-table tbody tr {
+  cursor: pointer;
+}
+
+.probe-table tbody tr:hover {
+  background: #f0f4f8;
+}
+
+.probe-table tbody tr.selected {
+  background: #d6eaf8;
+}
+
+.probe-table td.probe-undefined {
+  text-align: left;
+  white-space: normal;
+  font-style: italic;
+  color: #777;
 }
 
 .panel-header {

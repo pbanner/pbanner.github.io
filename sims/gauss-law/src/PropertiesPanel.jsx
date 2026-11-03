@@ -1,6 +1,6 @@
 // The properties panel in the upper-right corner: the settings of whatever
-// is selected -- a charge (PropertiesPanel) or the 2D cut (CutPanel) --
-// shown only while something is. Styled like the Display
+// is selected -- a charge (PropertiesPanel), the 2D cut (CutPanel) or a
+// field probe (ProbePanel) -- shown only while something is. Styled like the Display
 // Options panel (.overlay-controls in App.css). Purely presentational: the
 // selection and the charges live in App.jsx.
 //
@@ -216,6 +216,48 @@ export default function PropertiesPanel({ charge, onChange, onDelete, onClose, l
         </div>
       )}
 
+      <button type="button" className="control-button panel-delete-button" onClick={onDelete}>
+        Delete
+      </button>
+    </div>
+  );
+}
+
+// A field probe's panel: where it is, and what it shows besides its arrow.
+// probe: the selected probe (see probes.js). onChange(changes) /
+// onDelete() / onClose(): as for a charge's panel; so is lockedAxis (a
+// probe in the 2D cut's view stays in the cut). Its reading is in the
+// Field Probes panel below.
+export function ProbePanel({ probe, onChange, onDelete, onClose, lockedAxis = null }) {
+  const setCoord = (k, cm) => {
+    const position = [...probe.position];
+    position[k] = toWorld(cm);
+    onChange({ position });
+  };
+  return (
+    <div className="overlay-controls properties-panel">
+      <div className="panel-header">
+        <h3>Field Probe {probe.label}</h3>
+        <button type="button" className="panel-close-button" aria-label="Deselect" onClick={onClose}>
+          ×
+        </button>
+      </div>
+      <div className="property-row">
+        <RowLabel text="Position" />
+        <div className="number-fields">
+          {[0, 1, 2].map((k) => (
+            <NumberField
+              key={`${k}-${probe.id}`}
+              label={AXIS_NAMES[k]}
+              cm={toCm(probe.position[k])}
+              min={-WORLD_LIMIT_CM}
+              max={WORLD_LIMIT_CM}
+              disabled={k === lockedAxis}
+              onCommit={(cm) => setCoord(k, cm)}
+            />
+          ))}
+        </div>
+      </div>
       <button type="button" className="control-button panel-delete-button" onClick={onDelete}>
         Delete
       </button>

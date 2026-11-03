@@ -29,6 +29,14 @@
 // all pointing away from positive charge and toward negative.
 import { CM } from './geometry.js';
 
+// The field in kN/C, for the probes' readings. With the Coulomb constant
+// k, 1 nC at 1 cm makes k (1e-9 C) / (0.01 m)^2 = 89.9 kN/C. Here, 1 nC at
+// 1 world unit makes a field of 1, and a world unit is 1 / CM cm, so a
+// field of 1 here is CM^2 times that: 22.5 kN/C.
+const COULOMB_CONSTANT = 8.9875517923e9; // N m^2 / C^2
+const KILONEWTONS_PER_COULOMB = (COULOMB_CONSTANT * 1e-9) / 0.01 ** 2 / 1000 * CM ** 2;
+export const toKilonewtonsPerCoulomb = (field) => field.map((c) => c * KILONEWTONS_PER_COULOMB);
+
 // An object's field at p, as [x, y, z].
 export function objectField(obj, p) {
   switch (obj.kind) {

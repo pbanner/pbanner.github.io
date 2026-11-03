@@ -3,7 +3,8 @@ import Viewer from './Viewer.jsx';
 import ChargeSidebar from './ChargeSidebar.jsx';
 import ChargeIcon from './ChargeIcon.jsx';
 import DisplayOptionsPanel from './DisplayOptionsPanel.jsx';
-import PropertiesPanel, { CutPanel } from './PropertiesPanel.jsx';
+import PropertiesPanel, { CutPanel, ProbePanel } from './PropertiesPanel.jsx';
+import FieldProbesPanel from './FieldProbesPanel.jsx';
 import CutInset from './CutInset.jsx';
 import { getChargeType, makeCharge, normalizePosition, crowds } from './chargeTypes.js';
 import { PROBE_TYPE, MAX_PROBES, isProbeId, nextProbeLabel, probeInCut } from './probes.js';
@@ -157,7 +158,8 @@ export default function App() {
     }));
   };
   const moveCharge = (id, position) => updateCharge(id, { position });
-  const moveProbe = (id, position) => setProbes((prev) => prev.map((p) => (p.id === id ? { ...p, position } : p)));
+  const updateProbe = (id, changes) => setProbes((prev) => prev.map((p) => (p.id === id ? { ...p, ...changes } : p)));
+  const moveProbe = (id, position) => updateProbe(id, { position });
   const deleteProbe = (id) => {
     setProbes((prev) => prev.filter((p) => p.id !== id));
     setSelectedId((prev) => (prev === id ? null : prev));
@@ -303,6 +305,10 @@ export default function App() {
 
   const armedType = !armedTypeId ? null : isProbeType(armedTypeId) ? PROBE_TYPE : getChargeType(armedTypeId);
   const selectedCharge = charges.find((c) => c.id === selectedId) ?? null;
+  const selectedProbe = probes.find((p) => p.id === selectedId) ?? null;
+  // In the 2D cut's view, only the probes in the cut are shown, in the
+  // scene and in the Field Probes panel.
+  const shownProbes = inCut ? probes.filter((p) => probeInCut(p, inCut)) : probes;
 
   return (
     <div className="app-layout">
@@ -351,27 +357,45 @@ export default function App() {
         </div>
       )}
 
-      {selectedId === 'cut' && placedCut && (
-        <CutPanel
-          cut={placedCut}
-          allowed={allowed}
-          onChangeAxis={(axis) => setCut(cutAt(axis))}
-          onChangeOffset={moveCut}
-          onView={viewCut}
-          onRemove={removeCut}
-          onClose={() => setSelectedId(null)}
-        />
-      )}
+      {/* Upper-right corner: the selected thing's panel, and under it the
+          Field Probes panel -- or that alone, flush in the corner. */}
+      <div className="upper-right-stack">
+        {selectedId === 'cut' && placedCut && (
+          <CutPanel
+            cut={placedCut}
+            allowed={allowed}
+            onChangeAxis={(axis) => setCut(cutAt(axis))}
+            onChangeOffset={moveCut}
+            onView={viewCut}
+            onRemove={removeCut}
+            onClose={() => setSelectedId(null)}
+          />
+        )}
 
-      {selectedCharge && (
-        <PropertiesPanel
-          charge={selectedCharge}
-          lockedAxis={inCut ? inCut.axis : null}
-          onChange={(changes) => updateCharge(selectedCharge.id, changes)}
-          onDelete={() => deleteCharge(selectedCharge.id)}
-          onClose={() => setSelectedId(null)}
-        />
-      )}
+        {selectedCharge && (
+          <PropertiesPanel
+            charge={selectedCharge}
+            lockedAxis={inCut ? inCut.axis : null}
+            onChange={(changes) => updateCharge(selectedCharge.id, changes)}
+            onDelete={() => deleteCharge(selectedCharge.id)}
+            onClose={() => setSelectedId(null)}
+          />
+        )}
+
+        {selectedProbe && (
+          <ProbePanel
+            probe={selectedProbe}
+            lockedAxis={inCut ? inCut.axis : null}
+            onChange={(changes) => updateProbe(selectedProbe.id, changes)}
+            onDelete={() => deleteProbe(selectedProbe.id)}
+            onClose={() => setSelectedId(null)}
+          />
+        )}
+
+        {shownProbes.length > 0 && (
+          <FieldProbesPanel probes={shownProbes} charges={charges} selectedId={selectedId} onSelect={setSelectedId} cut={inCut} />
+        )}
+      </div>
 
       {/* Lower-left corner: the view controls, under the axis gizmo (which
           Viewer draws in the canvas) -- or in 2D, under a small 3D picture
