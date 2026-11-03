@@ -30,10 +30,10 @@ const toCm = (world) => world / CM;
 const toWorld = (cm) => cm * CM;
 
 // A length in cm as text: whole numbers plainly, others to 2 decimals
-// (trailing zeros dropped), with a true minus sign.
+// (trailing zeros dropped). (A plain hyphen for a minus sign: a number box
+// takes nothing else.)
 function formatCm(cm) {
-  const rounded = Math.round(cm * 100) / 100;
-  return String(rounded).replace(/^-/, '−');
+  return String(Math.round(cm * 100) / 100);
 }
 
 // A row's label, with the unit of what's in it after it: "Radius (cm)".
@@ -45,14 +45,23 @@ function RowLabel({ text, unit = 'cm' }) {
   );
 }
 
-// A number box. While it's being typed in, it shows the draft text; Enter
-// or leaving the box commits it (clamped to [min, max]), and text that
-// isn't a number puts the old value back. `disabled` grays it out.
-function NumberField({ label, cm, min, max, onCommit, disabled = false }) {
+// A number box with up and down arrows -- the browser's own number box,
+// as in the other sims -- in cm. Typing is a draft, shown just as typed,
+// until Enter or leaving the box commits it (committing every keystroke
+// would move a charge to 1 on the way to 12); text that isn't a number
+// puts the old value back. A step with the arrows, or the up and down
+// keys, commits at once: those are the changes with no inputType, which
+// only typing, pasting and deleting have. Either way the value is kept to
+// [min, max].
+//
+// The arrows step by 1 cm, to whole multiples of it counted from
+// `stepBase` (the box's own min, as far as the browser knows: 0 for a
+// size, so a radius steps 1, 2, 3 rather than from its least, 0.5).
+// `disabled` grays it out.
+function NumberField({ label, cm, min, max, onCommit, disabled = false, stepBase = min }) {
   const [draft, setDraft] = useState(null);
-  const commit = () => {
-    if (draft === null) return;
-    const value = Number.parseFloat(draft.replace('−', '-'));
+  const commitValue = (text) => {
+    const value = Number.parseFloat(text);
     setDraft(null);
     if (Number.isFinite(value)) onCommit(Math.min(max, Math.max(min, value)));
   };
@@ -60,12 +69,17 @@ function NumberField({ label, cm, min, max, onCommit, disabled = false }) {
     <label className="number-field">
       <span>{label}</span>
       <input
-        type="text"
-        inputMode="decimal"
+        type="number"
+        min={stepBase}
+        max={max}
+        step={1}
         value={draft ?? formatCm(cm)}
         disabled={disabled}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
+        onChange={(e) => {
+          if (e.nativeEvent.inputType) setDraft(e.target.value);
+          else commitValue(e.target.value);
+        }}
+        onBlur={() => { if (draft !== null) commitValue(draft); }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') e.currentTarget.blur();
         }}
@@ -203,7 +217,7 @@ export default function PropertiesPanel({ charge, onChange, onDelete, onClose, l
         <div className="property-row">
           <RowLabel text="Radius" />
           <div className="number-fields">
-            <NumberField key={`radius-${charge.id}`} label="" cm={toCm(charge.radius)} {...SIZE_LIMITS_CM} onCommit={(cm) => onChange({ radius: toWorld(cm) })} />
+            <NumberField key={`radius-${charge.id}`} label="" cm={toCm(charge.radius)} {...SIZE_LIMITS_CM} stepBase={0} onCommit={(cm) => onChange({ radius: toWorld(cm) })} />
           </div>
         </div>
       )}
@@ -211,7 +225,7 @@ export default function PropertiesPanel({ charge, onChange, onDelete, onClose, l
         <div className="property-row">
           <RowLabel text="Thickness" />
           <div className="number-fields">
-            <NumberField key={`thickness-${charge.id}`} label="" cm={toCm(charge.thickness)} {...SIZE_LIMITS_CM} onCommit={(cm) => onChange({ thickness: toWorld(cm) })} />
+            <NumberField key={`thickness-${charge.id}`} label="" cm={toCm(charge.thickness)} {...SIZE_LIMITS_CM} stepBase={0} onCommit={(cm) => onChange({ thickness: toWorld(cm) })} />
           </div>
         </div>
       )}

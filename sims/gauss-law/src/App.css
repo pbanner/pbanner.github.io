@@ -345,7 +345,8 @@ input[type="range"]::-moz-range-track {
 
 /* Upper-right corner: the properties panel for whatever is selected
    (PropertiesPanel.jsx), in the same style as Display Options, wide
-   enough for a charge density ("+0.010 nC/cm²") and three coordinates --
+   enough for a charge density ("+0.010 nC/cm²") and three number boxes
+   with their arrows ("Position (cm)" and its x, y and z) --
    and under it the Field Probes panel (FieldProbesPanel.jsx), or that
    alone, flush in the corner. They scroll rather than run into the
    Display Options panel, about 200 px tall, in the lower-right corner --
@@ -366,7 +367,7 @@ input[type="range"]::-moz-range-track {
 
 .upper-right-stack > .overlay-controls {
   flex: none;
-  width: 270px;
+  width: 324px;
 }
 
 /* The Field Probes panel's table: a row per probe, numbers lined up on
@@ -557,8 +558,10 @@ input[type="range"]::-moz-range-track {
   cursor: default;
 }
 
+/* As wide as the box was without arrows, plus room for the arrows (the
+   browser's own, about 15 px), so the number never hides behind them. */
 .number-field input {
-  width: 3.2em;
+  width: calc(3.2em + 15px);
   padding: 2px 4px;
   border: 1px solid #bbb;
   border-radius: 4px;
