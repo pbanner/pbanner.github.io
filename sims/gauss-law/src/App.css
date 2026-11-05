@@ -1,0 +1,740 @@
+/* The whole screen is the 3D viewer; every control floats on top of it as
+   an absolutely positioned overlay, rather than sharing the screen with a
+   fixed sidebar the way the Bloch sphere sim does. */
+.app-layout {
+  --display-panel-width: 180px; /* shared by .display-options-panel and .interaction-hint */
+  position: relative;
+  height: 100vh; /* fallback for browsers that don't support dvh below */
+  height: 100dvh; /* the *actual* visible viewport height -- see the Bloch sphere sim's .app-layout for why plain 100vh misbehaves on mobile Safari */
+  width: 100%;
+  overflow: hidden;
+  background: #f4f5f7;
+}
+
+.viewer {
+  position: absolute;
+  inset: 0;
+}
+
+.control-button {
+  padding: 10px 10px;
+  margin: 2px 0px;
+  border: 1px solid #ddd;
+  background: #fff;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #666;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.control-button:hover {
+  background: #f0f0f0;
+  border-color: #bbb;
+}
+
+/* Lower-left corner: the view controls. The axis gizmo floats on its
+   own (drawn in the canvas by Viewer.jsx's GizmoHelper, centered
+   VIEW_CONTROLS_GIZMO_MARGIN pixels from the corner), and below it is a
+   column of one-line buttons about as wide as the gizmo, centered under
+   it. */
+.view-controls {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  width: 108px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 10;
+}
+
+.view-button {
+  margin: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 1.3;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+/* Left-edge toolbar -- a single thin column of icon buttons floating over
+   the viewer, same look as the optics lab's .sidebar-panel. */
+.sidebar-panel {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border: 2px solid #333;
+  border-radius: 12px;
+  padding: 10px 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+.sidebar-heading {
+  font-size: 16px;
+  font-weight: bold;
+  color: #333;
+}
+
+.sidebar-column {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Gray circle on hover means "interactive"; blue means "currently armed". */
+.sidebar-icon-button {
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-sizing: border-box;
+  touch-action: none; /* the drag-to-place gesture needs every pointermove itself, not the browser's own scroll/pan gesture on top of it */
+}
+
+.sidebar-icon-button:hover {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.sidebar-icon-button.active {
+  background: #3498db;
+}
+
+.sidebar-icon-button.active:hover {
+  background: #2f88c4;
+}
+
+/* A hovered sidebar icon's label, floating just outside the sidebar.
+   Viewport (fixed) coordinates and a high z-index so it renders above the
+   canvas and every overlay. */
+.sidebar-hover-label {
+  position: fixed;
+  pointer-events: none;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #999;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: bold;
+  color: #222;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+}
+
+/* The flat 2D placement ghost, centered on the pointer. pointer-events:
+   none so it never blocks hit-testing of whatever is underneath it. */
+.placement-ghost {
+  position: fixed;
+  pointer-events: none;
+  opacity: 0.6;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.35));
+  z-index: 1000;
+}
+
+.sidebar-divider {
+  width: 100%;
+  height: 1px;
+  background: #aaa;
+  margin: 4px 0;
+}
+
+/* One line of usage help along the bottom edge, centered in the space
+   between the view controls (lower left) and the Display Options panel
+   (lower right). With left, right and width all set, auto side margins
+   center it within that space; width: fit-content lets it shrink to its
+   text, and wrap only once the text is wider than the space. */
+.interaction-hint {
+  position: absolute;
+  left: calc(16px + 108px + 16px);
+  right: calc(16px + var(--display-panel-width) + 16px);
+  bottom: 16px;
+  width: fit-content;
+  margin: 0 auto;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: #444;
+  text-align: center;
+  line-height: 1.3;
+  z-index: 5;
+}
+
+/* These buttons are pointer-driven, and the Shift/Alt modifier keys would
+   otherwise make the browser draw its keyboard-focus ring on whichever
+   one was last clicked. */
+.sidebar-icon-button:focus {
+  outline: none;
+}
+
+/* The (x, y, z) readout floating above a charge while it's placed or
+   dragged (CoordinateReadout.jsx). It's placed by setting its transform
+   every frame, starting from the viewer's top-left corner, and stays
+   hidden until that has happened once. Tabular digits keep the numbers
+   from shifting sideways as they change. */
+/* A field probe's letter, up and to the right of it in the scene
+   (ProbeMarker.jsx; drei's Html puts the corner of the box it wraps this
+   in on the probe). In the selection blue while the probe is selected.
+   Positioned absolutely, so that box has no size of its own and doesn't
+   cover the probe -- a press there must reach the canvas, to grab it --
+   and the letter itself lets presses through. */
+.probe-label {
+  position: absolute;
+  left: 9px;
+  top: -26px;
+  pointer-events: none;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #151515;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 17px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.probe-label.selected {
+  background: #3498db;
+  color: #fff;
+}
+
+.coordinate-readout {
+  position: absolute;
+  left: 0;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #999;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: #222;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 6;
+}
+
+/* Lower-right corner: the Display Options panel. */
+.lower-right-stack {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 10;
+}
+
+/* On-canvas overlay panel look, copied from the optics lab's
+   .overlay-controls (which itself matches the Stern-Gerlach and Bloch
+   sphere sims' on-canvas panels). */
+.overlay-controls {
+  border: 2px solid #333;
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  line-height: 1.6;
+}
+
+.overlay-controls h3 {
+  margin: 0 0 2px 0;
+  font-size: 16px;
+  font-weight: bold;
+  color: #333;
+}
+
+.overlay-controls label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+}
+
+.overlay-controls input[type="checkbox"],
+.overlay-controls input[type="radio"] {
+  cursor: pointer;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.display-options-panel {
+  width: var(--display-panel-width);
+}
+
+/* The Lines / Arrows choice: side by side, indented under the "Electric
+   field" checkbox it belongs to. */
+/* The field's style (Lines / Arrows), set in under its checkbox. */
+.control-group.field-style {
+  flex-direction: row;
+  padding-left: 21px;
+}
+
+.control-group.disabled {
+  opacity: 0.45;
+}
+
+.control-group.disabled label,
+.control-group.disabled input {
+  cursor: default;
+}
+
+/* A dimmed group dims its toggle buttons itself, so they aren't dimmed
+   twice over. */
+.control-group.disabled .segmented button:disabled {
+  opacity: 1;
+}
+
+/* Slider look from the optics lab: one dark track color on both sides of
+   the thumb, and a blue round thumb. */
+input[type="range"] {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #404040;
+  outline: none;
+  appearance: none;
+  cursor: pointer;
+}
+/* Webkit browsers (Chrome, Safari) */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #3498db;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+/* Firefox */
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #3498db;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+input[type="range"]::-moz-range-track {
+  background: transparent;
+  border: none;
+}
+
+/* Upper-right corner: the properties panel for whatever is selected
+   (PropertiesPanel.jsx), in the same style as Display Options, wide
+   enough for a charge density ("+0.010 nC/cm²") and three number boxes
+   with their arrows ("Position (cm)" and its x, y and z) --
+   and under it the Field Probes panel (FieldProbesPanel.jsx), or that
+   alone, flush in the corner. They scroll rather than run into the
+   Display Options panel, about 200 px tall, in the lower-right corner --
+   and the stack is as wide as the panels, so a scrollbar goes beside them
+   rather than squeezing them (and it never scrolls sideways). */
+.upper-right-stack {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  max-height: calc(100dvh - 250px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 10;
+}
+
+.upper-right-stack > .overlay-controls {
+  flex: none;
+  width: 324px;
+}
+
+/* The Field Probes panel's table: a row per probe, numbers lined up on
+   the right; the selected probe's row in a light selection blue, and
+   rows clickable to select their probes. */
+.probe-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: #333;
+}
+
+.probe-table th,
+.probe-table td {
+  padding: 2px 4px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.probe-table th {
+  font-weight: 600;
+  color: #555;
+  border-bottom: 1px solid #ddd;
+}
+
+.probe-table th:first-child,
+.probe-table td:first-child {
+  text-align: left;
+  font-weight: 600;
+}
+
+.probe-table tbody tr {
+  cursor: pointer;
+}
+
+.probe-table tbody tr:hover {
+  background: #f0f4f8;
+}
+
+.probe-table tbody tr.selected {
+  background: #d6eaf8;
+}
+
+.probe-table td.probe-undefined {
+  text-align: left;
+  white-space: normal;
+  font-style: italic;
+  color: #777;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* The panel's × closes it by deselecting. */
+.panel-close-button {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 2px;
+  color: #666;
+  cursor: pointer;
+}
+
+.panel-close-button:hover {
+  color: #222;
+}
+
+/* A label on the left, its control on the right. */
+.property-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: #333;
+}
+
+/* A row's label stays on one line. */
+.property-row > span:first-child {
+  white-space: nowrap;
+}
+
+/* − value + : the value between two small square buttons. Tabular digits
+   keep the value from shifting sideways as it changes. */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stepper button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 15px;
+  line-height: 1;
+  color: #333;
+  cursor: pointer;
+}
+
+.stepper button:hover:not(:disabled) {
+  background: #f0f0f0;
+  border-color: #999;
+}
+
+.stepper button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.stepper-value {
+  min-width: 3.2em;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel-delete-button {
+  margin-top: 4px;
+  padding: 6px 10px;
+}
+
+.panel-delete-button:hover {
+  color: #b42318;
+  border-color: #e0a39c;
+  background: #fdf1f0;
+}
+
+/* Joined toggle buttons for a small choice (Form, Along, Parallel to); the
+   chosen one in the selection blue. */
+.segmented {
+  display: flex;
+}
+
+.segmented button {
+  padding: 2px 8px;
+  border: 1px solid #bbb;
+  background: #fff;
+  font-size: 12px;
+  color: #333;
+  cursor: pointer;
+}
+
+.segmented button + button {
+  border-left: none;
+}
+
+.segmented button:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.segmented button:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.segmented button:hover:not(.active) {
+  background: #f0f0f0;
+}
+
+.segmented button.active {
+  background: #3498db;
+  border-color: #3498db;
+  color: #fff;
+}
+
+/* The unit after a row's label: "Radius (cm)". */
+.row-unit {
+  color: #888;
+  font-size: 12px;
+}
+
+/* Number boxes, each with its axis name to its left. */
+.number-fields {
+  display: flex;
+  gap: 6px;
+}
+
+/* A number box (PropertiesPanel.jsx's NumberField): its axis name and
+   box, in a label, then its up and down arrows, joined to the box's right
+   side. */
+.number-field {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.overlay-controls .number-field label {
+  gap: 3px;
+  cursor: default;
+}
+
+/* The box and its arrows together are 4em wide; the arrows take 16 px.
+   `appearance: textfield` hides Firefox's own arrows, and the rule below
+   the other browsers': NumberField draws its own, since Safari on an iPad
+   or iPhone has none. */
+.number-field input {
+  width: calc(4em - 16px);
+  padding: 2px 4px;
+  border: 1px solid #bbb;
+  border-radius: 4px 0 0 4px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.number-field input::-webkit-inner-spin-button,
+.number-field input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* The arrows: a column of two buttons as tall as the box. */
+.number-arrows {
+  display: flex;
+  flex-direction: column;
+}
+
+.number-arrows button {
+  flex: 1;
+  width: 16px;
+  padding: 0;
+  border: 1px solid #bbb;
+  border-left: none;
+  background: #f4f5f7;
+  color: #555;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.number-arrows button:first-child {
+  border-radius: 0 4px 0 0;
+}
+
+.number-arrows button:last-child {
+  border-top: none;
+  border-radius: 0 0 4px 0;
+}
+
+.number-arrows button:hover:not(:disabled) {
+  background: #e4e7eb;
+  color: #222;
+}
+
+.number-arrows button:active:not(:disabled) {
+  background: #d6dade;
+}
+
+.number-arrows button:disabled {
+  color: #c3c7cc;
+  cursor: default;
+}
+
+/* On a touchscreen, taller boxes, so each arrow is a bigger target for a
+   finger. */
+@media (pointer: coarse) {
+  .number-field input {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+}
+
+.segmented button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.segmented button:disabled:hover:not(.active) {
+  background: #fff;
+}
+
+.number-field input:disabled {
+  background: #f0f1f3;
+  color: #888;
+}
+
+/* The 2D cut's panel: why its cut is invalid, in the cut's invalid
+   orange, and its View 2D cut button. */
+.panel-warning {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #b8650a;
+}
+
+.panel-wide-button {
+  margin-top: 4px;
+  padding: 6px 10px;
+}
+
+.control-button:disabled,
+.control-button:disabled:hover {
+  background: #fff;
+  border-color: #ddd;
+  color: #aaa;
+  cursor: default;
+}
+
+/* In the 2D cut's view, a small 3D picture of where the cut is, in the
+   axis gizmo's place above the view buttons (CutInset.jsx); clicking it
+   goes back to 3D. */
+.cut-inset {
+  display: block;
+  width: 108px;
+  height: 108px;
+  margin-bottom: 4px;
+  padding: 0;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fbfbfc;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.cut-inset:hover {
+  border-color: #3498db;
+}
+
+/* In a short window, the sidebar mustn't run into the view controls in
+   the lower-left corner (the axis gizmo or the 2D cut's inset and its
+   buttons, about 200px tall): it's capped above them, and scrolls if it
+   still doesn't fit -- which in windows under 620px tall, where its
+   buttons are also smaller (below), takes a very short window. */
+.sidebar-panel {
+  max-height: calc(100dvh - 16px - 210px);
+  overflow-y: auto;
+}
+
+@media (max-height: 620px) {
+  .sidebar-panel {
+    gap: 4px;
+    padding: 8px 6px;
+  }
+
+  .sidebar-heading {
+    font-size: 14px;
+  }
+
+  .sidebar-column {
+    gap: 2px;
+  }
+
+  .sidebar-icon-button {
+    width: 36px;
+    height: 36px;
+    padding: 4px;
+  }
+
+  .sidebar-icon-button svg {
+    width: 26px;
+    height: 26px;
+  }
+}
