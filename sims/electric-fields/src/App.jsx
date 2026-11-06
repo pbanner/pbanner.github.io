@@ -7,7 +7,7 @@ import PropertiesPanel, { CutPanel, ProbePanel } from './PropertiesPanel.jsx';
 import FieldProbesPanel from './FieldProbesPanel.jsx';
 import CutInset from './CutInset.jsx';
 import OrbitLock from './OrbitLock.jsx';
-import { getChargeType, makeCharge, normalizePosition, crowds } from './chargeTypes.js';
+import { getChargeType, makeCharge, normalizePosition, crowds, freeingChanges, PINNING_CHANGES } from './chargeTypes.js';
 import { PROBE_TYPE, MAX_PROBES, isProbeId, nextProbeLabel, probeInCut } from './probes.js';
 import { allowedCuts, defaultCutAxis, placeCut, keepInCut } from './cutPlanes.js';
 import { CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
@@ -174,6 +174,13 @@ export default function App() {
     }));
   };
   const moveCharge = (id, position) => updateCharge(id, { position });
+  // Switching a point charge between pinned and free, in its properties
+  // panel: a newly free one gets the next free name (q₁, q₂, ...) and,
+  // the first time, the default mass and no velocity (chargeTypes.js).
+  const setFree = (id, free) => {
+    const charge = charges.find((c) => c.id === id);
+    if (charge) updateCharge(id, free ? freeingChanges(charge, charges) : PINNING_CHANGES);
+  };
   const updateProbe = (id, changes) => setProbes((prev) => prev.map((p) => (p.id === id ? { ...p, ...changes } : p)));
   const moveProbe = (id, position) => updateProbe(id, { position });
   const deleteProbe = (id) => {
@@ -400,6 +407,7 @@ export default function App() {
               charge={selectedCharge}
               lockedAxis={inCut ? inCut.axis : null}
               onChange={(changes) => updateCharge(selectedCharge.id, changes)}
+              onSetFree={(free) => setFree(selectedCharge.id, free)}
               onDelete={() => deleteCharge(selectedCharge.id)}
               onClose={() => setSelectedId(null)}
             />

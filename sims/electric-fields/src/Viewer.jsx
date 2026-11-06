@@ -1,4 +1,4 @@
-import { useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { OrbitControls, GizmoHelper } from '@react-three/drei';
@@ -6,7 +6,7 @@ import { ChargeDrag } from './chargeDrag.js';
 import ChargeMarker, { PositionGuides } from './ChargeMarker.jsx';
 import ProbeMarker, { ProbeFieldLine } from './ProbeMarker.jsx';
 import { probeReading, probeInCut } from './probes.js';
-import { objectField } from './chargeField.js';
+import { objectField, fieldKey } from './chargeField.js';
 import { chargeColor } from './chargeTypes.js';
 import ChargedObject from './ChargedObject.jsx';
 import ObjectHandles from './ObjectHandles.jsx';
@@ -94,11 +94,11 @@ function dragReadout(item, grab) {
 }
 
 // charges: everything placed, [{ id, kind, ... }] (see chargeField.js).
-//   They're also the field's sources, as they are, and since App.jsx only
-//   makes a new array when a charge changes,
-//   a re-render for anything else (e.g. the hover highlight) doesn't
-//   recompute the field. The placement ghost isn't a source: only placed
-//   charges make a field.
+//   They're also the field's sources (`sources`, below), which are traced
+//   again only when something the field depends on changes -- not for a
+//   re-render for anything else (e.g. the hover highlight), nor for a
+//   change to a free charge that doesn't touch the field (its velocity).
+//   The placement ghost isn't a source: only placed charges make a field.
 // probes: the field probes, [{ id, label, position }] (see probes.js),
 //   picked and dragged like point charges (onMoveProbe(id, position),
 //   onDeleteProbe(id)). In the 2D cut's view, only those in the cut are
@@ -336,6 +336,17 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
       else onUpdateCharge(item.id, { position: unitAxis(axis).map((u) => (u ? value : 0)) });
     }, (ev) => endDrag(ev, onDeleteCharge));
   };
+
+  // The charges as the field's sources: the same array, but a new one only
+  // when something the field depends on changes (chargeField.js's
+  // fieldKey) -- not, say, a free charge's velocity, or whether its arrow
+  // is shown -- so the field lines and arrows, which are traced again
+  // whenever their sources change, aren't traced again for nothing. (So
+  // the deps are the key, not the array: the array is read only when the
+  // key changes.)
+  const sourcesKey = fieldKey(charges);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const sources = useMemo(() => charges, [sourcesKey]);
 
   // Point charges are picked, dragged and drawn as ChargeMarkers; the
   // charged spheres, rods and planes ("objects") as ChargedObjects.
@@ -621,9 +632,9 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
         {/* With a valid 2D cut, its lines are painted on it, over the 3D
             lines, which fade -- and in 2D, they're all there is. Arrows
             are the 3D grid's, or in 2D a grid in the cut. */}
-        {showField && fieldStyle === 'lines' && !view2D && <FieldLines sources={charges} density={fieldDensity} faded={!!cut?.valid} />}
-        {showField && fieldStyle === 'lines' && cut?.valid && <FieldLines sources={charges} density={fieldDensity} cut={cut} />}
-        {showField && fieldStyle === 'arrows' && <FieldArrows sources={charges} density={fieldDensity} cut={view2D ? cut : null} />}
+        {showField && fieldStyle === 'lines' && !view2D && <FieldLines sources={sources} density={fieldDensity} faded={!!cut?.valid} />}
+        {showField && fieldStyle === 'lines' && cut?.valid && <FieldLines sources={sources} density={fieldDensity} cut={cut} />}
+        {showField && fieldStyle === 'arrows' && <FieldArrows sources={sources} density={fieldDensity} cut={view2D ? cut : null} />}
 
         {pointCharges.map((charge) => (
           <ChargeMarker
@@ -670,12 +681,12 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
               />
               {/* Where the field has no single value, neither does its
                   line. */}
-              {probe.showFieldLine && reading.field && <ProbeFieldLine position={probe.position} sources={charges} cut={view2D ? cut : null} />}
+              {probe.showFieldLine && reading.field && <ProbeFieldLine position={probe.position} sources={sources} cut={view2D ? cut : null} />}
             </group>
           );
         })}
 
-        {cut && !view2D && <CutPlane cut={cut} charges={charges} selected={selectedId === 'cut'} />}
+        {cut && !view2D && <CutPlane cut={cut} charges={sources} selected={selectedId === 'cut'} />}
 
         {selectedObject && <ObjectHandles charge={selectedObject} hoveredId={hoveredHandleId} activeId={handleDrag?.id} isHidden={handleHidden} />}
 

@@ -100,6 +100,15 @@ function planeField(obj, p) {
   return field;
 }
 
+// What the field of `objects` depends on, as a string: each one's kind,
+// place, charge, size and shape. Two arrangements with the same key have
+// the same field everywhere -- so the field lines needn't be traced again
+// when something else changes, like a free charge's velocity or a display
+// option.
+export function fieldKey(objects) {
+  return JSON.stringify(objects.map((c) => [c.id, c.kind, c.position, c.q, c.lambda, c.sigma, c.radius, c.form, c.axis, c.thickness]));
+}
+
 // The total field at p of every object.
 export function fieldAt(p, objects) {
   let ex = 0;

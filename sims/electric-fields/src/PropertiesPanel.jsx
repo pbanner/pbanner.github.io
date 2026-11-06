@@ -6,9 +6,10 @@
 //
 // Every length is shown and typed in cm, like the coordinate readout
 // (positions in state are in world units; see geometry.js's CM), and
-// labeled "(cm)"; charges are in nC.
+// labeled "(cm)"; charges are in nC, a free charge's mass in g, and its
+// velocity in cm/s (in state, world units per second).
 import { useState } from 'react';
-import { CHARGE_SETTINGS, MAX_CHARGE_STEPS, chargeSteps, withChargeSteps } from './chargeTypes.js';
+import { CHARGE_SETTINGS, MAX_CHARGE_STEPS, chargeSteps, withChargeSteps, isFree, freeLabelText } from './chargeTypes.js';
 import { CM } from './geometry.js';
 import Segmented from './Segmented.jsx';
 import { WORLD_HALF_EXTENT } from './sceneConstants.js';
@@ -30,11 +31,16 @@ const SIZE_LIMITS_CM = { min: 0.5, max: WORLD_LIMIT_CM }; // radii, thicknesses
 const toCm = (world) => world / CM;
 const toWorld = (cm) => cm * CM;
 
-// A length in cm as text: whole numbers plainly, others to 2 decimals
-// (trailing zeros dropped). (A plain hyphen for a minus sign: a number box
-// takes nothing else.)
-function formatCm(cm) {
-  return String(Math.round(cm * 100) / 100);
+// A number as text: whole numbers plainly, others to 2 decimals (trailing
+// zeros dropped). (A plain hyphen for a minus sign: a number box takes
+// nothing else.)
+function formatNumber(value) {
+  return String(Math.round(value * 100) / 100);
+}
+// A mass in grams likewise -- except one under 0.01 g, which would round
+// to 0, to 2 significant figures.
+function formatMass(grams) {
+  return grams >= 0.01 ? formatNumber(grams) : String(Number(grams.toPrecision(2)));
 }
 
 // A row's label, with the unit of what's in it after it: "Radius (cm)".
@@ -46,36 +52,45 @@ function RowLabel({ text, unit = 'cm' }) {
   );
 }
 
-// A number box with up and down arrows, in cm. The box itself is the
-// browser's own number box -- so the up and down keys step it, and a
-// tablet or phone offers a keyboard with digits -- but its arrows are drawn
-// here: Safari on an iPad or iPhone doesn't draw a number box's arrows at
-// all, so the browser's are hidden (App.css) and these stand in for them
-// everywhere.
+// A number box with up and down arrows -- a length in cm, a mass in g or a
+// velocity in cm/s. The box itself is the browser's own number box -- so
+// the up and down keys step it, and a tablet or phone offers a keyboard
+// with digits -- but its arrows are drawn here: Safari on an iPad or
+// iPhone doesn't draw a number box's arrows at all, so the browser's are
+// hidden (App.css) and these stand in for them everywhere.
 //
 // Typing is a draft, shown just as typed, until Enter or leaving the box
 // commits it (committing every keystroke would move a charge to 1 on the
-// way to 12); text that isn't a number puts the old value back. A step --
-// an arrow, or the up or down key -- commits at once. (The keys change the
-// box with no inputType, which only typing, pasting and deleting have.)
-// Either way the value is kept to [min, max].
+// way to 12); text that isn't a number, or that `accept` turns down, puts
+// the old value back. A step -- an arrow, or the up or down key -- commits
+// at once. (The keys change the box with no inputType, which only typing,
+// pasting and deleting have.) Either way the value is kept to [min, max]
+// (unlimited by default).
 //
-// A step is 1 cm, to the next whole multiple of it counted from
-// `stepBase`, as the browser's own arrows would step: 0 for a size, so a
-// radius steps 1, 2, 3 rather than from its least, 0.5, and 2.75 steps up
-// to 3 or down to 2. `disabled` grays it out.
-function NumberField({ label, cm, min, max, onCommit, disabled = false, stepBase = min }) {
+// A step is `step` (1 by default), to the next whole multiple of it
+// counted from `stepBase`, as the browser's own arrows would step: 0 for a
+// size, so a radius steps 1, 2, 3 rather than from its least, 0.5, and
+// 2.75 steps up to 3 or down to 2. Stepping down goes no lower than
+// `stepMin` (min, by default), though a value typed below it is allowed:
+// a mass can be typed as 0.05 g, but stepped down only to 0.1 g. `format`
+// shows the value as text. `disabled` grays it out.
+function NumberField({
+  label, value, onCommit, min = -Infinity, max = Infinity, step = 1, stepBase = Number.isFinite(min) ? min : 0,
+  stepMin = min, accept = () => true, format = formatNumber, disabled = false,
+}) {
   const [draft, setDraft] = useState(null);
   const commitValue = (text) => {
-    const value = Number.parseFloat(text);
+    const parsed = Number.parseFloat(text);
     setDraft(null);
-    if (Number.isFinite(value)) onCommit(Math.min(max, Math.max(min, value)));
+    if (Number.isFinite(parsed) && accept(parsed)) onCommit(Math.min(max, Math.max(min, parsed)));
   };
   const stepBy = (direction) => {
-    const current = Number.parseFloat(draft ?? formatCm(cm));
+    const current = Number.parseFloat(draft ?? format(value));
     if (!Number.isFinite(current)) return;
-    const steps = current - stepBase;
-    const next = stepBase + (direction > 0 ? Math.floor(steps + 1e-9) + 1 : Math.ceil(steps - 1e-9) - 1);
+    const steps = (current - stepBase) / step;
+    let next = stepBase + step * (direction > 0 ? Math.floor(steps + 1e-9) + 1 : Math.ceil(steps - 1e-9) - 1);
+    next = Number(next.toFixed(10)); // 0.1 + 0.2 is 0.30000000000000004
+    if (direction < 0 && next < stepMin) next = current > stepMin ? stepMin : current;
     commitValue(String(next));
   };
   return (
@@ -84,10 +99,14 @@ function NumberField({ label, cm, min, max, onCommit, disabled = false, stepBase
         <span>{label}</span>
         <input
           type="number"
-          min={stepBase}
-          max={max}
-          step={1}
-          value={draft ?? formatCm(cm)}
+          // The browser's own stepping (the up and down keys) counts from
+          // `min`, so that's stepBase, not the least value allowed -- and
+          // there's none for a box with no least value (a velocity), which
+          // the browser would otherwise hold above it.
+          min={Number.isFinite(min) ? stepBase : undefined}
+          max={Number.isFinite(max) ? max : undefined}
+          step={step}
+          value={draft ?? format(value)}
           disabled={disabled}
           onChange={(e) => {
             if (e.nativeEvent.inputType) setDraft(e.target.value);
@@ -135,15 +154,75 @@ function nextSteps(steps, delta) {
   return next === 0 ? next + delta : next;
 }
 
+// A free charge's own settings (its part of PropertiesPanel):
+//   - its mass, in g: the arrows step it by 0.1 g, down to 0.1 g, but
+//     anything above 0 can be typed;
+//   - its velocity, in cm/s, to start the run with;
+//   - whether to show its predicted path (the run worked out in advance:
+//     motion.js) and an arrow along its velocity.
+const MASS_STEP = 0.1;
+function FreeChargeSettings({ charge, onChange }) {
+  const setVelocity = (k, cmPerSecond) => {
+    const velocity = [...charge.velocity];
+    velocity[k] = toWorld(cmPerSecond);
+    onChange({ velocity });
+  };
+  return (
+    <>
+      <div className="property-row">
+        <RowLabel text="Mass" unit="g" />
+        <div className="number-fields">
+          <NumberField
+            key={`mass-${charge.id}`}
+            label=""
+            value={charge.mass}
+            step={MASS_STEP}
+            stepBase={0}
+            stepMin={MASS_STEP}
+            accept={(grams) => grams > 0}
+            format={formatMass}
+            onCommit={(mass) => onChange({ mass })}
+          />
+        </div>
+      </div>
+      <div className="property-row">
+        <RowLabel text="Velocity" unit="cm/s" />
+        <div className="number-fields">
+          {[0, 1, 2].map((k) => (
+            <NumberField key={`v${k}-${charge.id}`} label={AXIS_NAMES[k]} value={toCm(charge.velocity[k])} onCommit={(v) => setVelocity(k, v)} />
+          ))}
+        </div>
+      </div>
+      <label>
+        <input type="checkbox" checked={charge.showPredictedPath} onChange={(e) => onChange({ showPredictedPath: e.target.checked })} />
+        Show predicted path
+      </label>
+      <label>
+        <input type="checkbox" checked={charge.showVelocity} onChange={(e) => onChange({ showVelocity: e.target.checked })} />
+        Show velocity
+      </label>
+    </>
+  );
+}
+
 // charge: the selected charge (see chargeTypes.js).
 // onChange(changes): new values for some of its fields.
+// onSetFree(free): a point charge switched to free (true) or pinned.
+// canBeFree: whether a pinned point charge can be switched to free (it
+//   can't while it's against a wall: walls.js); `freeBlockedReason` says
+//   why not, as the Free button's tooltip.
 // onDelete() / onClose(): delete it, or deselect.
 // lockedAxis: while the 2D cut is viewed, its axis (0, 1 or 2): the
 //   coordinate across the cut is grayed out, and so is turning a charged
 //   plane parallel to the cut, since either would take the charge out of
 //   the cut's mirror symmetry.
-export default function PropertiesPanel({ charge, onChange, onDelete, onClose, lockedAxis = null }) {
+//
+// A free point charge's panel also has its mass, its velocity (where it
+// starts off, and how fast) and two display options: its predicted path,
+// and an arrow along its velocity.
+export default function PropertiesPanel({ charge, onChange, onSetFree, onDelete, onClose, lockedAxis = null, canBeFree = true, freeBlockedReason }) {
   const { kind } = charge;
+  const free = isFree(charge);
   const steps = chargeSteps(charge);
   // A rod's or plane's charge is a density: lambda, charge per length, or
   // sigma, charge per area, the symbols Gauss's law problems use.
@@ -170,11 +249,24 @@ export default function PropertiesPanel({ charge, onChange, onDelete, onClose, l
   return (
     <div className="overlay-controls properties-panel">
       <div className="panel-header">
-        <h3>{TITLES[kind]}</h3>
+        <h3>{TITLES[kind]}{free && ` ${freeLabelText(charge.freeLabel)}`}</h3>
         <button type="button" className="panel-close-button" aria-label="Deselect" onClick={onClose}>
           ×
         </button>
       </div>
+
+      {kind === 'point' && (
+        <div className="property-row">
+          <span>Type</span>
+          <Segmented
+            options={[[false, 'Pinned'], [true, 'Free']]}
+            value={free}
+            onChange={onSetFree}
+            isDisabled={(v) => v && !free && !canBeFree}
+            titleFor={(v) => (v && !free && !canBeFree ? freeBlockedReason : undefined)}
+          />
+        </div>
+      )}
 
       <div className="property-row">
         <span>{label}</span>
@@ -216,7 +308,7 @@ export default function PropertiesPanel({ charge, onChange, onDelete, onClose, l
             <NumberField
               key={`${k}-${charge.id}`}
               label={AXIS_NAMES[k]}
-              cm={toCm(charge.position[k])}
+              value={toCm(charge.position[k])}
               min={-WORLD_LIMIT_CM}
               max={WORLD_LIMIT_CM}
               disabled={k === lockedAxis}
@@ -226,11 +318,13 @@ export default function PropertiesPanel({ charge, onChange, onDelete, onClose, l
         </div>
       </div>
 
+      {free && <FreeChargeSettings charge={charge} onChange={onChange} />}
+
       {(kind === 'sphere' || (kind === 'rod' && charge.form !== 'line')) && (
         <div className="property-row">
           <RowLabel text="Radius" />
           <div className="number-fields">
-            <NumberField key={`radius-${charge.id}`} label="" cm={toCm(charge.radius)} {...SIZE_LIMITS_CM} stepBase={0} onCommit={(cm) => onChange({ radius: toWorld(cm) })} />
+            <NumberField key={`radius-${charge.id}`} label="" value={toCm(charge.radius)} {...SIZE_LIMITS_CM} stepBase={0} onCommit={(cm) => onChange({ radius: toWorld(cm) })} />
           </div>
         </div>
       )}
@@ -238,7 +332,7 @@ export default function PropertiesPanel({ charge, onChange, onDelete, onClose, l
         <div className="property-row">
           <RowLabel text="Thickness" />
           <div className="number-fields">
-            <NumberField key={`thickness-${charge.id}`} label="" cm={toCm(charge.thickness)} {...SIZE_LIMITS_CM} stepBase={0} onCommit={(cm) => onChange({ thickness: toWorld(cm) })} />
+            <NumberField key={`thickness-${charge.id}`} label="" value={toCm(charge.thickness)} {...SIZE_LIMITS_CM} stepBase={0} onCommit={(cm) => onChange({ thickness: toWorld(cm) })} />
           </div>
         </div>
       )}
@@ -277,7 +371,7 @@ export function ProbePanel({ probe, onChange, onDelete, onClose, lockedAxis = nu
             <NumberField
               key={`${k}-${probe.id}`}
               label={AXIS_NAMES[k]}
-              cm={toCm(probe.position[k])}
+              value={toCm(probe.position[k])}
               min={-WORLD_LIMIT_CM}
               max={WORLD_LIMIT_CM}
               disabled={k === lockedAxis}
@@ -338,7 +432,7 @@ export function CutPanel({ cut, allowed, onChangeAxis, onChangeOffset, onView, o
           <NumberField
             key={`cut-${cut.axis}`}
             label={AXIS_NAMES[cut.axis]}
-            cm={toCm(cut.offset)}
+            value={toCm(cut.offset)}
             min={-WORLD_LIMIT_CM}
             max={WORLD_LIMIT_CM}
             disabled={!cut.movable}
