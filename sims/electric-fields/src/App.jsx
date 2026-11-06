@@ -7,8 +7,9 @@ import PropertiesPanel, { CutPanel, ProbePanel } from './PropertiesPanel.jsx';
 import FieldProbesPanel from './FieldProbesPanel.jsx';
 import CutInset from './CutInset.jsx';
 import OrbitLock from './OrbitLock.jsx';
-import { getChargeType, makeCharge, normalizePosition, crowds, freeingChanges, PINNING_CHANGES, isFree } from './chargeTypes.js';
+import { getChargeType, makeCharge, normalizePosition, crowds, freeingChanges, PINNING_CHANGES, isFree, freeLabelText } from './chargeTypes.js';
 import { simulateRun, motionKey } from './motion.js';
+import { contactGap, touchesFreeCharge, wallName } from './walls.js';
 import { PROBE_TYPE, MAX_PROBES, isProbeId, nextProbeLabel, probeInCut } from './probes.js';
 import { allowedCuts, defaultCutAxis, placeCut, keepInCut } from './cutPlanes.js';
 import { CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
@@ -143,12 +144,17 @@ export default function App() {
     ? { kind: 'probe', position: point }
     : makeCharge(typeId, point, inCut ? (c) => keepInCut(c, inCut, true) : undefined));
   // Where a new charge can't go: on top of a point charge or a thin rod
-  // (crowds, in chargeTypes.js). Treated like a point off the grid -- the
-  // ghost isn't drawn there, and dropping there places nothing. A probe
-  // can go anywhere (on a charge, it reads "undefined"), up to MAX_PROBES.
-  const placeable = (typeId, point) => point && (isProbeType(typeId)
-    ? probes.length < MAX_PROBES
-    : !crowds(makeNew(typeId, point), charges));
+  // (crowds, in chargeTypes.js), or against a free charge -- a free charge
+  // never touches anything (walls.js). Treated like a point off the grid
+  // -- the ghost isn't drawn there, and dropping there places nothing. A
+  // probe can go anywhere (on a charge, it reads "undefined"), up to
+  // MAX_PROBES.
+  const placeable = (typeId, point) => {
+    if (!point) return false;
+    if (isProbeType(typeId)) return probes.length < MAX_PROBES;
+    const candidate = makeNew(typeId, point);
+    return !crowds(candidate, charges) && !touchesFreeCharge(candidate, charges);
+  };
   const addCharge = (typeId, position) => {
     if (!placeable(typeId, position)) return;
     if (isProbeType(typeId)) {
@@ -162,16 +168,18 @@ export default function App() {
     setSelectedId(id);
   };
   // Every edit -- dragging, a handle, the properties panel -- goes through
-  // here. One that would stack it on another charge is ignored, so a
-  // dragged charge stops at the last free spot, and a typed position that
-  // would stack it springs back.
+  // here. One that would stack it on another charge, or put a free charge
+  // against anything (walls.js) -- whichever of the two moves or grows --
+  // is ignored, so a dragged charge stops at the last spot it can be, and
+  // a typed position or size that it can't have springs back.
   const updateCharge = (id, changes) => {
     setCharges((prev) => prev.map((c) => {
       if (c.id !== id) return c;
       const changed = inCut ? keepInCut({ ...c, ...changes }, inCut) : { ...c, ...changes };
       if (!changed) return c;
       const next = normalizePosition(changed);
-      return crowds(next, prev.filter((o) => o.id !== id)) ? c : next;
+      const others = prev.filter((o) => o.id !== id);
+      return crowds(next, others) || touchesFreeCharge(next, others) ? c : next;
     }));
   };
   const moveCharge = (id, position) => updateCharge(id, { position });
@@ -343,6 +351,12 @@ export default function App() {
   const armedType = !armedTypeId ? null : isProbeType(armedTypeId) ? PROBE_TYPE : getChargeType(armedTypeId);
   const selectedCharge = charges.find((c) => c.id === selectedId) ?? null;
   const selectedProbe = probes.find((p) => p.id === selectedId) ?? null;
+  // What keeps the selected pinned point charge from being made free, if
+  // anything: whatever it's touching (walls.js). Its panel's Free button is
+  // grayed out then.
+  const freeBlocker = selectedCharge?.kind === 'point' && !isFree(selectedCharge)
+    ? charges.find((o) => o.id !== selectedCharge.id && contactGap(selectedCharge.position, o) <= 0) ?? null
+    : null;
   // In the 2D cut's view, only the probes in the cut are shown, in the
   // scene and in the Field Probes panel.
   const shownProbes = inCut ? probes.filter((p) => probeInCut(p, inCut)) : probes;
@@ -420,6 +434,8 @@ export default function App() {
               lockedAxis={inCut ? inCut.axis : null}
               onChange={(changes) => updateCharge(selectedCharge.id, changes)}
               onSetFree={(free) => setFree(selectedCharge.id, free)}
+              canBeFree={!freeBlocker}
+              freeBlockedReason={freeBlocker && `A free charge can't start out touching anything, and this one touches ${wallName(freeBlocker, (c) => freeLabelText(c.freeLabel))}`}
               onDelete={() => deleteCharge(selectedCharge.id)}
               onClose={() => setSelectedId(null)}
             />
