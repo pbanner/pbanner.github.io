@@ -9,10 +9,10 @@ import { PositionGuides } from './ChargeMarker.jsx';
 // Sizes, in world units (1 world unit = 2 cm). The rings sit just outside
 // the ball; the selection ring (like a selected point charge's) just
 // outside them.
-const BALL_RADIUS = 0.07;
-const RING_RADIUS = 0.115;
-const RING_THICKNESS = 0.009;
-const SELECTION_RING = [0.15, 0.18];
+const BALL_RADIUS = 0.125;
+const RING_RADIUS = 0.20;
+const RING_THICKNESS = 0.015;
+const SELECTION_RING = [0.25, 0.28];
 const PROBE_COLOR = '#151515';
 
 // The three rings, one parallel to each coordinate plane. A torus is
@@ -24,15 +24,15 @@ const RING_ROTATIONS = [[0, 0, 0], [0, Math.PI / 2, 0], [Math.PI / 2, 0, 0]];
 // (weakest field) to LONGEST_ARROW (strongest) long, on the same
 // logarithmic scale as the field arrows (fieldArrows.js), so a field
 // that's twice as strong always looks the same amount longer.
-const SHORTEST_ARROW = 0.35;
-const LONGEST_ARROW = 1.6;
-const ARROW = { shaftRadius: 0.028, headRadius: 0.07, headLength: 0.2 };
+const SHORTEST_ARROW = 0.4;
+const LONGEST_ARROW = 1.5;
+const ARROW = { shaftRadius: 0.050, headRadius: 0.12, headLength: 0.25 };
 // The components' arrows are thinner, and one shorter than this isn't
 // drawn (it's 0, or as good as).
-const COMPONENT_ARROW = { shaftRadius: 0.014, headRadius: 0.042, headLength: 0.13 };
-const SHORTEST_COMPONENT = 0.02;
+const COMPONENT_ARROW = { shaftRadius: 0.050, headRadius: 0.12, headLength: 0.25 };
+const SHORTEST_COMPONENT = 0.05;
 // The charges' contributions' arrows, and the longest one can be.
-const CONTRIBUTION_ARROW = { shaftRadius: 0.018, headRadius: 0.05, headLength: 0.15 };
+const CONTRIBUTION_ARROW = { shaftRadius: 0.050, headRadius: 0.12, headLength: 0.25 };
 const LONGEST_CONTRIBUTION = 1.5;
 
 const UP = new THREE.Vector3(0, 1, 0);
