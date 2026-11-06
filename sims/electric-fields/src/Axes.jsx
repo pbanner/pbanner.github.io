@@ -11,7 +11,7 @@ const AXIS_DIRECTIONS = [
 ];
 const AXIS_NAMES = ['x', 'y', 'z'];
 const ORIGIN_RADIUS = 0.08;
-const TICK_RADIUS = 0.04;
+const TICK_RADIUS = 0.05;
 const LABEL_OFFSET = 0.45;
 const LABEL_SIZE = 0.6; // world units
 
@@ -68,7 +68,7 @@ export default function Axes({ hiddenAxis = null }) {
         const start = u.clone().multiplyScalar(-WORLD_HALF_EXTENT).toArray();
         return (
           <group key={axis}>
-            <Line points={[start, end]} color={color} lineWidth={2} transparent opacity={0.8} />
+            <Line points={[start, end]} color={color} lineWidth={3} transparent opacity={0.8} />
             {tickValues.map((s) => (
               <mesh key={s} position={u.clone().multiplyScalar(s).toArray()}>
                 <sphereGeometry args={[TICK_RADIUS, 12, 12]} />
