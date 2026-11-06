@@ -236,6 +236,13 @@
   color: #fff;
 }
 
+/* A free charge's name ("q₁", ChargeMarker.jsx), in the same style, set
+   a little further out: a charge is bigger than a probe, and glows. */
+.charge-label {
+  left: 14px;
+  top: -32px;
+}
+
 .coordinate-readout {
   position: absolute;
   left: 0;

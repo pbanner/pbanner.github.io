@@ -7,7 +7,7 @@ import ChargeMarker, { PositionGuides } from './ChargeMarker.jsx';
 import ProbeMarker, { ProbeFieldLine } from './ProbeMarker.jsx';
 import { probeReading, probeInCut } from './probes.js';
 import { objectField, fieldKey } from './chargeField.js';
-import { chargeColor } from './chargeTypes.js';
+import { chargeColor, isFree, freeLabelText } from './chargeTypes.js';
 import ChargedObject from './ChargedObject.jsx';
 import ObjectHandles from './ObjectHandles.jsx';
 import CutPlane from './CutPlane.jsx';
@@ -643,6 +643,8 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
             position={charge.position}
             highlighted={charge.id === draggingId || (draggingId == null && charge.id === hoveredId)}
             selected={charge.id === selectedId}
+            free={isFree(charge)}
+            label={isFree(charge) ? freeLabelText(charge.freeLabel) : null}
             showGuides={charge.id === draggingId}
           />
         ))}
