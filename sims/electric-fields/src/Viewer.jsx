@@ -120,7 +120,10 @@ function dragReadout(item, grab) {
 //   its perspective, and only the cut's field lines (or arrows) are drawn.
 // showGrid / showAxes / showField / fieldStyle ('lines' or 'arrows') /
 //   fieldDensity: the Display Options panel's settings
-export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProbe, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, cut, onMoveCut, view2D, showGrid, showAxes, showField, fieldStyle, fieldDensity }) {
+// orbiting: the camera is orbiting (Start Orbit; see CameraAnimator's
+//   startOrbit). Any press on the view stops it, where it is
+//   (onStopOrbit()), and then does whatever it would have done anyway.
+export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProbe, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, cut, onMoveCut, view2D, showGrid, showAxes, showField, fieldStyle, fieldDensity, orbiting, onStopOrbit }) {
   const wrapperRef = useRef();
   const controlsRef = useRef();
   const cameraAnimatorRef = useRef();
@@ -177,6 +180,15 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
     // flatFraming reads the current cut, whose position is in the deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view2D, cutAxis, cutOffset]);
+
+  // The orbit follows the `orbiting` prop. (A press on the view also stops
+  // it straight away, in handlePointerDownCapture, without waiting for the
+  // prop to catch up: see there.)
+  useEffect(() => {
+    const animator = cameraAnimatorRef.current;
+    if (orbiting) animator?.startOrbit();
+    else animator?.stopOrbit();
+  }, [orbiting]);
 
   // Can't use controls.reset(): drei captures the controls' saved state
   // before applying the `target` prop, so reset() would aim at the wrong
@@ -464,7 +476,17 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
   // click-to-place's second click, which is likewise acted on at pointerup
   // only if the pointer barely moved -- so a real drag still orbits the
   // camera, and only a genuine click drops the charge.
+  //
+  // Any press -- any button, anywhere on the view, the axis gizmo included
+  // -- first stops the orbit, if the camera is orbiting. It's stopped here
+  // and now, not just through App.jsx's state (which only reaches the
+  // orbit after a re-render), so the camera doesn't move a frame further
+  // under a drag that's just starting from where it is.
   const handlePointerDownCapture = (e) => {
+    if (orbiting) {
+      cameraAnimatorRef.current?.stopOrbit();
+      onStopOrbit();
+    }
     pressRef.current = null;
     // Finish any typing in the properties panel first: taking the focus
     // away from its box commits what was typed to the charge it belongs

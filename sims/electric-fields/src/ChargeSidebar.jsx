@@ -1,6 +1,7 @@
 import { CHARGE_TYPES } from './chargeTypes.js';
 import { PROBE_TYPE } from './probes.js';
 import ChargeIcon from './ChargeIcon.jsx';
+import OrbitLock from './OrbitLock.jsx';
 
 // One icon in the sidebar's column. Reports its own hover in and out (as
 // { label, rect } / null) rather than rendering a label itself -- the label
@@ -48,45 +49,49 @@ function TrashIcon({ size = 28, color = '#333' }) {
 // click it to toggle delete mode (then click charges or probes to delete
 // them), or drag a placed charge or probe onto it (Viewer.jsx looks for its
 // data-role="trash-target" under the pointer on release).
-export default function ChargeSidebar({ armedTypeId, onButtonPointerDown, removeMode, onToggleRemoveMode, onHoverButton }) {
+//
+// While the camera orbits (`locked`), it's all disabled (OrbitLock.jsx).
+export default function ChargeSidebar({ armedTypeId, onButtonPointerDown, removeMode, onToggleRemoveMode, onHoverButton, locked }) {
   return (
     <div className="sidebar-panel">
-      <div className="sidebar-heading">Add</div>
-      <div className="sidebar-column">
-        {CHARGE_TYPES.map((type) => (
-          <SidebarIconButton
-            key={type.id}
-            label={type.label}
-            active={armedTypeId === type.id}
-            ariaLabel={`Add ${type.label}`}
-            onPointerDown={(e) => onButtonPointerDown(type.id, e)}
-            onHoverButton={onHoverButton}
-          >
-            <ChargeIcon type={type} />
-          </SidebarIconButton>
-        ))}
-      </div>
-      <div className="sidebar-divider" />
-      <SidebarIconButton
-        label={PROBE_TYPE.label}
-        active={armedTypeId === PROBE_TYPE.id}
-        ariaLabel={`Add ${PROBE_TYPE.label}`}
-        onPointerDown={(e) => onButtonPointerDown(PROBE_TYPE.id, e)}
-        onHoverButton={onHoverButton}
-      >
-        <ChargeIcon type={PROBE_TYPE} />
-      </SidebarIconButton>
-      <div className="sidebar-divider" />
-      <SidebarIconButton
-        label="Delete"
-        active={removeMode}
-        ariaLabel="Toggle delete mode"
-        dataRole="trash-target"
-        onClick={onToggleRemoveMode}
-        onHoverButton={onHoverButton}
-      >
-        <TrashIcon color={removeMode ? '#fff' : '#333'} />
-      </SidebarIconButton>
+      <OrbitLock locked={locked}>
+        <div className="sidebar-heading">Add</div>
+        <div className="sidebar-column">
+          {CHARGE_TYPES.map((type) => (
+            <SidebarIconButton
+              key={type.id}
+              label={type.label}
+              active={armedTypeId === type.id}
+              ariaLabel={`Add ${type.label}`}
+              onPointerDown={(e) => onButtonPointerDown(type.id, e)}
+              onHoverButton={onHoverButton}
+            >
+              <ChargeIcon type={type} />
+            </SidebarIconButton>
+          ))}
+        </div>
+        <div className="sidebar-divider" />
+        <SidebarIconButton
+          label={PROBE_TYPE.label}
+          active={armedTypeId === PROBE_TYPE.id}
+          ariaLabel={`Add ${PROBE_TYPE.label}`}
+          onPointerDown={(e) => onButtonPointerDown(PROBE_TYPE.id, e)}
+          onHoverButton={onHoverButton}
+        >
+          <ChargeIcon type={PROBE_TYPE} />
+        </SidebarIconButton>
+        <div className="sidebar-divider" />
+        <SidebarIconButton
+          label="Delete"
+          active={removeMode}
+          ariaLabel="Toggle delete mode"
+          dataRole="trash-target"
+          onClick={onToggleRemoveMode}
+          onHoverButton={onHoverButton}
+        >
+          <TrashIcon color={removeMode ? '#fff' : '#333'} />
+        </SidebarIconButton>
+      </OrbitLock>
     </div>
   );
 }

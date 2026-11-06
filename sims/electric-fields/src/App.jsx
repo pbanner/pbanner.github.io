@@ -6,6 +6,7 @@ import DisplayOptionsPanel from './DisplayOptionsPanel.jsx';
 import PropertiesPanel, { CutPanel, ProbePanel } from './PropertiesPanel.jsx';
 import FieldProbesPanel from './FieldProbesPanel.jsx';
 import CutInset from './CutInset.jsx';
+import OrbitLock from './OrbitLock.jsx';
 import { getChargeType, makeCharge, normalizePosition, crowds } from './chargeTypes.js';
 import { PROBE_TYPE, MAX_PROBES, isProbeId, nextProbeLabel, probeInCut } from './probes.js';
 import { allowedCuts, defaultCutAxis, placeCut, keepInCut } from './cutPlanes.js';
@@ -73,6 +74,7 @@ export default function App() {
   // A probe off the cut is hidden in its view, so it's deselected too.
   const viewCut = () => {
     if (!placedCut?.valid) return;
+    setOrbiting(false); // its button is disabled while orbiting; this is just to be sure
     disarm();
     setRemoveMode(false);
     const hiddenProbe = (id) => probes.some((p) => p.id === id && !probeInCut(p, placedCut));
@@ -112,6 +114,20 @@ export default function App() {
   });
 
   const viewerRef = useRef(null);
+
+  // Whether the camera is orbiting (Start Orbit, in the view controls; see
+  // CameraAnimator's startOrbit). It goes on until Stop Orbit, or any press
+  // on the view (Viewer's onStopOrbit); meanwhile every other control is
+  // disabled (OrbitLock.jsx), though scrolling still zooms. Only in 3D:
+  // in the 2D cut's view the camera doesn't rotate. Starting it puts
+  // down whatever the sidebar had armed, and leaves delete mode, so that
+  // the press that stops it doesn't also place or delete something.
+  const [orbiting, setOrbiting] = useState(false);
+  const startOrbit = () => {
+    disarm();
+    setRemoveMode(false);
+    setOrbiting(true);
+  };
 
   // While the cut is viewed in 2D, everything placed or edited is kept
   // mirror-symmetric through it (keepInCut), so the cut stays valid: new
@@ -290,10 +306,13 @@ export default function App() {
   };
 
   // Escape backs out of placement or delete mode, same as the optics lab,
-  // and deselects.
+  // and deselects -- except while orbiting, when it's disabled like the
+  // other controls. (Through an effect event, to see the current
+  // `orbiting` without re-adding the listener.)
+  const isOrbiting = useEffectEvent(() => orbiting);
   useEffect(() => {
     const onKeyDown = (e) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && !isOrbiting()) {
         disarm();
         setRemoveMode(false);
         setSelectedId(null);
@@ -335,6 +354,8 @@ export default function App() {
         showField={displayOptions.showField}
         fieldStyle={displayOptions.fieldStyle}
         fieldDensity={displayOptions.fieldDensity}
+        orbiting={orbiting}
+        onStopOrbit={() => setOrbiting(false)}
       />
 
       <ChargeSidebar
@@ -343,6 +364,7 @@ export default function App() {
         removeMode={removeMode}
         onToggleRemoveMode={toggleRemoveMode}
         onHoverButton={setHoveredSidebarButton}
+        locked={orbiting}
       />
 
       {hoveredSidebarButton && !armedTypeId && (
@@ -360,47 +382,50 @@ export default function App() {
       {/* Upper-right corner: the selected thing's panel, and under it the
           Field Probes panel -- or that alone, flush in the corner. */}
       <div className="upper-right-stack">
-        {selectedId === 'cut' && placedCut && (
-          <CutPanel
-            cut={placedCut}
-            allowed={allowed}
-            onChangeAxis={(axis) => setCut(cutAt(axis))}
-            onChangeOffset={moveCut}
-            onView={viewCut}
-            onRemove={removeCut}
-            onClose={() => setSelectedId(null)}
-          />
-        )}
+        <OrbitLock locked={orbiting}>
+          {selectedId === 'cut' && placedCut && (
+            <CutPanel
+              cut={placedCut}
+              allowed={allowed}
+              onChangeAxis={(axis) => setCut(cutAt(axis))}
+              onChangeOffset={moveCut}
+              onView={viewCut}
+              onRemove={removeCut}
+              onClose={() => setSelectedId(null)}
+            />
+          )}
 
-        {selectedCharge && (
-          <PropertiesPanel
-            charge={selectedCharge}
-            lockedAxis={inCut ? inCut.axis : null}
-            onChange={(changes) => updateCharge(selectedCharge.id, changes)}
-            onDelete={() => deleteCharge(selectedCharge.id)}
-            onClose={() => setSelectedId(null)}
-          />
-        )}
+          {selectedCharge && (
+            <PropertiesPanel
+              charge={selectedCharge}
+              lockedAxis={inCut ? inCut.axis : null}
+              onChange={(changes) => updateCharge(selectedCharge.id, changes)}
+              onDelete={() => deleteCharge(selectedCharge.id)}
+              onClose={() => setSelectedId(null)}
+            />
+          )}
 
-        {selectedProbe && (
-          <ProbePanel
-            probe={selectedProbe}
-            lockedAxis={inCut ? inCut.axis : null}
-            onChange={(changes) => updateProbe(selectedProbe.id, changes)}
-            onDelete={() => deleteProbe(selectedProbe.id)}
-            onClose={() => setSelectedId(null)}
-          />
-        )}
+          {selectedProbe && (
+            <ProbePanel
+              probe={selectedProbe}
+              lockedAxis={inCut ? inCut.axis : null}
+              onChange={(changes) => updateProbe(selectedProbe.id, changes)}
+              onDelete={() => deleteProbe(selectedProbe.id)}
+              onClose={() => setSelectedId(null)}
+            />
+          )}
 
-        {shownProbes.length > 0 && (
-          <FieldProbesPanel probes={shownProbes} charges={charges} selectedId={selectedId} onSelect={setSelectedId} cut={inCut} />
-        )}
+          {shownProbes.length > 0 && (
+            <FieldProbesPanel probes={shownProbes} charges={charges} selectedId={selectedId} onSelect={setSelectedId} cut={inCut} />
+          )}
+        </OrbitLock>
       </div>
 
       {/* Lower-left corner: the view controls, under the axis gizmo (which
           Viewer draws in the canvas) -- or in 2D, under a small 3D picture
           of where the cut is. The cut's button inserts a cut, views it in
-          2D, or goes back to 3D. */}
+          2D, or goes back to 3D. The orbit's button starts and stops the
+          orbit; while it runs, the other two are disabled. */}
       <div className="view-controls">
         {view2D && placedCut && <CutInset charges={charges} cut={placedCut} onClick={() => setView2D(false)} />}
         {view2D ? (
@@ -410,7 +435,7 @@ export default function App() {
         ) : placedCut ? (
           <button
             className="control-button view-button"
-            disabled={!placedCut.valid}
+            disabled={!placedCut.valid || orbiting}
             title={placedCut.valid ? undefined : "The charges aren't all in the cut"}
             onClick={viewCut}
           >
@@ -419,31 +444,43 @@ export default function App() {
         ) : (
           <button
             className="control-button view-button"
-            disabled={defaultCutAxis(allowed) === null}
+            disabled={defaultCutAxis(allowed) === null || orbiting}
             title={defaultCutAxis(allowed) === null ? "The charges aren't all in one plane parallel to xy, xz or yz" : undefined}
             onClick={insertCut}
           >
             Insert 2D cut
           </button>
         )}
-        <button className="control-button view-button" onClick={() => viewerRef.current?.resetView()}>
+        <button
+          className="control-button view-button"
+          disabled={view2D}
+          title={view2D ? 'The camera orbits only in 3D' : undefined}
+          onClick={orbiting ? () => setOrbiting(false) : startOrbit}
+        >
+          {orbiting ? 'Stop Orbit' : 'Start Orbit'}
+        </button>
+        <button className="control-button view-button" disabled={orbiting} onClick={() => viewerRef.current?.resetView()}>
           Reset View
         </button>
       </div>
 
       {/* Lower-right corner: the Display Options panel. */}
       <div className="lower-right-stack">
-        <DisplayOptionsPanel
-          displayOptions={displayOptions}
-          setDisplayOptions={setDisplayOptions}
-          gridPlane={view2D && placedCut ? ['yz', 'xz', 'xy'][placedCut.axis] : 'xy'}
-        />
+        <OrbitLock locked={orbiting}>
+          <DisplayOptionsPanel
+            displayOptions={displayOptions}
+            setDisplayOptions={setDisplayOptions}
+            gridPlane={view2D && placedCut ? ['yz', 'xz', 'xy'][placedCut.axis] : 'xy'}
+          />
+        </OrbitLock>
       </div>
 
       {/* How to place and manipulate charges, shown at all times --
           nothing else on screen hints that Shift and Alt do anything. */}
       <div className="interaction-hint">
-        {removeMode
+        {orbiting
+          ? 'Orbiting the camera · Scroll to zoom · Click the view, or Stop Orbit, to stop'
+          : removeMode
           ? 'Click an object to delete it · Press Escape, or click the trash can again, to stop deleting'
           : view2D
             ? 'Viewing the 2D cut! · Add objects from the sidebar · Click an object to edit it · Drag an object to move it · Drag empty space to pan, scroll to zoom · Back to 3D in the lower left'

@@ -30,9 +30,10 @@ export const INITIAL_CAMERA_TARGET = [0, 0, 0];
 export const CAMERA_FOV = 35;
 
 // The axis gizmo's center, in pixels from the viewer's lower-left corner:
-// centered over the view controls' two buttons (.view-controls in App.css,
-// 108 px wide starting 16 px in) and high enough to clear them.
-export const VIEW_CONTROLS_GIZMO_MARGIN = [70, 135];
+// centered over the view controls' three buttons (.view-controls in
+// App.css, 108 px wide starting 16 px in) and high enough to clear them.
+// Each button takes about 32 px of height (25.6 px, plus the 6 px gap).
+export const VIEW_CONTROLS_GIZMO_MARGIN = [70, 167];
 
 // A pointerdown/pointerup pair counts as a "click" rather than a drag as
 // long as the pointer moved no more than this many pixels in between --

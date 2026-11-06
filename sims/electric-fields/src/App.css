@@ -59,6 +59,26 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
+/* While the camera orbits, every control but Stop Orbit is disabled: the
+   sidebar's and each panel's contents are wrapped in an .orbit-lock (see
+   OrbitLock in App.jsx) that's made `inert` -- nothing in it can be
+   clicked, hovered, focused or typed into. It's display: contents, so it
+   has no box of its own and lays nothing out: its children are laid out
+   as if it weren't there. A press on an inert element passes through it
+   to whatever is underneath -- here, the sidebar or panel stack holding
+   it, which isn't inert and does nothing with it -- so it never reaches
+   the 3D view (where it would stop the orbit). The contents are dimmed
+   the way a disabled control group is (.control-group.disabled), inside
+   panel frames that stay as they are. */
+.orbit-lock {
+  display: contents;
+}
+
+.orbit-lock[inert] > :not(.overlay-controls),
+.orbit-lock[inert] > .overlay-controls > * {
+  opacity: 0.45;
+}
+
 /* Left-edge toolbar -- a single thin column of icon buttons floating over
    the viewer, same look as the optics lab's .sidebar-panel. */
 .sidebar-panel {
@@ -371,7 +391,7 @@ input[type="range"]::-moz-range-track {
   z-index: 10;
 }
 
-.upper-right-stack > .overlay-controls {
+.upper-right-stack > .orbit-lock > .overlay-controls {
   flex: none;
   width: 324px;
 }
@@ -705,11 +725,11 @@ input[type="range"]::-moz-range-track {
 
 /* In a short window, the sidebar mustn't run into the view controls in
    the lower-left corner (the axis gizmo or the 2D cut's inset and its
-   buttons, about 200px tall): it's capped above them, and scrolls if it
+   buttons, about 230px tall): it's capped above them, and scrolls if it
    still doesn't fit -- which in windows under 620px tall, where its
    buttons are also smaller (below), takes a very short window. */
 .sidebar-panel {
-  max-height: calc(100dvh - 16px - 210px);
+  max-height: calc(100dvh - 16px - 242px);
   overflow-y: auto;
 }
 
