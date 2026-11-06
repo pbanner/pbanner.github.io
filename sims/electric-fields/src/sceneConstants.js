@@ -13,6 +13,11 @@ export const WORLD_HALF_EXTENT = 5;
 
 export const CHARGE_RADIUS = 0.15;
 
+// A thin (line) rod's drawn thickness: its charge is all on its axis, but
+// it's drawn as a cylinder this wide (ChargedObject.jsx), and that's the
+// wall a free charge can run into (walls.js).
+export const LINE_ROD_DRAWN_RADIUS = 0.05;
+
 // How close to a field probe's center (ProbeMarker.jsx) a press grabs it:
 // a little outside its rings.
 export const PROBE_PICK_RADIUS = 0.15;
