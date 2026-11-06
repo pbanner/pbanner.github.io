@@ -10,6 +10,7 @@ import { objectField, fieldKey } from './chargeField.js';
 import { chargeColor, isFree, freeLabelText } from './chargeTypes.js';
 import ChargedObject from './ChargedObject.jsx';
 import ObjectHandles from './ObjectHandles.jsx';
+import { VelocityArrow, PredictedPath } from './MotionMarks.jsx';
 import CutPlane from './CutPlane.jsx';
 import { objectHandles, LineDrag, unitAxis } from './handles.js';
 import Axes from './Axes.jsx';
@@ -120,10 +121,14 @@ function dragReadout(item, grab) {
 //   its perspective, and only the cut's field lines (or arrows) are drawn.
 // showGrid / showAxes / showField / fieldStyle ('lines' or 'arrows') /
 //   fieldDensity: the Display Options panel's settings
+// predictedRun: the run the free charges would make from where they are
+//   (motion.js's simulateRun), or null -- for the predicted paths of the
+//   free charges that show theirs. Free charges that show their velocity
+//   get an arrow along it.
 // orbiting: the camera is orbiting (Start Orbit; see CameraAnimator's
 //   startOrbit). Any press on the view stops it, where it is
 //   (onStopOrbit()), and then does whatever it would have done anyway.
-export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProbe, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, cut, onMoveCut, view2D, showGrid, showAxes, showField, fieldStyle, fieldDensity, orbiting, onStopOrbit }) {
+export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProbe, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, cut, onMoveCut, view2D, showGrid, showAxes, showField, fieldStyle, fieldDensity, predictedRun, orbiting, onStopOrbit }) {
   const wrapperRef = useRef();
   const controlsRef = useRef();
   const cameraAnimatorRef = useRef();
@@ -647,6 +652,14 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
             label={isFree(charge) ? freeLabelText(charge.freeLabel) : null}
             showGuides={charge.id === draggingId}
           />
+        ))}
+        {pointCharges.filter(isFree).map((charge) => (
+          <group key={`motion-${charge.id}`}>
+            {charge.showVelocity && <VelocityArrow position={charge.position} velocity={charge.velocity} />}
+            {charge.showPredictedPath && predictedRun && (
+              <PredictedPath run={predictedRun} index={predictedRun.ids.indexOf(charge.id)} charge={charge} />
+            )}
+          </group>
         ))}
 
         {objects.map((obj) => (

@@ -7,7 +7,8 @@ import PropertiesPanel, { CutPanel, ProbePanel } from './PropertiesPanel.jsx';
 import FieldProbesPanel from './FieldProbesPanel.jsx';
 import CutInset from './CutInset.jsx';
 import OrbitLock from './OrbitLock.jsx';
-import { getChargeType, makeCharge, normalizePosition, crowds, freeingChanges, PINNING_CHANGES } from './chargeTypes.js';
+import { getChargeType, makeCharge, normalizePosition, crowds, freeingChanges, PINNING_CHANGES, isFree } from './chargeTypes.js';
+import { simulateRun, motionKey } from './motion.js';
 import { PROBE_TYPE, MAX_PROBES, isProbeId, nextProbeLabel, probeInCut } from './probes.js';
 import { allowedCuts, defaultCutAxis, placeCut, keepInCut } from './cutPlanes.js';
 import { CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
@@ -329,6 +330,16 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  // The run the free charges would make from where they are now (motion.js),
+  // for their predicted paths -- worked out only while one of those is
+  // shown, and again only when something it depends on changes (its key):
+  // as a free charge is dragged, say, but not when a display option is
+  // checked. It takes a few milliseconds, so it keeps up with a drag.
+  const showsPredictedPath = charges.some((c) => isFree(c) && c.showPredictedPath);
+  const runKey = showsPredictedPath ? motionKey(charges) : null;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the key stands for the charges
+  const predictedRun = useMemo(() => (runKey ? simulateRun(charges) : null), [runKey]);
+
   const armedType = !armedTypeId ? null : isProbeType(armedTypeId) ? PROBE_TYPE : getChargeType(armedTypeId);
   const selectedCharge = charges.find((c) => c.id === selectedId) ?? null;
   const selectedProbe = probes.find((p) => p.id === selectedId) ?? null;
@@ -361,6 +372,7 @@ export default function App() {
         showField={displayOptions.showField}
         fieldStyle={displayOptions.fieldStyle}
         fieldDensity={displayOptions.fieldDensity}
+        predictedRun={predictedRun}
         orbiting={orbiting}
         onStopOrbit={() => setOrbiting(false)}
       />
