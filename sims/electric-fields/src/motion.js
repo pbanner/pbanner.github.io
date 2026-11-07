@@ -95,31 +95,81 @@ const E = [71 / 57600, 0, -71 / 16695, 71 / 1920, -17253 / 339200, 22 / 525, -1 
 function makeSystem(charges) {
   const free = charges.filter(isFree);
   const fixed = charges.filter((c) => !isFree(c));
+  // Room for the terms of one free charge's field (see derivative): one
+  // from each other charge, along each axis.
+  const terms = Math.max(1, fixed.length + free.length - 1);
   return {
     free,
     fixed,
     q: free.map((c) => c.q),
     accel: free.map((c) => (ACCELERATION_SCALE * c.q) / c.mass),
+    terms: [new Float64Array(terms), new Float64Array(terms), new Float64Array(terms)],
   };
+}
+
+// The sum of the first `count` of `terms` (reordering them), added up so
+// that terms that are exact opposites cancel exactly, in any order.
+//
+// That matters for symmetric arrangements. In the middle of a square of
+// charges, say, the charges' sideways pulls cancel exactly -- but added up
+// one by one, in whatever order the charges were placed, a running total
+// can round (-c - 2c needs one more binary digit than c has), and leave a
+// "zero" of 1e-17 instead. If the free charge's position is unstable (as
+// Earnshaw's theorem says some direction always is), that speck of
+// rounding then grows exponentially, until the charge veers off for no
+// reason anyone could see -- and only for some placement orders. A
+// mirror-image charge's term, though, is the exact opposite of its twin's
+// (the same numbers, one sign flipped), so here the terms are sorted by
+// size, and each group of the same size is added as one number: how many
+// more of them are positive than negative, times their size. Twins then
+// cancel to exactly 0, and the total is the same whatever order the terms
+// came in. A symmetric arrangement stays exactly symmetric, and a run
+// doesn't depend on the order the charges were placed in.
+//
+// (An insertion sort: the lists are short, one term per charge.)
+function balancedSum(terms, count) {
+  for (let k = 1; k < count; k++) {
+    const v = terms[k];
+    const size = Math.abs(v);
+    let j = k - 1;
+    while (j >= 0 && Math.abs(terms[j]) > size) {
+      terms[j + 1] = terms[j];
+      j--;
+    }
+    terms[j + 1] = v;
+  }
+  let sum = 0;
+  let k = 0;
+  while (k < count) {
+    const size = Math.abs(terms[k]);
+    let net = 0; // how many more of this size are positive than negative
+    while (k < count && Math.abs(terms[k]) === size) {
+      net += Math.sign(terms[k]);
+      k++;
+    }
+    sum += net * size;
+  }
+  return sum;
 }
 
 const positionOf = (y, i) => [y[6 * i], y[6 * i + 1], y[6 * i + 2]];
 
 // The derivative of state y, into `out`: each position changes at its
 // velocity, and each velocity at (q / m) E, E the field of everything but
-// the charge itself.
+// the charge itself -- each other charge's field, added up along each axis
+// by balancedSum.
 function derivative(sys, y, out) {
   const n = sys.free.length;
+  const [tx, ty, tz] = sys.terms;
   for (let i = 0; i < n; i++) {
     const p = positionOf(y, i);
-    let ex = 0;
-    let ey = 0;
-    let ez = 0;
+    let count = 0;
     for (const obj of sys.fixed) {
       const e = objectField(obj, p);
-      ex += e[0];
-      ey += e[1];
-      ez += e[2];
+      tx[count] = e[0];
+      ty[count] = e[1];
+      tz[count] = e[2];
+      count++;
     }
     for (let j = 0; j < n; j++) {
       if (j === i) continue;
@@ -128,10 +178,14 @@ function derivative(sys, y, out) {
       const dz = p[2] - y[6 * j + 2];
       const r2 = dx * dx + dy * dy + dz * dz;
       const s = sys.q[j] / (r2 * Math.sqrt(r2));
-      ex += s * dx;
-      ey += s * dy;
-      ez += s * dz;
+      tx[count] = s * dx;
+      ty[count] = s * dy;
+      tz[count] = s * dz;
+      count++;
     }
+    const ex = balancedSum(tx, count);
+    const ey = balancedSum(ty, count);
+    const ez = balancedSum(tz, count);
     const a = sys.accel[i];
     out[6 * i] = y[6 * i + 3];
     out[6 * i + 1] = y[6 * i + 4];

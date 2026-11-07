@@ -247,3 +247,57 @@ test('the trail up to a moment ends exactly where the charge is then', () => {
   // Up to the end, it's the whole path.
   assert.deepEqual(pathInsideBox(run, 0, run.end.time), pathInsideBox(run, 0));
 });
+
+// Four pinned charges at the corners of a square, (±3, ±3, 0) cm, +1 nC on
+// one diagonal and -2 nC on the other, in a given order (a list of the
+// corners' letters), and a free +1 nC charge in the middle, launched along
+// z at `vz` world units/s from `start`.
+function quadrupole(order, vz, start = [0, 0, 0]) {
+  const corners = {
+    a: pinned(1, +1, [1.5, 1.5, 0]),
+    b: pinned(2, +1, [-1.5, -1.5, 0]),
+    c: pinned(3, -2, [1.5, -1.5, 0]),
+    d: pinned(4, -2, [-1.5, 1.5, 0]),
+  };
+  return [...order.map((k) => corners[k]), free(9, +1, start, [0, 0, vz])];
+}
+
+test('a symmetric arrangement stays exactly symmetric, whatever order its charges were placed in', (t) => {
+  // In the middle of the square, the corners' sideways pulls cancel, and
+  // the free charge oscillates up and down through it. The middle is
+  // unstable sideways (toward the -2 nC corners: Earnshaw's theorem), so a
+  // rounding error there would grow until the charge veered off; added up
+  // as balancedSum adds them, the pulls cancel exactly, in any order.
+  for (const vz of [0.1, 0.45, 0.9]) {
+    const runs = [['a', 'b', 'c', 'd'], ['a', 'c', 'b', 'd'], ['d', 'a', 'c', 'b']].map((order) => simulateRun(quadrupole(order, vz)));
+    for (const run of runs) {
+      assert.equal(run.end.reason, 'time');
+      assert.equal(Math.max(...run.states.map((y) => Math.hypot(y[0], y[1]))), 0);
+    }
+    assert.deepStrictEqual(runs[1].states, runs[0].states);
+    assert.deepStrictEqual(runs[2].states, runs[0].states);
+  }
+  t.diagnostic('launched at 0.05, 0.225 and 0.45 world units/s, in three orders: on the axis for all 60 s, and the same run every time');
+});
+
+test('Earnshaw: nudged just off the axis, the free charge falls into a -2 nC corner', (t) => {
+  // 0.01 cm (0.005 world units) toward the corner at (3, -3) cm.
+  const nudge = 0.005 / Math.SQRT2;
+  const run = simulateRun(quadrupole(['a', 'b', 'c', 'd'], 0.45, [nudge, -nudge, 0]));
+  t.diagnostic(`${run.end.reason} with charge ${run.end.otherId} at t = ${run.end.time.toFixed(2)} s`);
+  assert.equal(run.end.reason, 'collision');
+  assert.equal(run.end.otherId, 3);
+  assert.ok(run.end.time < 10);
+});
+
+test("a run doesn't depend on the order the charges were placed in", () => {
+  const charges = [
+    pinned(1, +2, [0, 0, 0]),
+    pinned(2, -1, [2, 1, 0]),
+    pinned(3, +1, [-1, 3, 1]),
+    shell(4, 1.5, [-3, -2, 0], 1),
+    free(5, -1, [1, -2, 0.5], [0.4, 0.3, 0.1]),
+  ];
+  const reordered = [charges[3], charges[2], charges[4], charges[0], charges[1]];
+  assert.deepStrictEqual(simulateRun(reordered).states, simulateRun(charges).states);
+});
