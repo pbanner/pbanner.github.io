@@ -22,6 +22,7 @@ import './App.css';
 const SIDEBAR_LABEL_GAP = 12;
 // Size of the 2D placement ghost.
 const GHOST_ICON_SIZE = 36;
+const AXIS_NAMES = ['x', 'y', 'z'];
 
 // What ended a run (motion.js's run.end), for the playback panel, naming
 // free charges by name and anything else by what it is (walls.js).
@@ -557,6 +558,18 @@ export default function App() {
     return () => cancelAnimationFrame(frame);
   }, [playback.status, playback.speed, run, linesMove]);
 
+  // In the 2D cut's view, a run can be played only if it stays in the cut:
+  // every free charge in it (it is, if the cut is valid) and moving within
+  // it -- no part of its velocity across the cut. Otherwise, why not.
+  // (Searched for in `charges` itself: searching freeCharges, an array made
+  // from it, keeps the React Compiler from optimizing App -- it can't then
+  // tell that nothing changes the charges after they're memoized from.)
+  const acrossAxis = view2D && placedCut ? placedCut.axis : null;
+  const movingAcross = acrossAxis === null ? null : charges.find((c) => isFree(c) && Math.abs(c.velocity[acrossAxis]) > 1e-9);
+  const playBlockedReason = movingAcross
+    ? `To play in the 2D cut, every free charge has to move within it, and ${freeLabelText(movingAcross.freeLabel)}'s velocity has a ${AXIS_NAMES[acrossAxis]} part`
+    : null;
+
   // What ended the run, once it's been reached.
   const runNote = running && run && playback.time >= run.end.time ? endNote(run, charges) : null;
 
@@ -638,7 +651,7 @@ export default function App() {
               allowed={allowed}
               onChangeAxis={(axis) => setCut(cutAt(axis))}
               onChangeOffset={moveCut}
-              onView={running ? null : viewCut}
+              onView={viewCut}
               onRemove={removeCut}
               readOnly={running}
               onClose={() => setSelectedId(null)}
@@ -690,7 +703,7 @@ export default function App() {
         ) : placedCut ? (
           <button
             className="control-button view-button"
-            disabled={!placedCut.valid || orbiting || running}
+            disabled={!placedCut.valid || orbiting}
             title={placedCut.valid ? undefined : "The charges aren't all in the cut"}
             onClick={viewCut}
           >
@@ -751,6 +764,7 @@ export default function App() {
                 onSpeed={setSpeed}
                 note={runNote}
                 calculating={linesMove && calculating}
+                playBlockedReason={playBlockedReason}
               />
             </OrbitLock>
           </div>
@@ -759,7 +773,7 @@ export default function App() {
           {orbiting
             ? 'Orbiting the camera · Scroll to zoom · Click the view, or Stop Orbit, to stop'
             : running
-            ? 'A run is under way · Click a charge to see where it is and how fast it\'s going · Drag empty space to turn the view · Reset to edit again'
+            ? `A run is under way · Click a charge to see where it is and how fast it's going · Drag empty space to ${view2D ? 'pan' : 'turn the view'} · Reset to edit again`
             : removeMode
             ? 'Click an object to delete it · Press Escape, or click the trash can again, to stop deleting'
             : view2D

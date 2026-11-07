@@ -165,7 +165,10 @@ function nextSteps(steps, delta) {
 //     run worked out in advance: motion.js), and arrows along its velocity
 //     and the force on it. These can be changed during a run too.
 const MASS_STEP = 0.1;
-function FreeChargeSettings({ charge, onChange, readOnly = false }) {
+//   In the 2D cut's view (lockedAxis), its velocity's part across the cut
+//   is grayed out while it's 0, so that the charge keeps moving within the
+//   cut; if it isn't 0 (set in 3D), it can still be changed, to 0.
+function FreeChargeSettings({ charge, onChange, readOnly = false, lockedAxis = null }) {
   const setVelocity = (k, cmPerSecond) => {
     const velocity = [...charge.velocity];
     velocity[k] = toWorld(cmPerSecond);
@@ -194,7 +197,14 @@ function FreeChargeSettings({ charge, onChange, readOnly = false }) {
         <RowLabel text="Velocity" unit="cm/s" />
         <div className="number-fields">
           {[0, 1, 2].map((k) => (
-            <NumberField key={`v${k}-${charge.id}`} label={AXIS_NAMES[k]} value={toCm(charge.velocity[k])} readOnly={readOnly} onCommit={(v) => setVelocity(k, v)} />
+            <NumberField
+              key={`v${k}-${charge.id}`}
+              label={AXIS_NAMES[k]}
+              value={toCm(charge.velocity[k])}
+              disabled={k === lockedAxis && charge.velocity[k] === 0}
+              readOnly={readOnly}
+              onCommit={(v) => setVelocity(k, v)}
+            />
           ))}
         </div>
       </div>
@@ -330,7 +340,7 @@ export default function PropertiesPanel({ charge, onChange, onSetFree, onDelete,
         </div>
       </div>
 
-      {free && <FreeChargeSettings charge={charge} onChange={onChange} readOnly={readOnly} />}
+      {free && <FreeChargeSettings charge={charge} onChange={onChange} readOnly={readOnly} lockedAxis={lockedAxis} />}
 
       {(kind === 'sphere' || (kind === 'rod' && charge.form !== 'line')) && (
         <div className="property-row">
