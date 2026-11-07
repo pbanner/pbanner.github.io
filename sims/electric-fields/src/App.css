@@ -2,7 +2,7 @@
    an absolutely positioned overlay, rather than sharing the screen with a
    fixed sidebar the way the Bloch sphere sim does. */
 .app-layout {
-  --display-panel-width: 180px; /* shared by .display-options-panel and .interaction-hint */
+  --display-panel-width: 200px; /* shared by .display-options-panel and the bottom-center stack (wide enough for "Show as" beside Lines / Arrows) */
   position: relative;
   height: 100vh; /* fallback for browsers that don't support dvh below */
   height: 100dvh; /* the *actual* visible viewport height -- see the Bloch sphere sim's .app-layout for why plain 100vh misbehaves on mobile Safari */
@@ -390,12 +390,30 @@ input[type="range"].playback-scrubber {
   width: var(--display-panel-width);
 }
 
-/* The Lines / Arrows choice: side by side, indented under the "Electric
-   field" checkbox it belongs to. */
-/* The field's style (Lines / Arrows), set in under its checkbox. */
+/* A thin line across a panel, between groups of its settings. Lighter than
+   the panel's border, so it separates without boxing anything in. */
+.panel-divider {
+  height: 1px;
+  margin: 2px 0;
+  background: #d5d5d5;
+}
+
+/* The field's style: "Show as", and the Lines / Arrows choice beside it,
+   on one line (the panel is wide enough for both: --display-panel-width). */
 .control-group.field-style {
   flex-direction: row;
-  padding-left: 21px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: #333;
+  white-space: nowrap;
+}
+
+/* The density slider's round thumb stands out past the slider's own box,
+   so a little room below it keeps it off the panel's bottom edge. */
+.display-options-panel input[type="range"] {
+  margin-bottom: 6px;
 }
 
 /* Which charges' field is drawn: a label and, under it, a menu as wide as

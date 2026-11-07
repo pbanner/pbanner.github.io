@@ -14,8 +14,9 @@ import { freeLabelText } from './chargeTypes.js';
 // axis). The value is shown in the label rather than in a separate number
 // box (as the optics lab's SliderPlusTextboxControl does) to keep the panel
 // thin. The style is chosen with joined toggle buttons (Segmented), like
-// the properties panel's choices. It and the slider are dimmed, and can't
-// be changed, while the field is hidden.
+// the properties panel's choices, labeled "Show as". It and the slider are
+// dimmed, and can't be changed, while the field is hidden. A divider sets
+// the field's settings apart from the grid's and the axes'.
 if (FIELD_LINE_DENSITY_LEVELS !== FIELD_ARROW_DENSITY_LEVELS) {
   throw new Error('Field lines and arrows must have the same number of density levels');
 }
@@ -52,11 +53,13 @@ export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions,
         <input type="checkbox" checked={displayOptions.showAxes} onChange={(e) => setOption('showAxes', e.target.checked)} />
         Axes
       </label>
+      <div className="panel-divider" />
       <label>
         <input type="checkbox" checked={displayOptions.showField} onChange={(e) => setOption('showField', e.target.checked)} />
         Electric field
       </label>
       <div className={`control-group field-style${displayOptions.showField ? '' : ' disabled'}`}>
+        <span>Show as</span>
         <Segmented
           options={[['lines', 'Lines'], ['arrows', 'Arrows']]}
           value={displayOptions.fieldStyle}
