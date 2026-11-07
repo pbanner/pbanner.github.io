@@ -691,6 +691,48 @@ export function arrowheadsAlong(lines, spacing) {
   return arrows;
 }
 
+// About one arrowhead per this many world units of line (FieldLines.jsx).
+// Sparse on purpose: an arrowhead pointing nearly at or away from the
+// viewer shows only its round cross-section, so a dense set reads as
+// scattered dots.
+export const ARROW_SPACING = 2;
+
+// A set of lines packed for sending from a worker (fieldLineWorker.js):
+// `segments`, every line's consecutive points as pairs -- x, y, z of one
+// end, then of the other, for each little segment -- and `arrows`, each
+// arrowhead's position then direction (arrowheadsAlong), six numbers each.
+// Float32Arrays, so they can be handed to another thread without being
+// copied.
+export function packFieldLines(lines) {
+  let count = 0;
+  for (const line of lines) count += Math.max(0, line.length - 1);
+  const segments = new Float32Array(6 * count);
+  let i = 0;
+  for (const line of lines) {
+    for (let k = 1; k < line.length; k++) {
+      segments.set(line[k - 1], i);
+      segments.set(line[k], i + 3);
+      i += 6;
+    }
+  }
+  const heads = arrowheadsAlong(lines, ARROW_SPACING);
+  const arrows = new Float32Array(6 * heads.length);
+  heads.forEach((a, k) => {
+    arrows.set(a.position, 6 * k);
+    arrows.set(a.direction, 6 * k + 3);
+  });
+  return { segments, arrows };
+}
+
+// The arrowheads of packed lines, back as [{ position, direction }].
+export function unpackArrows(arrows) {
+  const out = [];
+  for (let k = 0; k < arrows.length; k += 6) {
+    out.push({ position: [arrows[k], arrows[k + 1], arrows[k + 2]], direction: [arrows[k + 3], arrows[k + 4], arrows[k + 5]] });
+  }
+  return out;
+}
+
 // The field line through a point -- a field probe's (see probes.js) --
 // traced both ways from it: back against E to where it starts, and on
 // along E to where it ends, as one line, ordered along E. It's the true

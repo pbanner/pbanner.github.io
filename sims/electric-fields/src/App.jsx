@@ -8,12 +8,13 @@ import FieldProbesPanel from './FieldProbesPanel.jsx';
 import CutInset from './CutInset.jsx';
 import OrbitLock from './OrbitLock.jsx';
 import PlaybackPanel from './PlaybackPanel.jsx';
-import { formatTime } from './playback.js';
+import { formatTime, FramePlayer } from './playback.js';
+import { createFieldLineWorkers } from './fieldLineWorkers.js';
 import { getChargeType, makeCharge, normalizePosition, crowds, freeingChanges, PINNING_CHANGES, isFree, freeLabelText } from './chargeTypes.js';
 import { simulateRun, motionKey, stateAt, insideBox, MAX_RUN_TIME } from './motion.js';
 import { contactGap, touchesFreeCharge, wallName } from './walls.js';
 import { PROBE_TYPE, MAX_PROBES, isProbeId, nextProbeLabel, probeInCut } from './probes.js';
-import { allowedCuts, defaultCutAxis, placeCut, keepInCut, allowsOffset } from './cutPlanes.js';
+import { allowedCut, allowedCuts, defaultCutAxis, placeCut, keepInCut, allowsOffset } from './cutPlanes.js';
 import { CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
 import './App.css';
 
@@ -34,6 +35,33 @@ function endNote(run, charges) {
   }
   if (run.end.reason === 'left') return `Every free charge had left the box by ${at}.`;
   return `The run stopped at its ${MAX_RUN_TIME} s limit.`;
+}
+
+// Everything as it is at time t of a run: each free charge where the run
+// has it, going as fast as it is then, and marked `outside` while it's out
+// of the box (it isn't seen then, but its field still counts).
+function chargesAt(charges, run, t) {
+  const { positions, velocities } = stateAt(run, t);
+  return charges.map((c) => {
+    const i = run.ids.indexOf(c.id);
+    return i < 0 ? c : { ...c, position: positions[i], velocity: velocities[i], outside: !insideBox(positions[i]) };
+  });
+}
+
+// Which of `shown` make the field that's drawn (Display Options): all of
+// them, the pinned ones, or all but the free charge feltBy.
+function sourcesOf(shown, fieldOf, feltBy) {
+  if (fieldOf === 'pinned') return shown.filter((c) => !isFree(c));
+  if (fieldOf === 'felt') return shown.filter((c) => c.id !== feltBy);
+  return shown;
+}
+
+// Whether the cut, where it was put (setupCut, from placeCut), is valid
+// with everything as `shown` and the drawn field's `sources`: valid to
+// begin with, and with both mirror-symmetric through it.
+function cutValid(setupCut, shown, sources) {
+  const at = (charges) => allowsOffset(allowedCut(charges, setupCut.axis), setupCut.offset);
+  return setupCut.valid && at(shown) && (sources === shown || at(sources));
 }
 
 export default function App() {
@@ -82,11 +110,7 @@ export default function App() {
   // Before a run, the charges just as they're placed.
   const shownCharges = useMemo(() => {
     if (!running || !run) return charges;
-    const { positions, velocities } = stateAt(run, playback.time);
-    return charges.map((c) => {
-      const i = run.ids.indexOf(c.id);
-      return i < 0 ? c : { ...c, position: positions[i], velocity: velocities[i], outside: !insideBox(positions[i]) };
-    });
+    return chargesAt(charges, run, playback.time);
   }, [charges, run, running, playback.time]);
 
   // What the Display Options panel controls -- including which charges'
@@ -110,11 +134,7 @@ export default function App() {
   const freeCharges = charges.filter(isFree);
   const fieldOf = freeCharges.length === 0 ? 'all' : displayOptions.fieldOf;
   const feltBy = fieldOf === 'felt' ? (freeCharges.find((c) => c.id === displayOptions.feltBy) ?? freeCharges[0]).id : null;
-  const fieldSources = useMemo(() => {
-    if (fieldOf === 'pinned') return shownCharges.filter((c) => !isFree(c));
-    if (fieldOf === 'felt') return shownCharges.filter((c) => c.id !== feltBy);
-    return shownCharges;
-  }, [shownCharges, fieldOf, feltBy]);
+  const fieldSources = useMemo(() => sourcesOf(shownCharges, fieldOf, feltBy), [shownCharges, fieldOf, feltBy]);
 
   // The 2D cut, if there is one: { axis, offset } (see cutPlanes.js). Its
   // orientation is the user's choice; so is its offset, but only while the
@@ -131,15 +151,8 @@ export default function App() {
   // mirror-symmetric through the cut too: with only some of the charges'
   // field drawn (Display Options), those charges alone have to be -- a
   // free charge mirroring a pinned one isn't, without the free one.
-  const allowedNow = useMemo(() => (running ? allowedCuts(shownCharges) : allowed), [running, shownCharges, allowed]);
-  const allowedForField = useMemo(() => (fieldSources === shownCharges ? allowedNow : allowedCuts(fieldSources)), [fieldSources, shownCharges, allowedNow]);
   const setupCut = cut && placeCut(cut, allowed);
-  const placedCut = setupCut && {
-    ...setupCut,
-    valid: setupCut.valid
-      && (!running || allowsOffset(allowedNow[setupCut.axis], setupCut.offset))
-      && allowsOffset(allowedForField[setupCut.axis], setupCut.offset),
-  };
+  const placedCut = setupCut && { ...setupCut, valid: cutValid(setupCut, shownCharges, fieldSources) };
   if (cut && placedCut.offset !== cut.offset) setCut({ ...cut, offset: placedCut.offset });
   // A new cut takes the first allowed orientation (cutPlanes.js), at the
   // charges' one allowed position, or in the middle of the box.
@@ -432,6 +445,7 @@ export default function App() {
     if (!run || run.end.time === 0) return;
     disarm();
     setRemoveMode(false);
+    if (playback.time >= run.end.time) setSeeks((n) => n + 1);
     setPlayback((p) => ({ ...p, status: 'playing', time: p.time >= run.end.time ? 0 : p.time }));
   };
   const pause = () => setPlayback((p) => ({ ...p, status: 'paused' }));
@@ -441,16 +455,94 @@ export default function App() {
     disarm();
     setRemoveMode(false);
     setPlayback((p) => ({ ...p, status: time >= run.end.time ? 'ended' : 'paused', time }));
+    setSeeks((n) => n + 1);
   };
   const setSpeed = (speed) => setPlayback((p) => ({ ...p, speed }));
 
-  // While playing: each animation frame, the time is however far real time
-  // (times the speed) has gone since playing began, until the run's end.
-  // (Through an effect event, to read the time playing began at without
-  // restarting the clock on every tick.)
+  // Whether the field lines change as the run plays: while they're drawn,
+  // and include a free charge's field. Then each moment's lines are traced
+  // by workers, and the frame player (playback.js) shows a moment only once
+  // its lines are ready, keeping lines and charges in step, at 30, 25 or
+  // 20 frames a second, as fast as the workers manage. Otherwise -- arrows,
+  // only the pinned charges' field, or no field -- nothing needs waiting
+  // for, and playback simply follows the clock, every animation frame.
+  //
+  // The frames are for one set of settings, lineKey: a change to any of them
+  // (or a scrub, or a new speed) starts the player over from the moment
+  // shown. lineFrame is the frame shown; calculating, whether playback is
+  // waiting for frames.
+  const linesMove = running && displayOptions.showField && displayOptions.fieldStyle === 'lines' && fieldSources.some(isFree);
+  const lineKey = linesMove ? JSON.stringify([runKey, fieldOf, feltBy, displayOptions.fieldDensity, view2D, setupCut?.axis ?? null, setupCut?.offset ?? null]) : null;
+  const [lineFrame, setLineFrame] = useState(null);
+  const [calculating, setCalculating] = useState(false);
+  const [seeks, setSeeks] = useState(0); // counts scrubs and replays
+  const playerRef = useRef(null);
+  const workersRef = useRef(null);
+  // The request for one moment's lines: everything as it is then, and the
+  // cut's lines too if it's valid then.
+  const lineRequest = useEffectEvent((time) => {
+    const shown = chargesAt(charges, run, time);
+    const sources = sourcesOf(shown, fieldOf, feltBy);
+    const cutLines = setupCut && cutValid(setupCut, shown, sources) ? { axis: setupCut.axis, offset: setupCut.offset } : null;
+    return workersRef.current.compute({ sources, density: displayOptions.fieldDensity, want3D: !view2D, cut: cutLines });
+  });
   const playbackTime = useEffectEvent(() => playback.time);
+  const isPlaying = useEffectEvent(() => playback.status === 'playing');
+  useEffect(() => () => workersRef.current?.terminate(), []);
   useEffect(() => {
-    if (playback.status !== 'playing' || !run) return undefined;
+    if (!lineKey) return;
+    if (!workersRef.current) workersRef.current = createFieldLineWorkers();
+    if (!playerRef.current) {
+      playerRef.current = new FramePlayer({
+        workers: workersRef.current.count,
+        inFlight: workersRef.current.capacity,
+        now: () => performance.now(),
+        compute: (time) => lineRequest(time),
+        onCancel: () => workersRef.current.clearQueue(),
+      });
+    }
+    playerRef.current.reset({ time: playbackTime(), end: run.end.time, speed: playback.speed, key: lineKey });
+  }, [lineKey, playback.speed, seeks, run]);
+  // With ?fps at the end of the address, a small readout of the frame
+  // player's numbers, for checking it on a given computer: its workers, how
+  // long a frame takes them (and from asking for it to getting it), the
+  // rate it chose, and frames shown a second.
+  const [showRates] = useState(() => new URLSearchParams(window.location.search).has('fps'));
+  const [rates, setRates] = useState(null);
+  useEffect(() => {
+    if (!lineKey) return undefined;
+    let frame;
+    let shownTime = null;
+    const shownAt = []; // when each recent frame was first shown
+    let lastRates = 0;
+    const loop = () => {
+      const player = playerRef.current;
+      const state = player.tick(isPlaying());
+      setLineFrame(state.frame);
+      setCalculating(state.calculating);
+      const now = performance.now();
+      if (state.time !== shownTime || (state.ended && isPlaying())) {
+        if (state.time !== shownTime) shownAt.push(now);
+        shownTime = state.time;
+        setPlayback((p) => ({ ...p, time: state.time, status: p.status === 'playing' && state.ended ? 'ended' : p.status }));
+      }
+      if (showRates && now - lastRates > 500) {
+        lastRates = now;
+        while (shownAt.length > 0 && shownAt[0] < now - 1000) shownAt.shift();
+        setRates({ workers: player.workers, ms: player.msPerFrame, trip: player.msPerTrip, fps: player.fps, shown: shownAt.length });
+      }
+      frame = requestAnimationFrame(loop);
+    };
+    frame = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(frame);
+  }, [lineKey, showRates]);
+
+  // While playing, if the lines don't move: each animation frame, the time
+  // is however far real time (times the speed) has gone since playing
+  // began, until the run's end. (Through an effect event, to read the time
+  // playing began at without restarting the clock on every tick.)
+  useEffect(() => {
+    if (playback.status !== 'playing' || !run || linesMove) return undefined;
     const startTime = playbackTime();
     const end = run.end.time;
     let startWall = null;
@@ -463,7 +555,7 @@ export default function App() {
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [playback.status, playback.speed, run]);
+  }, [playback.status, playback.speed, run, linesMove]);
 
   // What ended the run, once it's been reached.
   const runNote = running && run && playback.time >= run.end.time ? endNote(run, charges) : null;
@@ -508,6 +600,7 @@ export default function App() {
         fieldStyle={displayOptions.fieldStyle}
         fieldDensity={displayOptions.fieldDensity}
         run={run}
+        lineFrame={linesMove ? lineFrame : undefined}
         runTime={playback.time}
         runLocked={running}
         orbiting={orbiting}
@@ -657,6 +750,7 @@ export default function App() {
                 onScrub={scrub}
                 onSpeed={setSpeed}
                 note={runNote}
+                calculating={linesMove && calculating}
               />
             </OrbitLock>
           </div>
@@ -673,6 +767,14 @@ export default function App() {
               : 'Add objects from the sidebar · Click an object to edit it · Drag an object to change its position, Shift+drag to raise or lower, Alt+drag to turn off snapping'}
         </div>
       </div>
+
+      {showRates && (
+        <div className="rates-readout">
+          {linesMove && rates
+            ? `Field lines: ${rates.workers} workers, ${rates.ms === null ? '…' : `${rates.ms.toFixed(0)} ms a frame (${rates.trip.toFixed(0)} ms there and back)`} · ${rates.fps} fps chosen, ${rates.shown} frames shown in the last second`
+            : 'Field lines: not changing as the charges move, so nothing to work out ahead'}
+        </div>
+      )}
 
       {/* While armed: a flat 2D icon follows the pointer whenever the charge
           can't be placed there (over the sidebar, off the edge of the

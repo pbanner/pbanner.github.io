@@ -127,6 +127,11 @@ function dragReadout(item, grab) {
 //   the predicted paths and, during a run, the trails of the free charges
 //   that show them. Free charges that show their velocity, or the force on
 //   them, get an arrow along it.
+// lineFrame: during a run, while the field lines change as the charges
+//   move, the lines for the moment shown, traced by a worker -- { lines3D,
+//   cutLines }, each packed (fieldLines.js's packFieldLines) or null -- or
+//   null until the first is ready; otherwise undefined, and the lines are
+//   traced here.
 // runTime / runLocked: during a run, how far into it (s), and that it's
 //   under way. `charges` is then everything as it is at that moment (App's
 //   shownCharges): a free charge marked `outside` is out of the box, and
@@ -136,7 +141,7 @@ function dragReadout(item, grab) {
 // orbiting: the camera is orbiting (Start Orbit; see CameraAnimator's
 //   startOrbit). Any press on the view stops it, where it is
 //   (onStopOrbit()), and then does whatever it would have done anyway.
-export default function Viewer({ ref, charges, fieldSources = charges, probes, onMoveProbe, onDeleteProbe, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, cut, onMoveCut, view2D, showGrid, showAxes, showField, fieldStyle, fieldDensity, run, runTime = 0, runLocked = false, orbiting, onStopOrbit }) {
+export default function Viewer({ ref, charges, fieldSources = charges, probes, onMoveProbe, onDeleteProbe, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, cut, onMoveCut, view2D, showGrid, showAxes, showField, fieldStyle, fieldDensity, run, lineFrame, runTime = 0, runLocked = false, orbiting, onStopOrbit }) {
   const wrapperRef = useRef();
   const controlsRef = useRef();
   const cameraAnimatorRef = useRef();
@@ -651,8 +656,8 @@ export default function Viewer({ ref, charges, fieldSources = charges, probes, o
         {/* With a valid 2D cut, its lines are painted on it, over the 3D
             lines, which fade -- and in 2D, they're all there is. Arrows
             are the 3D grid's, or in 2D a grid in the cut. */}
-        {showField && fieldStyle === 'lines' && !view2D && <FieldLines sources={sources} density={fieldDensity} faded={!!cut?.valid} />}
-        {showField && fieldStyle === 'lines' && cut?.valid && <FieldLines sources={sources} density={fieldDensity} cut={cut} />}
+        {showField && fieldStyle === 'lines' && !view2D && <FieldLines sources={sources} density={fieldDensity} faded={!!cut?.valid} packed={lineFrame === undefined ? undefined : lineFrame?.lines3D ?? null} />}
+        {showField && fieldStyle === 'lines' && cut?.valid && <FieldLines sources={sources} density={fieldDensity} cut={cut} packed={lineFrame === undefined ? undefined : lineFrame?.cutLines ?? null} />}
         {showField && fieldStyle === 'arrows' && <FieldArrows sources={sources} density={fieldDensity} cut={view2D ? cut : null} />}
 
         {pointCharges.map((charge) => (
@@ -721,7 +726,7 @@ export default function Viewer({ ref, charges, fieldSources = charges, probes, o
           );
         })}
 
-        {cut && !view2D && <CutPlane cut={cut} charges={sources} selected={selectedId === 'cut'} />}
+        {cut && !view2D && <CutPlane cut={cut} charges={charges} selected={selectedId === 'cut'} />}
 
         {selectedObject && <ObjectHandles charge={selectedObject} hoveredId={hoveredHandleId} activeId={handleDrag?.id} isHidden={handleHidden} />}
 
