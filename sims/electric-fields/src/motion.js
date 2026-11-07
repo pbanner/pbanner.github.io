@@ -366,13 +366,20 @@ export function stateAt(run, t) {
 // run.ids), as the pieces of it inside the box -- each a list of [x, y,
 // z] points, for drawing -- since a charge outside the box isn't seen.
 // Where it crosses a face of the box, the piece ends (or starts) exactly
-// on the face.
-export function pathInsideBox(run, index) {
+// on the face. With `untilTime`, only the path up to then (the trail
+// behind a charge during a run), ending exactly where the charge is.
+export function pathInsideBox(run, index, untilTime = Infinity) {
+  const points = [];
+  for (let k = 0; k < run.times.length && run.times[k] <= untilTime; k++) {
+    const y = run.states[k];
+    points.push([y[6 * index], y[6 * index + 1], y[6 * index + 2]]);
+  }
+  if (untilTime < run.end.time) points.push(stateAt(run, untilTime).positions[index]);
+
   const pieces = [];
   let piece = null;
   let previous = null;
-  for (const y of run.states) {
-    const p = [y[6 * index], y[6 * index + 1], y[6 * index + 2]];
+  for (const p of points) {
     const inside = insideBox(p);
     if (previous && inside !== insideBox(previous)) {
       const crossing = boxCrossing(previous, p);

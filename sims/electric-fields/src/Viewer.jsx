@@ -6,11 +6,11 @@ import { ChargeDrag } from './chargeDrag.js';
 import ChargeMarker, { PositionGuides } from './ChargeMarker.jsx';
 import ProbeMarker, { ProbeFieldLine } from './ProbeMarker.jsx';
 import { probeReading, probeInCut } from './probes.js';
-import { objectField, fieldKey } from './chargeField.js';
+import { objectField, fieldAt, fieldKey } from './chargeField.js';
 import { chargeColor, isFree, freeLabelText } from './chargeTypes.js';
 import ChargedObject from './ChargedObject.jsx';
 import ObjectHandles from './ObjectHandles.jsx';
-import { VelocityArrow, PredictedPath } from './MotionMarks.jsx';
+import { VelocityArrow, ForceArrow, PredictedPath, Trail } from './MotionMarks.jsx';
 import CutPlane from './CutPlane.jsx';
 import { objectHandles, LineDrag, unitAxis } from './handles.js';
 import Axes from './Axes.jsx';
@@ -122,8 +122,9 @@ function dragReadout(item, grab) {
 // showGrid / showAxes / showField / fieldStyle ('lines' or 'arrows') /
 //   fieldDensity: the Display Options panel's settings
 // run: the free charges' run (motion.js's simulateRun), or null -- for
-//   the predicted paths of the free charges that show theirs. Free charges
-//   that show their velocity get an arrow along it.
+//   the predicted paths and, during a run, the trails of the free charges
+//   that show them. Free charges that show their velocity, or the force on
+//   them, get an arrow along it.
 // runTime / runLocked: during a run, how far into it (s), and that it's
 //   under way. `charges` is then everything as it is at that moment (App's
 //   shownCharges): a free charge marked `outside` is out of the box, and
@@ -133,7 +134,7 @@ function dragReadout(item, grab) {
 // orbiting: the camera is orbiting (Start Orbit; see CameraAnimator's
 //   startOrbit). Any press on the view stops it, where it is
 //   (onStopOrbit()), and then does whatever it would have done anyway.
-export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProbe, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, cut, onMoveCut, view2D, showGrid, showAxes, showField, fieldStyle, fieldDensity, run, runLocked = false, orbiting, onStopOrbit }) {
+export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProbe, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, cut, onMoveCut, view2D, showGrid, showAxes, showField, fieldStyle, fieldDensity, run, runTime = 0, runLocked = false, orbiting, onStopOrbit }) {
   const wrapperRef = useRef();
   const controlsRef = useRef();
   const cameraAnimatorRef = useRef();
@@ -667,8 +668,14 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
         {pointCharges.filter(isFree).map((charge) => (
           <group key={`motion-${charge.id}`}>
             {charge.showVelocity && <VelocityArrow position={charge.position} velocity={charge.velocity} />}
+            {charge.showForce && (
+              <ForceArrow position={charge.position} q={charge.q} field={fieldAt(charge.position, charges.filter((c) => c.id !== charge.id))} />
+            )}
             {charge.showPredictedPath && run && (
               <PredictedPath run={run} index={run.ids.indexOf(charge.id)} charge={charge} />
+            )}
+            {charge.showPath && runLocked && run && (
+              <Trail run={run} index={run.ids.indexOf(charge.id)} time={runTime} charge={charge} />
             )}
           </group>
         ))}

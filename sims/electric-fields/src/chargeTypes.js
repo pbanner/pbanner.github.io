@@ -24,10 +24,13 @@
 // A point charge is either pinned -- held in place, the kind there always
 // was -- or free: it moves, pushed by every other charge's field (see
 // motion.js). A free one also has
-//   { free: true, mass, velocity, freeLabel, showPredictedPath, showVelocity }
+//   { free: true, mass, velocity, freeLabel,
+//     showPath, showPredictedPath, showVelocity, showForce }
 // mass in grams, velocity in world units per second (its initial velocity;
 // the properties panel shows cm/s), freeLabel the n in its name, q_n
-// (freeLabelText), and the two display options set in its panel. A pinned
+// (freeLabelText), and the display options set in its panel: its trail
+// during a run (on to start with), its predicted path, and arrows along its
+// velocity and the force on it. A pinned
 // one has free false, or no `free` at all. Switching a free charge back to
 // pinned keeps its mass, velocity and display options, so switching it to
 // free again brings them back, but gives up its name for another free
@@ -118,8 +121,10 @@ export function freeingChanges(charge, charges) {
     freeLabel: nextFreeLabel(charges.filter((c) => c.id !== charge.id)),
     mass: charge.mass ?? DEFAULT_FREE_MASS,
     velocity: charge.velocity ?? [0, 0, 0],
+    showPath: charge.showPath ?? true,
     showPredictedPath: charge.showPredictedPath ?? false,
     showVelocity: charge.showVelocity ?? false,
+    showForce: charge.showForce ?? false,
   };
 }
 export const PINNING_CHANGES = { free: false, freeLabel: null };

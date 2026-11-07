@@ -236,3 +236,14 @@ test('stateAt gives back the samples themselves, at their own times', () => {
     assert.ok(norm(sub(velocities[0], [y[3], y[4], y[5]])) < 1e-12);
   }
 });
+
+test('the trail up to a moment ends exactly where the charge is then', () => {
+  const run = simulateRun([pinned(1, +1, [0, 0, 0]), free(2, -1, [1, 0, 0], [0, 0.9, 0])]);
+  for (const time of [0.37, 1.5, 12.25]) {
+    const pieces = pathInsideBox(run, 0, time);
+    const last = pieces.at(-1).at(-1);
+    assert.ok(norm(sub(last, stateAt(run, time).positions[0])) < 1e-12, `at ${time} s`);
+  }
+  // Up to the end, it's the whole path.
+  assert.deepEqual(pathInsideBox(run, 0, run.end.time), pathInsideBox(run, 0));
+});

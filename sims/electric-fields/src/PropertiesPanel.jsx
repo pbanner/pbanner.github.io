@@ -161,8 +161,9 @@ function nextSteps(steps, delta) {
 //   - its mass, in g: the arrows step it by 0.1 g, down to 0.1 g, but
 //     anything above 0 can be typed;
 //   - its velocity, in cm/s, to start the run with;
-//   - whether to show its predicted path (the run worked out in advance:
-//     motion.js) and an arrow along its velocity.
+//   - what to show: its path so far during a run, its predicted path (the
+//     run worked out in advance: motion.js), and arrows along its velocity
+//     and the force on it. These can be changed during a run too.
 const MASS_STEP = 0.1;
 function FreeChargeSettings({ charge, onChange, readOnly = false }) {
   const setVelocity = (k, cmPerSecond) => {
@@ -197,14 +198,17 @@ function FreeChargeSettings({ charge, onChange, readOnly = false }) {
           ))}
         </div>
       </div>
-      <label>
-        <input type="checkbox" checked={charge.showPredictedPath} onChange={(e) => onChange({ showPredictedPath: e.target.checked })} />
-        Show predicted path
-      </label>
-      <label>
-        <input type="checkbox" checked={charge.showVelocity} onChange={(e) => onChange({ showVelocity: e.target.checked })} />
-        Show velocity
-      </label>
+      {[
+        ['showPath', 'Show path'],
+        ['showPredictedPath', 'Show predicted path'],
+        ['showVelocity', 'Show velocity'],
+        ['showForce', 'Show force'],
+      ].map(([key, text]) => (
+        <label key={key}>
+          <input type="checkbox" checked={!!charge[key]} onChange={(e) => onChange({ [key]: e.target.checked })} />
+          {text}
+        </label>
+      ))}
     </>
   );
 }
@@ -226,8 +230,7 @@ function FreeChargeSettings({ charge, onChange, readOnly = false }) {
 //   options can be changed.
 //
 // A free point charge's panel also has its mass, its velocity (where it
-// starts off, and how fast) and two display options: its predicted path,
-// and an arrow along its velocity.
+// starts off, and how fast) and its display options (FreeChargeSettings).
 export default function PropertiesPanel({ charge, onChange, onSetFree, onDelete, onClose, lockedAxis = null, canBeFree = true, freeBlockedReason, readOnly = false }) {
   const { kind } = charge;
   const free = isFree(charge);
