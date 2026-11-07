@@ -21,10 +21,12 @@ if (FIELD_LINE_DENSITY_LEVELS !== FIELD_ARROW_DENSITY_LEVELS) {
 }
 const FIELD_DENSITY_RANGE = { min: 1, max: FIELD_LINE_DENSITY_LEVELS, step: 1 };
 
-// Which charges' field is drawn, and read by the probes ("Field of"): all
-// of them, only the pinned ones, or all but one free charge -- the field
-// that free charge feels, chosen from a menu of them. Dimmed, too, while
-// there are no free charges, when the three are all the same.
+// Which charges' field is drawn, and read by the probes: one labeled menu
+// that reads as a sentence -- "Show field due to: all charges", "...:
+// pinned charges only", or "...: all charges except q₁" (one entry for
+// each free charge: the field that charge feels, since no charge feels
+// its own). Dimmed, too, while there are no free charges, when they're
+// all the same.
 //
 // gridPlane: the plane the grid is drawn in, for its label -- 'xy' (the
 // floor), or the 2D cut's plane while it's shown. freeCharges: the free
@@ -34,7 +36,11 @@ const FIELD_DENSITY_RANGE = { min: 1, max: FIELD_LINE_DENSITY_LEVELS, step: 1 };
 export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions, gridPlane = 'xy', freeCharges = [], fieldOf = 'all', feltBy = null }) {
   const setOption = (key, value) => setDisplayOptions((prev) => ({ ...prev, [key]: value }));
   const canChooseSources = displayOptions.showField && freeCharges.length > 0;
-  const chooseSources = (choice) => setDisplayOptions((prev) => ({ ...prev, fieldOf: choice, feltBy: choice === 'felt' ? feltBy ?? freeCharges[0]?.id ?? null : prev.feltBy }));
+  // The menu's value: 'all', 'pinned', or 'except-' and a free charge's id.
+  const sourcesValue = fieldOf === 'felt' ? `except-${feltBy}` : fieldOf;
+  const chooseSources = (value) => setDisplayOptions((prev) => (value.startsWith('except-')
+    ? { ...prev, fieldOf: 'felt', feltBy: Number(value.slice('except-'.length)) }
+    : { ...prev, fieldOf: value }));
   return (
     <div className="overlay-controls display-options-panel">
       <h3>Display Options</h3>
@@ -58,21 +64,15 @@ export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions,
           isDisabled={() => !displayOptions.showField}
         />
       </div>
-      <div className={`control-group field-of${canChooseSources ? '' : ' disabled'}`}>
-        <span>Field of</span>
-        <Segmented
-          options={[['all', 'All'], ['pinned', 'Pinned'], ['felt', 'Felt by']]}
-          value={fieldOf}
-          onChange={chooseSources}
-          isDisabled={() => !canChooseSources}
-        />
-        {fieldOf === 'felt' && (
-          <select aria-label="Free charge" value={feltBy} disabled={!canChooseSources} onChange={(e) => setOption('feltBy', Number(e.target.value))}>
-            {freeCharges.map((c) => (
-              <option key={c.id} value={c.id}>{freeLabelText(c.freeLabel)}</option>
-            ))}
-          </select>
-        )}
+      <div className={`control-group field-sources${canChooseSources ? '' : ' disabled'}`}>
+        <label htmlFor="field-sources">Show field due to</label>
+        <select id="field-sources" value={sourcesValue} disabled={!canChooseSources} onChange={(e) => chooseSources(e.target.value)}>
+          <option value="all">all charges</option>
+          <option value="pinned">pinned charges only</option>
+          {freeCharges.map((c) => (
+            <option key={c.id} value={`except-${c.id}`}>all charges except {freeLabelText(c.freeLabel)}</option>
+          ))}
+        </select>
       </div>
       <div className={`control-group${displayOptions.showField ? '' : ' disabled'}`}>
         <label htmlFor="field-density">Density: {displayOptions.fieldDensity}</label>

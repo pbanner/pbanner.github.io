@@ -380,24 +380,13 @@ input[type="range"].playback-scrubber {
   padding-left: 21px;
 }
 
-/* Which charges' field is drawn: its label, its three choices, and (for
-   "Felt by") the free charge's menu. Not set in like the style: the three
-   choices need nearly the panel's whole width, so they're a little
-   narrower than usual too, and each stays on one line. */
-.control-group.field-of {
-  align-items: flex-start;
-  font-size: 13px;
-  color: #333;
-}
-
-.control-group.field-of .segmented button {
-  padding: 2px 6px;
-  white-space: nowrap;
-}
-
-.control-group.field-of select {
+/* Which charges' field is drawn: a label and, under it, a menu as wide as
+   the panel. */
+.control-group.field-sources select {
+  width: 100%;
+  padding: 1px 2px;
   font: inherit;
-  padding: 1px 4px;
+  font-size: 12px;
 }
 
 .control-group.disabled {

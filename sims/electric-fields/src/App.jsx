@@ -117,7 +117,8 @@ export default function App() {
   // What the Display Options panel controls -- including which charges'
   // field is drawn (fieldOf): 'all' of them, the 'pinned' ones only, or
   // every one but one free charge, the field that free charge feels
-  // ('felt', feltBy its id). Whatever is drawn, the probes read.
+  // ('felt', feltBy its id: the menu's "all charges except q₁"). Whatever
+  // is drawn, the probes read.
   const [displayOptions, setDisplayOptions] = useState({
     showGrid: true,
     showAxes: true,
