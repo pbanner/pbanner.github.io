@@ -95,11 +95,13 @@ function dragReadout(item, grab) {
 }
 
 // charges: everything placed, [{ id, kind, ... }] (see chargeField.js).
-//   They're also the field's sources (`sources`, below), which are traced
-//   again only when something the field depends on changes -- not for a
-//   re-render for anything else (e.g. the hover highlight), nor for a
-//   change to a free charge that doesn't touch the field (its velocity).
-//   The placement ghost isn't a source: only placed charges make a field.
+// fieldSources: the charges whose field is drawn and read by the probes
+//   (all of them, or only some: App.jsx's fieldOf), traced again only
+//   when something that field depends on changes (`sources`, below) --
+//   not for a re-render for anything else (e.g. the hover highlight), nor
+//   for a change to a free charge that doesn't touch the field (its
+//   velocity). The placement ghost isn't a source: only placed charges
+//   make a field.
 // probes: the field probes, [{ id, label, position }] (see probes.js),
 //   picked and dragged like point charges (onMoveProbe(id, position),
 //   onDeleteProbe(id)). In the 2D cut's view, only those in the cut are
@@ -134,7 +136,7 @@ function dragReadout(item, grab) {
 // orbiting: the camera is orbiting (Start Orbit; see CameraAnimator's
 //   startOrbit). Any press on the view stops it, where it is
 //   (onStopOrbit()), and then does whatever it would have done anyway.
-export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProbe, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, cut, onMoveCut, view2D, showGrid, showAxes, showField, fieldStyle, fieldDensity, run, runTime = 0, runLocked = false, orbiting, onStopOrbit }) {
+export default function Viewer({ ref, charges, fieldSources = charges, probes, onMoveProbe, onDeleteProbe, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, cut, onMoveCut, view2D, showGrid, showAxes, showField, fieldStyle, fieldDensity, run, runTime = 0, runLocked = false, orbiting, onStopOrbit }) {
   const wrapperRef = useRef();
   const controlsRef = useRef();
   const cameraAnimatorRef = useRef();
@@ -355,9 +357,9 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
   // whenever their sources change, aren't traced again for nothing. (So
   // the deps are the key, not the array: the array is read only when the
   // key changes.)
-  const sourcesKey = fieldKey(charges);
+  const sourcesKey = fieldKey(fieldSources);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const sources = useMemo(() => charges, [sourcesKey]);
+  const sources = useMemo(() => fieldSources, [sourcesKey]);
 
   // Point charges are picked, dragged and drawn as ChargeMarkers; the
   // charged spheres, rods and planes ("objects") as ChargedObjects.
@@ -695,10 +697,10 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
         )}
 
         {shownProbes.map((probe) => {
-          const reading = probeReading(charges, probe.position);
+          const reading = probeReading(sources, probe.position);
           // Each charge's own field there, where the field is defined.
           const contributions = probe.showContributions && reading.field
-            ? charges.map((c) => ({ id: c.id, field: objectField(c, probe.position), color: chargeColor(c) }))
+            ? sources.map((c) => ({ id: c.id, field: objectField(c, probe.position), color: chargeColor(c) }))
             : null;
           return (
             <group key={probe.id}>
@@ -724,7 +726,7 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
         {selectedObject && <ObjectHandles charge={selectedObject} hoveredId={hoveredHandleId} activeId={handleDrag?.id} isHidden={handleHidden} />}
 
         {ghost && (ghost.kind === 'probe'
-          ? <ProbeMarker position={ghost.position} reading={probeReading(charges, ghost.position)} ghost showGuides />
+          ? <ProbeMarker position={ghost.position} reading={probeReading(sources, ghost.position)} ghost showGuides />
           : ghost.kind === 'point'
             ? <ChargeMarker q={ghost.q} position={ghost.position} ghost showGuides />
             : <ChargedObject charge={ghost} ghost />)}

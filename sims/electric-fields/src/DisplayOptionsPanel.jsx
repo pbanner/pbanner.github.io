@@ -5,6 +5,7 @@
 import { FIELD_LINE_DENSITY_LEVELS } from './fieldLines.js';
 import { FIELD_ARROW_DENSITY_LEVELS } from './fieldArrows.js';
 import Segmented from './Segmented.jsx';
+import { freeLabelText } from './chargeTypes.js';
 
 // The electric field is shown as field lines or as a grid of arrows, with
 // one density slider (1-5) for both: it steps through the field lines'
@@ -20,10 +21,20 @@ if (FIELD_LINE_DENSITY_LEVELS !== FIELD_ARROW_DENSITY_LEVELS) {
 }
 const FIELD_DENSITY_RANGE = { min: 1, max: FIELD_LINE_DENSITY_LEVELS, step: 1 };
 
+// Which charges' field is drawn, and read by the probes ("Field of"): all
+// of them, only the pinned ones, or all but one free charge -- the field
+// that free charge feels, chosen from a menu of them. Dimmed, too, while
+// there are no free charges, when the three are all the same.
+//
 // gridPlane: the plane the grid is drawn in, for its label -- 'xy' (the
-// floor), or the 2D cut's plane while it's shown.
-export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions, gridPlane = 'xy' }) {
+// floor), or the 2D cut's plane while it's shown. freeCharges: the free
+// charges, for the menu. fieldOf / feltBy: the setting in effect (App.jsx
+// works it out from displayOptions: there's no choosing a free charge
+// that isn't there).
+export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions, gridPlane = 'xy', freeCharges = [], fieldOf = 'all', feltBy = null }) {
   const setOption = (key, value) => setDisplayOptions((prev) => ({ ...prev, [key]: value }));
+  const canChooseSources = displayOptions.showField && freeCharges.length > 0;
+  const chooseSources = (choice) => setDisplayOptions((prev) => ({ ...prev, fieldOf: choice, feltBy: choice === 'felt' ? feltBy ?? freeCharges[0]?.id ?? null : prev.feltBy }));
   return (
     <div className="overlay-controls display-options-panel">
       <h3>Display Options</h3>
@@ -46,6 +57,22 @@ export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions,
           onChange={(style) => setOption('fieldStyle', style)}
           isDisabled={() => !displayOptions.showField}
         />
+      </div>
+      <div className={`control-group field-of${canChooseSources ? '' : ' disabled'}`}>
+        <span>Field of</span>
+        <Segmented
+          options={[['all', 'All'], ['pinned', 'Pinned'], ['felt', 'Felt by']]}
+          value={fieldOf}
+          onChange={chooseSources}
+          isDisabled={() => !canChooseSources}
+        />
+        {fieldOf === 'felt' && (
+          <select aria-label="Free charge" value={feltBy} disabled={!canChooseSources} onChange={(e) => setOption('feltBy', Number(e.target.value))}>
+            {freeCharges.map((c) => (
+              <option key={c.id} value={c.id}>{freeLabelText(c.freeLabel)}</option>
+            ))}
+          </select>
+        )}
       </div>
       <div className={`control-group${displayOptions.showField ? '' : ' disabled'}`}>
         <label htmlFor="field-density">Density: {displayOptions.fieldDensity}</label>

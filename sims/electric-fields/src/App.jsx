@@ -89,6 +89,33 @@ export default function App() {
     });
   }, [charges, run, running, playback.time]);
 
+  // What the Display Options panel controls -- including which charges'
+  // field is drawn (fieldOf): 'all' of them, the 'pinned' ones only, or
+  // every one but one free charge, the field that free charge feels
+  // ('felt', feltBy its id). Whatever is drawn, the probes read.
+  const [displayOptions, setDisplayOptions] = useState({
+    showGrid: true,
+    showAxes: true,
+    showField: true,
+    fieldStyle: 'lines', // or 'arrows'
+    fieldDensity: 3, // 30 lines per unit charge (seedDirections.js), or 7 x 7 x 7 arrows (fieldArrows.js)
+    fieldOf: 'all', // or 'pinned' or 'felt'
+    feltBy: null,
+  });
+
+  // The charges whose field is drawn (and read by the probes): as above,
+  // at this moment of a run. With no free charges, all of them, whatever
+  // the setting; and if the free charge chosen to feel the field is no
+  // longer free, the first one that is.
+  const freeCharges = charges.filter(isFree);
+  const fieldOf = freeCharges.length === 0 ? 'all' : displayOptions.fieldOf;
+  const feltBy = fieldOf === 'felt' ? (freeCharges.find((c) => c.id === displayOptions.feltBy) ?? freeCharges[0]).id : null;
+  const fieldSources = useMemo(() => {
+    if (fieldOf === 'pinned') return shownCharges.filter((c) => !isFree(c));
+    if (fieldOf === 'felt') return shownCharges.filter((c) => c.id !== feltBy);
+    return shownCharges;
+  }, [shownCharges, fieldOf, feltBy]);
+
   // The 2D cut, if there is one: { axis, offset } (see cutPlanes.js). Its
   // orientation is the user's choice; so is its offset, but only while the
   // charges allow it anywhere along its axis -- otherwise it's wherever the
@@ -99,9 +126,20 @@ export default function App() {
   // During a run, the cut stays where it was put, but whether it's valid
   // follows the charges as they move: a free charge that leaves the cut
   // leaves the arrangement no longer mirror-symmetric through it.
+  //
+  // And the cut's lines are true field lines only if the field drawn is
+  // mirror-symmetric through the cut too: with only some of the charges'
+  // field drawn (Display Options), those charges alone have to be -- a
+  // free charge mirroring a pinned one isn't, without the free one.
   const allowedNow = useMemo(() => (running ? allowedCuts(shownCharges) : allowed), [running, shownCharges, allowed]);
+  const allowedForField = useMemo(() => (fieldSources === shownCharges ? allowedNow : allowedCuts(fieldSources)), [fieldSources, shownCharges, allowedNow]);
   const setupCut = cut && placeCut(cut, allowed);
-  const placedCut = setupCut && running ? { ...setupCut, valid: allowsOffset(allowedNow[setupCut.axis], setupCut.offset) } : setupCut;
+  const placedCut = setupCut && {
+    ...setupCut,
+    valid: setupCut.valid
+      && (!running || allowsOffset(allowedNow[setupCut.axis], setupCut.offset))
+      && allowsOffset(allowedForField[setupCut.axis], setupCut.offset),
+  };
   if (cut && placedCut.offset !== cut.offset) setCut({ ...cut, offset: placedCut.offset });
   // A new cut takes the first allowed orientation (cutPlanes.js), at the
   // charges' one allowed position, or in the middle of the box.
@@ -159,15 +197,6 @@ export default function App() {
 
   // The sidebar's delete tool: while on, clicking a charge deletes it.
   const [removeMode, setRemoveMode] = useState(false);
-
-  // What the Display Options panel controls.
-  const [displayOptions, setDisplayOptions] = useState({
-    showGrid: true,
-    showAxes: true,
-    showField: true,
-    fieldStyle: 'lines', // or 'arrows'
-    fieldDensity: 3, // 30 lines per unit charge (seedDirections.js), or 7 x 7 x 7 arrows (fieldArrows.js)
-  });
 
   const viewerRef = useRef(null);
 
@@ -457,6 +486,7 @@ export default function App() {
       <Viewer
         ref={viewerRef}
         charges={shownCharges}
+        fieldSources={fieldSources}
         probes={probes}
         onMoveProbe={moveProbe}
         onDeleteProbe={deleteProbe}
@@ -548,7 +578,7 @@ export default function App() {
           )}
 
           {shownProbes.length > 0 && (
-            <FieldProbesPanel probes={shownProbes} charges={shownCharges} selectedId={selectedId} onSelect={setSelectedId} cut={inCut} />
+            <FieldProbesPanel probes={shownProbes} charges={fieldSources} selectedId={selectedId} onSelect={setSelectedId} cut={inCut} />
           )}
         </OrbitLock>
       </div>
@@ -602,6 +632,9 @@ export default function App() {
           <DisplayOptionsPanel
             displayOptions={displayOptions}
             setDisplayOptions={setDisplayOptions}
+            freeCharges={freeCharges}
+            fieldOf={fieldOf}
+            feltBy={feltBy}
             gridPlane={view2D && placedCut ? ['yz', 'xz', 'xy'][placedCut.axis] : 'xy'}
           />
         </OrbitLock>
