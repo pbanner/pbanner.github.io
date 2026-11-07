@@ -208,17 +208,30 @@ function FreeChargeSettings({ charge, onChange, readOnly = false, lockedAxis = n
           ))}
         </div>
       </div>
-      {[
-        ['showPath', 'Show path'],
-        ['showPredictedPath', 'Show predicted path'],
-        ['showVelocity', 'Show velocity'],
-        ['showForce', 'Show force'],
-      ].map(([key, text]) => (
-        <label key={key}>
-          <input type="checkbox" checked={!!charge[key]} onChange={(e) => onChange({ [key]: e.target.checked })} />
-          {text}
-        </label>
-      ))}
+      <div style={{ display: 'flex', flexDirection: 'row', gap: '20px', margin: '0.5em 0em' }}>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {[
+            ['showPath', 'Show path'],
+            ['showPredictedPath', 'Show predicted path']
+          ].map(([key, text]) => (
+            <label key={key}>
+              <input type="checkbox" checked={!!charge[key]} onChange={(e) => onChange({ [key]: e.target.checked })} />
+              {text}
+            </label>
+          ))}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {[
+            ['showVelocity', 'Show velocity'],
+            ['showForce', 'Show force']
+          ].map(([key, text]) => (
+            <label key={key}>
+              <input type="checkbox" checked={!!charge[key]} onChange={(e) => onChange({ [key]: e.target.checked })} />
+              {text}
+            </label>
+          ))}
+        </div>
+      </div>
     </>
   );
 }
