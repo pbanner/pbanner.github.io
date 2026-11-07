@@ -16,7 +16,9 @@ import { freeLabelText } from './chargeTypes.js';
 // thin. The style is chosen with joined toggle buttons (Segmented), like
 // the properties panel's choices, labeled "Show as". It and the slider are
 // dimmed, and can't be changed, while the field is hidden. A divider sets
-// the field's settings apart from the grid's and the axes'.
+// the field's settings apart from the grid's and the axes' (side by side),
+// and each of the field's settings has its label beside it, the three
+// lined up in a column.
 if (FIELD_LINE_DENSITY_LEVELS !== FIELD_ARROW_DENSITY_LEVELS) {
   throw new Error('Field lines and arrows must have the same number of density levels');
 }
@@ -45,20 +47,22 @@ export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions,
   return (
     <div className="overlay-controls display-options-panel">
       <h3>Display Options</h3>
-      <label>
-        <input type="checkbox" checked={displayOptions.showGrid} onChange={(e) => setOption('showGrid', e.target.checked)} />
-        Grid ({gridPlane} plane)
-      </label>
-      <label>
-        <input type="checkbox" checked={displayOptions.showAxes} onChange={(e) => setOption('showAxes', e.target.checked)} />
-        Axes
-      </label>
+      <div className="checkbox-row">
+        <label>
+          <input type="checkbox" checked={displayOptions.showGrid} onChange={(e) => setOption('showGrid', e.target.checked)} />
+          Grid ({gridPlane} plane)
+        </label>
+        <label>
+          <input type="checkbox" checked={displayOptions.showAxes} onChange={(e) => setOption('showAxes', e.target.checked)} />
+          Axes
+        </label>
+      </div>
       <div className="panel-divider" />
       <label>
         <input type="checkbox" checked={displayOptions.showField} onChange={(e) => setOption('showField', e.target.checked)} />
         Show electric field
       </label>
-      <div className={`control-group field-style${displayOptions.showField ? '' : ' disabled'}`}>
+      <div className={`control-group labeled-row${displayOptions.showField ? '' : ' disabled'}`}>
         <span>Show as:</span>
         <Segmented
           options={[['lines', 'Lines'], ['arrows', 'Arrows']]}
@@ -67,7 +71,7 @@ export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions,
           isDisabled={() => !displayOptions.showField}
         />
       </div>
-      <div className={`control-group field-sources${canChooseSources ? '' : ' disabled'}`}>
+      <div className={`control-group labeled-row${canChooseSources ? '' : ' disabled'}`}>
         <label htmlFor="field-sources">Show field due to:</label>
         <select id="field-sources" value={sourcesValue} disabled={!canChooseSources} onChange={(e) => chooseSources(e.target.value)}>
           <option value="all">all charges</option>
@@ -77,7 +81,7 @@ export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions,
           ))}
         </select>
       </div>
-      <div className={`control-group${displayOptions.showField ? '' : ' disabled'}`}>
+      <div className={`control-group labeled-row${displayOptions.showField ? '' : ' disabled'}`}>
         <label htmlFor="field-density">Display density: {displayOptions.fieldDensity}</label>
         <input
           id="field-density"

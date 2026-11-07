@@ -2,7 +2,8 @@
    an absolutely positioned overlay, rather than sharing the screen with a
    fixed sidebar the way the Bloch sphere sim does. */
 .app-layout {
-  --display-panel-width: 200px; /* shared by .display-options-panel and the bottom-center stack (wide enough for "Show as" beside Lines / Arrows) */
+  --side-panel-width: 324px; /* the right-hand panels: the selected thing's, Field Probes, and Display Options */
+  --display-panel-width: var(--side-panel-width); /* shared by .display-options-panel and the bottom-center stack */
   position: relative;
   height: 100vh; /* fallback for browsers that don't support dvh below */
   height: 100dvh; /* the *actual* visible viewport height -- see the Bloch sphere sim's .app-layout for why plain 100vh misbehaves on mobile Safari */
@@ -398,28 +399,39 @@ input[type="range"].playback-scrubber {
   background: #d5d5d5;
 }
 
-/* The field's style: "Show as", and the Lines / Arrows choice beside it,
-   on one line (the panel is wide enough for both: --display-panel-width). */
-.control-group.field-style {
+/* The grid's and the axes' checkboxes, side by side. */
+.checkbox-row {
+  display: flex;
+  gap: 28px;
+}
+
+/* Each of the field's settings ("Show as:", "Show field due to:",
+   "Display density:") on one line: its label, then its control. The labels
+   take a column of the same width, so the three controls start in line;
+   the menu and the slider fill the rest of their lines. (The slider's
+   rule is as specific as the sliders' own input[type="range"], and then
+   some, so it wins over that rule's width.) */
+.control-group.labeled-row {
   flex-direction: row;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   font-size: 13px;
   color: #333;
+}
+
+.control-group.labeled-row > :first-child {
+  flex: none;
+  width: 128px;
   white-space: nowrap;
 }
 
-/* The density slider's round thumb stands out past the slider's own box,
-   so a little room below it keeps it off the panel's bottom edge. */
-.display-options-panel input[type="range"] {
-  margin-bottom: 6px;
+.control-group.labeled-row select,
+.control-group.labeled-row input[type="range"] {
+  flex: 1;
+  min-width: 0;
 }
 
-/* Which charges' field is drawn: a label and, under it, a menu as wide as
-   the panel. */
-.control-group.field-sources select {
-  width: 100%;
+.control-group.labeled-row select {
   padding: 1px 2px;
   font: inherit;
   font-size: 12px;
@@ -501,7 +513,7 @@ input[type="range"]::-moz-range-track {
 
 .upper-right-stack > .orbit-lock > .overlay-controls {
   flex: none;
-  width: 324px;
+  width: var(--side-panel-width);
 }
 
 /* The Field Probes panel's table: a row per probe, numbers lined up on
