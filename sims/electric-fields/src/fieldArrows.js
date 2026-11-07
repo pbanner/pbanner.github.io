@@ -11,7 +11,7 @@
 // the same amount of length and darkness, a given strength always looks
 // the same, and the picture doesn't rescale itself as charges are dragged
 // around.
-import { fieldAt } from './chargeField.js';
+import { balancedFieldAt } from './chargeField.js';
 
 // Arrows per axis at each density setting (1-5): 27 to 1331 arrows. Always
 // odd, so that the middle layer of arrows runs through the origin -- in
@@ -74,7 +74,7 @@ export function computeFieldArrows(sources, { density, halfExtent, cut = null })
         }
         const tooClose = sources.some((s) => s.kind === 'point' && Math.hypot(...position.map((v, m) => v - s.position[m])) < minDistance);
         if (tooClose) continue;
-        const e = fieldAt(position, sources);
+        const e = balancedFieldAt(position, sources);
         const magnitude = Math.hypot(...e);
         if (!(magnitude > 0)) continue; // exactly where the field vanishes: no direction to show
         arrows.push({ position, direction: e.map((c) => c / magnitude), strength: fieldStrengthFraction(magnitude) });

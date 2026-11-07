@@ -1,14 +1,10 @@
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { Line } from '@react-three/drei';
 import * as THREE from 'three';
-import { computeFieldLines, arrowheadsAlong } from './fieldLines.js';
+import { computeFieldLines, arrowheadsAlong, unpackArrows, ARROW_SPACING } from './fieldLines.js';
 import { CHARGE_RADIUS, WORLD_HALF_EXTENT } from './sceneConstants.js';
 
 const LINE_COLOR = '#4a5058';
-// About one arrowhead per this many world units of line. Sparse on
-// purpose: an arrowhead pointing nearly at or away from the viewer shows
-// only its round cross-section, so a dense set reads as scattered dots.
-const ARROW_SPACING = 2;
 const ARROW_RADIUS = 0.05;
 const ARROW_LENGTH = 0.17;
 
@@ -62,30 +58,42 @@ function Arrowheads({ arrows, opacity }) {
 // cut: a valid 2D cut ({ axis, offset }), to draw only the lines lying in
 // it (or null for all of them, in 3D). faded: drawn faint, as the 3D lines
 // are while a cut's lines are painted over them.
+//
+// packed: lines already traced elsewhere -- by a worker, for a moment of a
+// run (fieldLineWorker.js) -- as packFieldLines packs them, to draw instead
+// of tracing them here (sources and density are then ignored); or null for
+// none yet (nothing is drawn).
 const FADED_OPACITY = 0.22;
-export default function FieldLines({ sources, density, cut = null, faded = false }) {
+export default function FieldLines({ sources, density, cut = null, faded = false, packed }) {
+  const given = packed !== undefined;
   const cutAxis = cut?.axis;
   const cutOffset = cut?.offset;
   const lines = useMemo(
-    () => computeFieldLines(sources, {
+    () => (given ? null : computeFieldLines(sources, {
       density,
       halfExtent: WORLD_HALF_EXTENT,
       chargeRadius: CHARGE_RADIUS,
       cut: cutAxis === undefined ? null : { axis: cutAxis, offset: cutOffset },
-    }),
-    [sources, density, cutAxis, cutOffset],
+    })),
+    [given, sources, density, cutAxis, cutOffset],
   );
   // `segments` mode draws each consecutive pair of points as its own line
   // segment, so every line's consecutive points become pairs: all the
-  // lines then go into a single line object (one draw call).
+  // lines then go into a single line object (one draw call). Packed lines
+  // come as those pairs already, as a flat array of numbers (which drei's
+  // Line takes too -- though as a plain array, not a Float32Array).
   const segmentPoints = useMemo(() => {
+    if (given) return packed ? Array.from(packed.segments) : [];
     const points = [];
     for (const line of lines) {
       for (let i = 1; i < line.length; i++) points.push(line[i - 1], line[i]);
     }
     return points;
-  }, [lines]);
-  const arrows = useMemo(() => arrowheadsAlong(lines, ARROW_SPACING), [lines]);
+  }, [given, packed, lines]);
+  const arrows = useMemo(() => {
+    if (given) return packed ? unpackArrows(packed.arrows) : [];
+    return arrowheadsAlong(lines, ARROW_SPACING);
+  }, [given, packed, lines]);
 
   if (segmentPoints.length === 0) return null;
   const opacity = faded ? FADED_OPACITY : 1;

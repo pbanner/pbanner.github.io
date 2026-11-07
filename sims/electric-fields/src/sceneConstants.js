@@ -13,6 +13,11 @@ export const WORLD_HALF_EXTENT = 5;
 
 export const CHARGE_RADIUS = 0.15;
 
+// A thin (line) rod's drawn thickness: its charge is all on its axis, but
+// it's drawn as a cylinder this wide (ChargedObject.jsx), and that's the
+// wall a free charge can run into (walls.js).
+export const LINE_ROD_DRAWN_RADIUS = 0.05;
+
 // How close to a field probe's center (ProbeMarker.jsx) a press grabs it:
 // a little outside its rings.
 export const PROBE_PICK_RADIUS = 0.15;
@@ -30,9 +35,10 @@ export const INITIAL_CAMERA_TARGET = [0, 0, 0];
 export const CAMERA_FOV = 35;
 
 // The axis gizmo's center, in pixels from the viewer's lower-left corner:
-// centered over the view controls' two buttons (.view-controls in App.css,
-// 108 px wide starting 16 px in) and high enough to clear them.
-export const VIEW_CONTROLS_GIZMO_MARGIN = [70, 135];
+// centered over the view controls' three buttons (.view-controls in
+// App.css, 108 px wide starting 16 px in) and high enough to clear them.
+// Each button takes about 32 px of height (25.6 px, plus the 6 px gap).
+export const VIEW_CONTROLS_GIZMO_MARGIN = [70, 167];
 
 // A pointerdown/pointerup pair counts as a "click" rather than a drag as
 // long as the pointer moved no more than this many pixels in between --

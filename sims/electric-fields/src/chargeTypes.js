@@ -20,6 +20,21 @@
 // position is where its axis crosses the plane perpendicular to it (the
 // axis coordinate is always 0), and a plane's is where it crosses its
 // axis (the other two coordinates are always 0).
+//
+// A point charge is either pinned -- held in place, the kind there always
+// was -- or free: it moves, pushed by every other charge's field (see
+// motion.js). A free one also has
+//   { free: true, mass, velocity, freeLabel,
+//     showPath, showPredictedPath, showVelocity, showForce }
+// mass in grams, velocity in world units per second (its initial velocity;
+// the properties panel shows cm/s), freeLabel the n in its name, q_n
+// (freeLabelText), and the display options set in its panel: its trail
+// during a run (on to start with), its predicted path, and arrows along its
+// velocity and the force on it. A pinned
+// one has free false, or no `free` at all. Switching a free charge back to
+// pinned keeps its mass, velocity and display options, so switching it to
+// free again brings them back, but gives up its name for another free
+// charge to take.
 export const MAX_CHARGE_STEPS = 5;
 
 // Each kind's charge comes in whole steps, from -MAX_CHARGE_STEPS to
@@ -80,6 +95,39 @@ export const CHARGE_TYPES = [
 export function getChargeType(id) {
   return CHARGE_TYPES.find((t) => t.id === id);
 }
+
+// Free charges (see the top of this file). A new free charge weighs
+// DEFAULT_FREE_MASS grams and starts at rest.
+export const DEFAULT_FREE_MASS = 1;
+export const isFree = (charge) => charge.kind === 'point' && charge.free === true;
+
+// A free charge's name, q_n with n as subscript digits: "q₁", "q₁₂".
+const SUBSCRIPT_DIGITS = '₀₁₂₃₄₅₆₇₈₉';
+export const freeLabelText = (n) => `q${[...String(n)].map((d) => SUBSCRIPT_DIGITS[Number(d)]).join('')}`;
+
+// The smallest n no free charge among `charges` has, so freeing a charge
+// after q₂ was pinned again brings q₂ back.
+export function nextFreeLabel(charges) {
+  let n = 1;
+  while (charges.some((c) => isFree(c) && c.freeLabel === n)) n++;
+  return n;
+}
+
+// The changes that make the point charge `charge` free, among all the
+// `charges` (it among them), or pinned again.
+export function freeingChanges(charge, charges) {
+  return {
+    free: true,
+    freeLabel: nextFreeLabel(charges.filter((c) => c.id !== charge.id)),
+    mass: charge.mass ?? DEFAULT_FREE_MASS,
+    velocity: charge.velocity ?? [0, 0, 0],
+    showPath: charge.showPath ?? true,
+    showPredictedPath: charge.showPredictedPath ?? false,
+    showVelocity: charge.showVelocity ?? false,
+    showForce: charge.showForce ?? false,
+  };
+}
+export const PINNING_CHANGES = { free: false, freeLabel: null };
 
 // A new charge of the given sidebar type dropped at `point` (no id yet).
 // A rod goes through the point along its axis (a new rod is vertical, so

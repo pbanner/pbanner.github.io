@@ -1,6 +1,6 @@
 import { useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { CanvasTexture, Quaternion, Vector3 } from 'three';
+import { CanvasTexture, Quaternion, Spherical, Vector3 } from 'three';
 import { axisViewOrientation, stopMomentum } from './cameraViews.js';
 
 // The orientation gizmo in the lower-left corner, and the camera move it
@@ -22,6 +22,32 @@ const HEAD_SCALE = 0.9;
 const TURN_RATE = 1.5 * Math.PI;
 const MIN_DURATION = 0.25;
 const MAX_DURATION = 0.8;
+
+// The orbit (see CameraAnimator's startOrbit): a lap every ORBIT_LAP
+// seconds once it's up to speed, which takes ORBIT_EASE_IN seconds. On the
+// way round, the camera rises and falls ORBIT_TILT radians either side of
+// its starting height, once a lap. Its polar angle -- from the orbit axis,
+// as OrbitControls measures it -- stays at least ORBIT_POLE_MARGIN from
+// either end of OrbitControls' 0 to pi range (see startOrbit).
+const DEG = Math.PI / 180;
+const ORBIT_LAP = 18;
+const ORBIT_EASE_IN = 1;
+const ORBIT_TILT = 15 * DEG;
+const ORBIT_POLE_MARGIN = 10 * DEG;
+// A frame's time step is capped at this many seconds, so that coming back
+// to a tab that was hidden (where frames stop) doesn't jump the orbit ahead.
+const MAX_FRAME_STEP = 0.1;
+
+const smoothstep = (x) => x * x * (3 - 2 * x);
+// How far round the orbit has gone, in radians, `t` seconds in. Its speed
+// rises from 0 along a smoothstep over the ease-in, then holds steady; this
+// is that speed integrated (the integral of 3x^2 - 2x^3 is x^3 - x^4 / 2).
+function orbitAngle(t) {
+  const speed = (2 * Math.PI) / ORBIT_LAP;
+  if (t >= ORBIT_EASE_IN) return speed * (t - ORBIT_EASE_IN / 2);
+  const x = t / ORBIT_EASE_IN;
+  return speed * ORBIT_EASE_IN * (x ** 3 - x ** 4 / 2);
+}
 
 // One clickable axis end: a colored disc, with the axis name on the
 // positive end, that grows a little while hovered (same look as drei's).
@@ -114,10 +140,25 @@ export function AxisGizmo({ onAxisClick }) {
 // a click rather than on pointerdown: the gizmo is drawn on the same
 // canvas, so pressing on it also fires 'start', which would cancel a move
 // begun on that same press.
+//
+// startOrbit() sets the camera orbiting until stopOrbit(): round and round
+// the axis that's up on screen (the camera's `up`, which is also the axis
+// OrbitControls turns a sideways drag about), through the target, rising
+// and falling a little once a lap. It's worked in OrbitControls' own
+// terms: spherical coordinates about `up`, with the polar angle measured
+// from `up` and the azimuth around it, so the camera is placed exactly as
+// OrbitControls would place it, and its own update each frame changes
+// nothing. The distance is read fresh every frame, so scrolling to zoom
+// works during the orbit; nothing here stops it but stopOrbit() (Viewer.jsx
+// calls that for any press on the view). It starts once any move under way
+// has finished.
 const visibleHeight = (distance, fov) => 2 * distance * Math.tan((fov * Math.PI) / 360);
 
 export function CameraAnimator({ ref, controlsRef }) {
   const move = useRef(null);
+  // The orbit, while there is one: { pending: true } until it starts, then
+  // what it started from (see beginOrbit).
+  const orbit = useRef(null);
 
   const state = () => {
     const controls = controlsRef.current;
@@ -157,7 +198,54 @@ export function CameraAnimator({ ref, controlsRef }) {
       move.current = null;
       if (controlsRef.current) controlsRef.current.enabled = true;
     },
+    startOrbit() {
+      orbit.current = { pending: true };
+    },
+    stopOrbit() {
+      orbit.current = null;
+    },
   }));
+
+  // The orbit's starting point, worked out as OrbitControls' update() does
+  // (three-stdlib): `toYUp` turns the camera's up onto +y, where three's
+  // Spherical measures its polar angle `phi` (from +y) and azimuth `theta`
+  // (around it). The camera's polar angle at the start is kept: it's the
+  // middle of the rise and fall. Except that within ORBIT_TILT +
+  // ORBIT_POLE_MARGIN of either pole -- looking almost straight down or up
+  // the orbit axis -- that would take the camera past the pole, where it
+  // would flip over, so the middle is eased away from it over the ease-in
+  // (`phiMiddle`).
+  const beginOrbit = (controls) => {
+    stopMomentum(controls);
+    const camera = controls.object;
+    const toYUp = new Quaternion().setFromUnitVectors(camera.up.clone().normalize(), new Vector3(0, 1, 0));
+    const start = new Spherical().setFromVector3(camera.position.clone().sub(controls.target).applyQuaternion(toYUp));
+    const limit = ORBIT_TILT + ORBIT_POLE_MARGIN;
+    return {
+      fromYUp: toYUp.clone().invert(),
+      theta: start.theta,
+      phi: start.phi,
+      phiMiddle: Math.min(Math.PI - limit, Math.max(limit, start.phi)),
+      elapsed: 0,
+    };
+  };
+
+  // One frame of the orbit. Going round is increasing theta, which is
+  // counterclockwise seen from above (looking down the orbit axis). The
+  // polar angle is phi = middle - tilt sin(angle): it falls first (the
+  // camera rises), and the rise and fall comes round once a lap, as the
+  // lap's angle does.
+  const stepOrbit = (o, controls, delta) => {
+    const camera = controls.object;
+    o.elapsed += Math.min(delta, MAX_FRAME_STEP);
+    const angle = orbitAngle(o.elapsed);
+    const middle = o.phi + (o.phiMiddle - o.phi) * smoothstep(Math.min(1, o.elapsed / ORBIT_EASE_IN));
+    const phi = middle - ORBIT_TILT * Math.sin(angle);
+    const distance = camera.position.distanceTo(controls.target);
+    const offset = new Vector3().setFromSphericalCoords(distance, phi, o.theta + angle).applyQuaternion(o.fromYUp);
+    camera.position.copy(controls.target).add(offset);
+    camera.lookAt(controls.target);
+  };
 
   useEffect(() => {
     const controls = controlsRef.current;
@@ -170,7 +258,13 @@ export function CameraAnimator({ ref, controlsRef }) {
   useFrame((_, delta) => {
     const m = move.current;
     const controls = controlsRef.current;
-    if (!m || !controls) return;
+    if (!controls) return;
+    if (!m && orbit.current) {
+      if (orbit.current.pending) orbit.current = beginOrbit(controls);
+      stepOrbit(orbit.current, controls, delta);
+      return;
+    }
+    if (!m) return;
     m.elapsed += delta;
     const t = Math.min(1, m.elapsed / m.duration);
     const eased = t * t * (3 - 2 * t); // smoothstep: starts and ends gently

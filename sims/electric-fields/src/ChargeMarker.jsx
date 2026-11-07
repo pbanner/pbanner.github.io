@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { Billboard, Line } from '@react-three/drei';
+import { Billboard, Html, Line } from '@react-three/drei';
 import { CanvasTexture } from 'three';
 import { CHARGE_RADIUS, SELECTION_COLOR } from './sceneConstants.js';
 import { chargeGuideSegments } from './geometry.js';
@@ -36,6 +36,37 @@ function useChargeLabelTexture(q) {
   return texture;
 }
 
+// A free charge glows: a soft halo of its own color around it, out to
+// GLOW_RADIUS charge radii, so free and pinned charges can be told apart
+// at a glance. It's a sprite (a flat picture that always faces the
+// camera) at the charge's center, behind its sphere, so only the part
+// outside the sphere shows: a white radial gradient, tinted the charge's
+// color by the sprite's material, fading from nearly opaque at the
+// sphere's edge to nothing. Normal blending, not additive: additive
+// blending brightens what's behind, and on this nearly white background
+// it would barely show. One texture serves every free charge.
+const GLOW_RADIUS = 2.4;
+const GLOW_OPACITY = 0.85;
+let glowTexture = null;
+function getGlowTexture() {
+  if (!glowTexture) {
+    const size = 128;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    const edge = 1 / GLOW_RADIUS; // the sphere's edge, as a fraction of the glow's radius
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    gradient.addColorStop(edge, 'rgba(255, 255, 255, 0.9)');
+    gradient.addColorStop(edge + (1 - edge) * 0.4, 'rgba(255, 255, 255, 0.45)');
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+    glowTexture = new CanvasTexture(canvas);
+  }
+  return glowTexture;
+}
+
 // One point charge in the scene: a colored sphere (red positive, blue
 // negative) with a white + or − -- or its value, if it's more than one
 // unit -- that always turns to face the camera (drei's Billboard), so the
@@ -43,9 +74,12 @@ function useChargeLabelTexture(q) {
 // placement preview; `highlighted` enlarges it slightly (hovered/dragged);
 // `selected` circles it with a blue ring that faces the camera.
 //
+// `free` gives it its glow, and `label` (a free charge's name, "q₁") is
+// written beside it, like a field probe's letter.
+//
 // `showGuides` (while the charge is being placed or dragged) adds its
 // PositionGuides.
-export default function ChargeMarker({ q, position, ghost = false, highlighted = false, selected = false, showGuides = false }) {
+export default function ChargeMarker({ q, position, ghost = false, highlighted = false, selected = false, free = false, label = null, showGuides = false }) {
   const barLength = CHARGE_RADIUS * 1.1;
   const barWidth = CHARGE_RADIUS * 0.24;
   // Just in front of the sphere's surface (in the billboard's own frame,
@@ -59,6 +93,11 @@ export default function ChargeMarker({ q, position, ghost = false, highlighted =
         {/* The highlight scales the sphere and its sign together; scaling
             only the sphere would swallow the sign inside it. */}
         <group scale={highlighted ? 1.15 : 1}>
+          {free && (
+            <sprite scale={[2 * GLOW_RADIUS * CHARGE_RADIUS, 2 * GLOW_RADIUS * CHARGE_RADIUS, 1]}>
+              <spriteMaterial map={getGlowTexture()} color={chargeColor(q)} transparent opacity={GLOW_OPACITY} depthWrite={false} toneMapped={false} />
+            </sprite>
+          )}
           <mesh>
             <sphereGeometry args={[CHARGE_RADIUS, 32, 32]} />
             <meshStandardMaterial color={chargeColor(q)} roughness={0.35} metalness={0.05} transparent={ghost} opacity={opacity} depthWrite={!ghost} />
@@ -91,6 +130,13 @@ export default function ChargeMarker({ q, position, ghost = false, highlighted =
               <meshBasicMaterial color={SELECTION_COLOR} />
             </mesh>
           </Billboard>
+        )}
+        {/* Drawn like a probe's letter (ProbeMarker.jsx), a little further
+            out, past the glow. */}
+        {label && (
+          <Html zIndexRange={[5, 0]} pointerEvents="none">
+            <div className={`probe-label charge-label${selected ? ' selected' : ''}`}>{label}</div>
+          </Html>
         )}
       </group>
 

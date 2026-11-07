@@ -6,9 +6,15 @@ import DisplayOptionsPanel from './DisplayOptionsPanel.jsx';
 import PropertiesPanel, { CutPanel, ProbePanel } from './PropertiesPanel.jsx';
 import FieldProbesPanel from './FieldProbesPanel.jsx';
 import CutInset from './CutInset.jsx';
-import { getChargeType, makeCharge, normalizePosition, crowds } from './chargeTypes.js';
+import OrbitLock from './OrbitLock.jsx';
+import PlaybackPanel from './PlaybackPanel.jsx';
+import { formatTime, FramePlayer } from './playback.js';
+import { createFieldLineWorkers } from './fieldLineWorkers.js';
+import { getChargeType, makeCharge, normalizePosition, crowds, freeingChanges, PINNING_CHANGES, isFree, freeLabelText } from './chargeTypes.js';
+import { simulateRun, motionKey, stateAt, insideBox, MAX_RUN_TIME } from './motion.js';
+import { contactGap, touchesFreeCharge, wallName } from './walls.js';
 import { PROBE_TYPE, MAX_PROBES, isProbeId, nextProbeLabel, probeInCut } from './probes.js';
-import { allowedCuts, defaultCutAxis, placeCut, keepInCut } from './cutPlanes.js';
+import { allowedCut, allowedCuts, defaultCutAxis, placeCut, keepInCut, allowsOffset } from './cutPlanes.js';
 import { CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
 import './App.css';
 
@@ -16,6 +22,48 @@ import './App.css';
 const SIDEBAR_LABEL_GAP = 12;
 // Size of the 2D placement ghost.
 const GHOST_ICON_SIZE = 36;
+const AXIS_NAMES = ['x', 'y', 'z'];
+
+// What ended a run (motion.js's run.end), for the playback panel, naming
+// free charges by name and anything else by what it is (walls.js).
+function endNote(run, charges) {
+  const name = (c) => freeLabelText(c.freeLabel);
+  const at = `t = ${formatTime(run.end.time)}`;
+  if (run.end.reason === 'collision') {
+    const who = charges.find((c) => c.id === run.end.chargeId);
+    const what = charges.find((c) => c.id === run.end.otherId);
+    return `${name(who)} hit ${wallName(what, name)} at ${at}.`;
+  }
+  if (run.end.reason === 'left') return `Every free charge had left the box by ${at}.`;
+  return `The run stopped at its ${MAX_RUN_TIME} s limit.`;
+}
+
+// Everything as it is at time t of a run: each free charge where the run
+// has it, going as fast as it is then, and marked `outside` while it's out
+// of the box (it isn't seen then, but its field still counts).
+function chargesAt(charges, run, t) {
+  const { positions, velocities } = stateAt(run, t);
+  return charges.map((c) => {
+    const i = run.ids.indexOf(c.id);
+    return i < 0 ? c : { ...c, position: positions[i], velocity: velocities[i], outside: !insideBox(positions[i]) };
+  });
+}
+
+// Which of `shown` make the field that's drawn (Display Options): all of
+// them, the pinned ones, or all but the free charge feltBy.
+function sourcesOf(shown, fieldOf, feltBy) {
+  if (fieldOf === 'pinned') return shown.filter((c) => !isFree(c));
+  if (fieldOf === 'felt') return shown.filter((c) => c.id !== feltBy);
+  return shown;
+}
+
+// Whether the cut, where it was put (setupCut, from placeCut), is valid
+// with everything as `shown` and the drawn field's `sources`: valid to
+// begin with, and with both mirror-symmetric through it.
+function cutValid(setupCut, shown, sources) {
+  const at = (charges) => allowsOffset(allowedCut(charges, setupCut.axis), setupCut.offset);
+  return setupCut.valid && at(shown) && (sources === shown || at(sources));
+}
 
 export default function App() {
   // Everything placed -- point charges and charged spheres, rods and
@@ -37,6 +85,59 @@ export default function App() {
   // panel shows what can be changed.
   const [selectedId, setSelectedId] = useState(null);
 
+  // Playback of the free charges' motion (PlaybackPanel.jsx): status
+  // 'setup' -- no run under way, and everything can be edited -- or
+  // 'playing', 'paused' or 'ended' (the run has reached its end): a run is
+  // under way (`running`), and nothing that would change it can be edited
+  // until Reset. `time` is how far into the run, in seconds; `speed`, a
+  // multiple of real time.
+  const [playback, setPlayback] = useState({ status: 'setup', time: 0, speed: 1 });
+  const running = playback.status !== 'setup';
+
+  // The run (motion.js): the free charges' whole motion from where they
+  // start, worked out whenever there are free charges -- for the playback
+  // panel (how long the run is, and whether it can be played) and the
+  // predicted paths -- and again only when something it depends on changes
+  // (its key): as a free charge is dragged, say, but not when a display
+  // option is checked. It takes a few milliseconds, so it keeps up with a
+  // drag. Nothing that would change it can be edited during a run.
+  const runKey = charges.some(isFree) ? motionKey(charges) : null;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the key stands for the charges
+  const run = useMemo(() => (runKey ? simulateRun(charges) : null), [runKey]);
+
+  // Everything as it is at this moment of the run: each free charge where
+  // the run has it, going as fast as it is then, and marked `outside` while
+  // it's out of the box (it isn't seen then, but its field still counts).
+  // Before a run, the charges just as they're placed.
+  const shownCharges = useMemo(() => {
+    if (!running || !run) return charges;
+    return chargesAt(charges, run, playback.time);
+  }, [charges, run, running, playback.time]);
+
+  // What the Display Options panel controls -- including which charges'
+  // field is drawn (fieldOf): 'all' of them, the 'pinned' ones only, or
+  // every one but one free charge, the field that free charge feels
+  // ('felt', feltBy its id: the menu's "all charges except q₁"). Whatever
+  // is drawn, the probes read.
+  const [displayOptions, setDisplayOptions] = useState({
+    showGrid: true,
+    showAxes: true,
+    showField: true,
+    fieldStyle: 'lines', // or 'arrows'
+    fieldDensity: 3, // 30 lines per unit charge (seedDirections.js), or 7 x 7 x 7 arrows (fieldArrows.js)
+    fieldOf: 'all', // or 'pinned' or 'felt'
+    feltBy: null,
+  });
+
+  // The charges whose field is drawn (and read by the probes): as above,
+  // at this moment of a run. With no free charges, all of them, whatever
+  // the setting; and if the free charge chosen to feel the field is no
+  // longer free, the first one that is.
+  const freeCharges = charges.filter(isFree);
+  const fieldOf = freeCharges.length === 0 ? 'all' : displayOptions.fieldOf;
+  const feltBy = fieldOf === 'felt' ? (freeCharges.find((c) => c.id === displayOptions.feltBy) ?? freeCharges[0]).id : null;
+  const fieldSources = useMemo(() => sourcesOf(shownCharges, fieldOf, feltBy), [shownCharges, fieldOf, feltBy]);
+
   // The 2D cut, if there is one: { axis, offset } (see cutPlanes.js). Its
   // orientation is the user's choice; so is its offset, but only while the
   // charges allow it anywhere along its axis -- otherwise it's wherever the
@@ -44,7 +145,16 @@ export default function App() {
   // that, so the cut stays put if they stop pinning it.
   const [cut, setCut] = useState(null);
   const allowed = useMemo(() => allowedCuts(charges), [charges]);
-  const placedCut = cut && placeCut(cut, allowed);
+  // During a run, the cut stays where it was put, but whether it's valid
+  // follows the charges as they move: a free charge that leaves the cut
+  // leaves the arrangement no longer mirror-symmetric through it.
+  //
+  // And the cut's lines are true field lines only if the field drawn is
+  // mirror-symmetric through the cut too: with only some of the charges'
+  // field drawn (Display Options), those charges alone have to be -- a
+  // free charge mirroring a pinned one isn't, without the free one.
+  const setupCut = cut && placeCut(cut, allowed);
+  const placedCut = setupCut && { ...setupCut, valid: cutValid(setupCut, shownCharges, fieldSources) };
   if (cut && placedCut.offset !== cut.offset) setCut({ ...cut, offset: placedCut.offset });
   // A new cut takes the first allowed orientation (cutPlanes.js), at the
   // charges' one allowed position, or in the middle of the box.
@@ -73,6 +183,7 @@ export default function App() {
   // A probe off the cut is hidden in its view, so it's deselected too.
   const viewCut = () => {
     if (!placedCut?.valid) return;
+    setOrbiting(false); // its button is disabled while orbiting; this is just to be sure
     disarm();
     setRemoveMode(false);
     const hiddenProbe = (id) => probes.some((p) => p.id === id && !probeInCut(p, placedCut));
@@ -102,16 +213,21 @@ export default function App() {
   // The sidebar's delete tool: while on, clicking a charge deletes it.
   const [removeMode, setRemoveMode] = useState(false);
 
-  // What the Display Options panel controls.
-  const [displayOptions, setDisplayOptions] = useState({
-    showGrid: true,
-    showAxes: true,
-    showField: true,
-    fieldStyle: 'lines', // or 'arrows'
-    fieldDensity: 3, // 30 lines per unit charge (seedDirections.js), or 7 x 7 x 7 arrows (fieldArrows.js)
-  });
-
   const viewerRef = useRef(null);
+
+  // Whether the camera is orbiting (Start Orbit, in the view controls; see
+  // CameraAnimator's startOrbit). It goes on until Stop Orbit, or any press
+  // on the view (Viewer's onStopOrbit); meanwhile every other control is
+  // disabled (OrbitLock.jsx), though scrolling still zooms. Only in 3D:
+  // in the 2D cut's view the camera doesn't rotate. Starting it puts
+  // down whatever the sidebar had armed, and leaves delete mode, so that
+  // the press that stops it doesn't also place or delete something.
+  const [orbiting, setOrbiting] = useState(false);
+  const startOrbit = () => {
+    disarm();
+    setRemoveMode(false);
+    setOrbiting(true);
+  };
 
   // While the cut is viewed in 2D, everything placed or edited is kept
   // mirror-symmetric through it (keepInCut), so the cut stays valid: new
@@ -126,12 +242,17 @@ export default function App() {
     ? { kind: 'probe', position: point }
     : makeCharge(typeId, point, inCut ? (c) => keepInCut(c, inCut, true) : undefined));
   // Where a new charge can't go: on top of a point charge or a thin rod
-  // (crowds, in chargeTypes.js). Treated like a point off the grid -- the
-  // ghost isn't drawn there, and dropping there places nothing. A probe
-  // can go anywhere (on a charge, it reads "undefined"), up to MAX_PROBES.
-  const placeable = (typeId, point) => point && (isProbeType(typeId)
-    ? probes.length < MAX_PROBES
-    : !crowds(makeNew(typeId, point), charges));
+  // (crowds, in chargeTypes.js), or against a free charge -- a free charge
+  // never touches anything (walls.js). Treated like a point off the grid
+  // -- the ghost isn't drawn there, and dropping there places nothing. A
+  // probe can go anywhere (on a charge, it reads "undefined"), up to
+  // MAX_PROBES.
+  const placeable = (typeId, point) => {
+    if (!point) return false;
+    if (isProbeType(typeId)) return probes.length < MAX_PROBES;
+    const candidate = makeNew(typeId, point);
+    return !crowds(candidate, charges) && !touchesFreeCharge(candidate, charges);
+  };
   const addCharge = (typeId, position) => {
     if (!placeable(typeId, position)) return;
     if (isProbeType(typeId)) {
@@ -145,19 +266,31 @@ export default function App() {
     setSelectedId(id);
   };
   // Every edit -- dragging, a handle, the properties panel -- goes through
-  // here. One that would stack it on another charge is ignored, so a
-  // dragged charge stops at the last free spot, and a typed position that
-  // would stack it springs back.
+  // here. One that would stack it on another charge, or put a free charge
+  // against anything (walls.js) -- whichever of the two moves or grows --
+  // is ignored, so a dragged charge stops at the last spot it can be, and
+  // a typed position or size that it can't have springs back.
   const updateCharge = (id, changes) => {
     setCharges((prev) => prev.map((c) => {
       if (c.id !== id) return c;
       const changed = inCut ? keepInCut({ ...c, ...changes }, inCut) : { ...c, ...changes };
       if (!changed) return c;
       const next = normalizePosition(changed);
-      return crowds(next, prev.filter((o) => o.id !== id)) ? c : next;
+      // During a run, nothing that would change the run can change: only,
+      // say, which of a free charge's marks are shown.
+      if (running && motionKey([next]) !== motionKey([c])) return c;
+      const others = prev.filter((o) => o.id !== id);
+      return crowds(next, others) || touchesFreeCharge(next, others) ? c : next;
     }));
   };
   const moveCharge = (id, position) => updateCharge(id, { position });
+  // Switching a point charge between pinned and free, in its properties
+  // panel: a newly free one gets the next free name (q₁, q₂, ...) and,
+  // the first time, the default mass and no velocity (chargeTypes.js).
+  const setFree = (id, free) => {
+    const charge = charges.find((c) => c.id === id);
+    if (charge) updateCharge(id, free ? freeingChanges(charge, charges) : PINNING_CHANGES);
+  };
   const updateProbe = (id, changes) => setProbes((prev) => prev.map((p) => (p.id === id ? { ...p, ...changes } : p)));
   const moveProbe = (id, position) => updateProbe(id, { position });
   const deleteProbe = (id) => {
@@ -290,10 +423,13 @@ export default function App() {
   };
 
   // Escape backs out of placement or delete mode, same as the optics lab,
-  // and deselects.
+  // and deselects -- except while orbiting, when it's disabled like the
+  // other controls. (Through an effect event, to see the current
+  // `orbiting` without re-adding the listener.)
+  const isOrbiting = useEffectEvent(() => orbiting);
   useEffect(() => {
     const onKeyDown = (e) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && !isOrbiting()) {
         disarm();
         setRemoveMode(false);
         setSelectedId(null);
@@ -303,9 +439,150 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  // Playing, pausing and so on (PlaybackPanel.jsx). Starting a run puts
+  // down whatever the sidebar had armed, and leaves delete mode. Play once
+  // the run is over plays it again from the start; scrubbing to a moment
+  // pauses there (and starts a run, if there wasn't one under way).
+  const play = () => {
+    if (!run || run.end.time === 0) return;
+    disarm();
+    setRemoveMode(false);
+    if (playback.time >= run.end.time) setSeeks((n) => n + 1);
+    setPlayback((p) => ({ ...p, status: 'playing', time: p.time >= run.end.time ? 0 : p.time }));
+  };
+  const pause = () => setPlayback((p) => ({ ...p, status: 'paused' }));
+  const resetRun = () => setPlayback((p) => ({ ...p, status: 'setup', time: 0 }));
+  const scrub = (time) => {
+    if (!run) return;
+    disarm();
+    setRemoveMode(false);
+    setPlayback((p) => ({ ...p, status: time >= run.end.time ? 'ended' : 'paused', time }));
+    setSeeks((n) => n + 1);
+  };
+  const setSpeed = (speed) => setPlayback((p) => ({ ...p, speed }));
+
+  // Whether the field lines change as the run plays: while they're drawn,
+  // and include a free charge's field. Then each moment's lines are traced
+  // by workers, and the frame player (playback.js) shows a moment only once
+  // its lines are ready, keeping lines and charges in step, at 30, 25 or
+  // 20 frames a second, as fast as the workers manage. Otherwise -- arrows,
+  // only the pinned charges' field, or no field -- nothing needs waiting
+  // for, and playback simply follows the clock, every animation frame.
+  //
+  // The frames are for one set of settings, lineKey: a change to any of them
+  // (or a scrub, or a new speed) starts the player over from the moment
+  // shown. lineFrame is the frame shown; calculating, whether playback is
+  // waiting for frames.
+  const linesMove = running && displayOptions.showField && displayOptions.fieldStyle === 'lines' && fieldSources.some(isFree);
+  const lineKey = linesMove ? JSON.stringify([runKey, fieldOf, feltBy, displayOptions.fieldDensity, view2D, setupCut?.axis ?? null, setupCut?.offset ?? null]) : null;
+  const [lineFrame, setLineFrame] = useState(null);
+  const [calculating, setCalculating] = useState(false);
+  const [seeks, setSeeks] = useState(0); // counts scrubs and replays
+  const playerRef = useRef(null);
+  const workersRef = useRef(null);
+  // The request for one moment's lines: everything as it is then, and the
+  // cut's lines too if it's valid then.
+  const lineRequest = useEffectEvent((time) => {
+    const shown = chargesAt(charges, run, time);
+    const sources = sourcesOf(shown, fieldOf, feltBy);
+    const cutLines = setupCut && cutValid(setupCut, shown, sources) ? { axis: setupCut.axis, offset: setupCut.offset } : null;
+    return workersRef.current.compute({ sources, density: displayOptions.fieldDensity, want3D: !view2D, cut: cutLines });
+  });
+  const playbackTime = useEffectEvent(() => playback.time);
+  const isPlaying = useEffectEvent(() => playback.status === 'playing');
+  useEffect(() => () => workersRef.current?.terminate(), []);
+  useEffect(() => {
+    if (!lineKey) return;
+    if (!workersRef.current) workersRef.current = createFieldLineWorkers();
+    if (!playerRef.current) {
+      playerRef.current = new FramePlayer({
+        workers: workersRef.current.count,
+        inFlight: workersRef.current.capacity,
+        now: () => performance.now(),
+        compute: (time) => lineRequest(time),
+        onCancel: () => workersRef.current.clearQueue(),
+      });
+    }
+    playerRef.current.reset({ time: playbackTime(), end: run.end.time, speed: playback.speed, key: lineKey });
+  }, [lineKey, playback.speed, seeks, run]);
+  // With ?fps at the end of the address, a small readout of the frame
+  // player's numbers, for checking it on a given computer: its workers, how
+  // long a frame takes them (and from asking for it to getting it), the
+  // rate it chose, and frames shown a second.
+  const [showRates] = useState(() => new URLSearchParams(window.location.search).has('fps'));
+  const [rates, setRates] = useState(null);
+  useEffect(() => {
+    if (!lineKey) return undefined;
+    let frame;
+    let shownTime = null;
+    const shownAt = []; // when each recent frame was first shown
+    let lastRates = 0;
+    const loop = () => {
+      const player = playerRef.current;
+      const state = player.tick(isPlaying());
+      setLineFrame(state.frame);
+      setCalculating(state.calculating);
+      const now = performance.now();
+      if (state.time !== shownTime || (state.ended && isPlaying())) {
+        if (state.time !== shownTime) shownAt.push(now);
+        shownTime = state.time;
+        setPlayback((p) => ({ ...p, time: state.time, status: p.status === 'playing' && state.ended ? 'ended' : p.status }));
+      }
+      if (showRates && now - lastRates > 500) {
+        lastRates = now;
+        while (shownAt.length > 0 && shownAt[0] < now - 1000) shownAt.shift();
+        setRates({ workers: player.workers, ms: player.msPerFrame, trip: player.msPerTrip, fps: player.fps, shown: shownAt.length });
+      }
+      frame = requestAnimationFrame(loop);
+    };
+    frame = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(frame);
+  }, [lineKey, showRates]);
+
+  // While playing, if the lines don't move: each animation frame, the time
+  // is however far real time (times the speed) has gone since playing
+  // began, until the run's end. (Through an effect event, to read the time
+  // playing began at without restarting the clock on every tick.)
+  useEffect(() => {
+    if (playback.status !== 'playing' || !run || linesMove) return undefined;
+    const startTime = playbackTime();
+    const end = run.end.time;
+    let startWall = null;
+    let frame;
+    const tick = (now) => {
+      if (startWall === null) startWall = now;
+      const time = Math.min(end, startTime + (playback.speed * (now - startWall)) / 1000);
+      setPlayback((p) => ({ ...p, time, status: time >= end ? 'ended' : p.status }));
+      if (time < end) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [playback.status, playback.speed, run, linesMove]);
+
+  // In the 2D cut's view, a run can be played only if it stays in the cut:
+  // every free charge in it (it is, if the cut is valid) and moving within
+  // it -- no part of its velocity across the cut. Otherwise, why not.
+  // (Searched for in `charges` itself: searching freeCharges, an array made
+  // from it, keeps the React Compiler from optimizing App -- it can't then
+  // tell that nothing changes the charges after they're memoized from.)
+  const acrossAxis = view2D && placedCut ? placedCut.axis : null;
+  const movingAcross = acrossAxis === null ? null : charges.find((c) => isFree(c) && Math.abs(c.velocity[acrossAxis]) > 1e-9);
+  const playBlockedReason = movingAcross
+    ? `To play in the 2D cut, every free charge has to move within it, and ${freeLabelText(movingAcross.freeLabel)}'s velocity has a ${AXIS_NAMES[acrossAxis]} part`
+    : null;
+
+  // What ended the run, once it's been reached.
+  const runNote = running && run && playback.time >= run.end.time ? endNote(run, charges) : null;
+
   const armedType = !armedTypeId ? null : isProbeType(armedTypeId) ? PROBE_TYPE : getChargeType(armedTypeId);
   const selectedCharge = charges.find((c) => c.id === selectedId) ?? null;
   const selectedProbe = probes.find((p) => p.id === selectedId) ?? null;
+  // What keeps the selected pinned point charge from being made free, if
+  // anything: whatever it's touching (walls.js). Its panel's Free button is
+  // grayed out then.
+  const freeBlocker = selectedCharge?.kind === 'point' && !isFree(selectedCharge)
+    ? charges.find((o) => o.id !== selectedCharge.id && contactGap(selectedCharge.position, o) <= 0) ?? null
+    : null;
   // In the 2D cut's view, only the probes in the cut are shown, in the
   // scene and in the Field Probes panel.
   const shownProbes = inCut ? probes.filter((p) => probeInCut(p, inCut)) : probes;
@@ -314,7 +591,8 @@ export default function App() {
     <div className="app-layout">
       <Viewer
         ref={viewerRef}
-        charges={charges}
+        charges={shownCharges}
+        fieldSources={fieldSources}
         probes={probes}
         onMoveProbe={moveProbe}
         onDeleteProbe={deleteProbe}
@@ -335,6 +613,12 @@ export default function App() {
         showField={displayOptions.showField}
         fieldStyle={displayOptions.fieldStyle}
         fieldDensity={displayOptions.fieldDensity}
+        run={run}
+        lineFrame={linesMove ? lineFrame : undefined}
+        runTime={playback.time}
+        runLocked={running}
+        orbiting={orbiting}
+        onStopOrbit={() => setOrbiting(false)}
       />
 
       <ChargeSidebar
@@ -343,6 +627,7 @@ export default function App() {
         removeMode={removeMode}
         onToggleRemoveMode={toggleRemoveMode}
         onHoverButton={setHoveredSidebarButton}
+        locked={orbiting || running}
       />
 
       {hoveredSidebarButton && !armedTypeId && (
@@ -357,52 +642,79 @@ export default function App() {
         </div>
       )}
 
-      {/* Upper-right corner: the selected thing's panel, and under it the
-          Field Probes panel -- or that alone, flush in the corner. */}
-      <div className="upper-right-stack">
-        {selectedId === 'cut' && placedCut && (
-          <CutPanel
-            cut={placedCut}
-            allowed={allowed}
-            onChangeAxis={(axis) => setCut(cutAt(axis))}
-            onChangeOffset={moveCut}
-            onView={viewCut}
-            onRemove={removeCut}
-            onClose={() => setSelectedId(null)}
-          />
-        )}
+      {/* The right-hand column, from the top margin to the bottom one: at the
+          top, the selected thing's panel and under it the Field Probes
+          panel (or that alone, flush in the corner); at the bottom, the
+          Display Options panel. The top stack gets whatever room is left
+          above Display Options, and scrolls once it needs more. */}
+      <div className="right-column">
+        <div className="upper-right-stack">
+          <OrbitLock locked={orbiting}>
+            {selectedId === 'cut' && placedCut && (
+              <CutPanel
+                cut={placedCut}
+                allowed={allowed}
+                onChangeAxis={(axis) => setCut(cutAt(axis))}
+                onChangeOffset={moveCut}
+                onView={viewCut}
+                onRemove={removeCut}
+                readOnly={running}
+                onClose={() => setSelectedId(null)}
+              />
+            )}
 
-        {selectedCharge && (
-          <PropertiesPanel
-            charge={selectedCharge}
-            lockedAxis={inCut ? inCut.axis : null}
-            onChange={(changes) => updateCharge(selectedCharge.id, changes)}
-            onDelete={() => deleteCharge(selectedCharge.id)}
-            onClose={() => setSelectedId(null)}
-          />
-        )}
+            {selectedCharge && (
+              <PropertiesPanel
+                charge={shownCharges.find((c) => c.id === selectedId)}
+                readOnly={running}
+                lockedAxis={inCut ? inCut.axis : null}
+                onChange={(changes) => updateCharge(selectedCharge.id, changes)}
+                onSetFree={(free) => setFree(selectedCharge.id, free)}
+                canBeFree={!freeBlocker}
+                freeBlockedReason={freeBlocker && `A free charge can't start out touching anything, and this one touches ${wallName(freeBlocker, (c) => freeLabelText(c.freeLabel))}`}
+                onDelete={() => deleteCharge(selectedCharge.id)}
+                onClose={() => setSelectedId(null)}
+              />
+            )}
 
-        {selectedProbe && (
-          <ProbePanel
-            probe={selectedProbe}
-            lockedAxis={inCut ? inCut.axis : null}
-            onChange={(changes) => updateProbe(selectedProbe.id, changes)}
-            onDelete={() => deleteProbe(selectedProbe.id)}
-            onClose={() => setSelectedId(null)}
-          />
-        )}
+            {selectedProbe && (
+              <ProbePanel
+                probe={selectedProbe}
+                readOnly={running}
+                lockedAxis={inCut ? inCut.axis : null}
+                onChange={(changes) => updateProbe(selectedProbe.id, changes)}
+                onDelete={() => deleteProbe(selectedProbe.id)}
+                onClose={() => setSelectedId(null)}
+              />
+            )}
 
-        {shownProbes.length > 0 && (
-          <FieldProbesPanel probes={shownProbes} charges={charges} selectedId={selectedId} onSelect={setSelectedId} cut={inCut} />
-        )}
+            {shownProbes.length > 0 && (
+              <FieldProbesPanel probes={shownProbes} charges={fieldSources} selectedId={selectedId} onSelect={setSelectedId} cut={inCut} />
+            )}
+          </OrbitLock>
+        </div>
+        {/* At the bottom: the Display Options panel. */}
+        <div className="lower-right-stack">
+          <OrbitLock locked={orbiting}>
+            <DisplayOptionsPanel
+              displayOptions={displayOptions}
+              setDisplayOptions={setDisplayOptions}
+              freeCharges={freeCharges}
+              fieldOf={fieldOf}
+              feltBy={feltBy}
+              gridPlane={view2D && placedCut ? ['yz', 'xz', 'xy'][placedCut.axis] : 'xy'}
+            />
+          </OrbitLock>
+        </div>
       </div>
 
       {/* Lower-left corner: the view controls, under the axis gizmo (which
           Viewer draws in the canvas) -- or in 2D, under a small 3D picture
           of where the cut is. The cut's button inserts a cut, views it in
-          2D, or goes back to 3D. */}
+          2D, or goes back to 3D. The orbit's button starts and stops the
+          orbit; while it runs, the other two are disabled. */}
       <div className="view-controls">
-        {view2D && placedCut && <CutInset charges={charges} cut={placedCut} onClick={() => setView2D(false)} />}
+        {view2D && placedCut && <CutInset charges={shownCharges} cut={placedCut} onClick={() => setView2D(false)} />}
         {view2D ? (
           <button className="control-button view-button" onClick={() => setView2D(false)}>
             Back to 3D
@@ -410,7 +722,7 @@ export default function App() {
         ) : placedCut ? (
           <button
             className="control-button view-button"
-            disabled={!placedCut.valid}
+            disabled={!placedCut.valid || orbiting}
             title={placedCut.valid ? undefined : "The charges aren't all in the cut"}
             onClick={viewCut}
           >
@@ -419,36 +731,69 @@ export default function App() {
         ) : (
           <button
             className="control-button view-button"
-            disabled={defaultCutAxis(allowed) === null}
+            disabled={defaultCutAxis(allowed) === null || orbiting || running}
             title={defaultCutAxis(allowed) === null ? "The charges aren't all in one plane parallel to xy, xz or yz" : undefined}
             onClick={insertCut}
           >
             Insert 2D cut
           </button>
         )}
-        <button className="control-button view-button" onClick={() => viewerRef.current?.resetView()}>
+        <button
+          className="control-button view-button"
+          disabled={view2D}
+          title={view2D ? 'The camera orbits only in 3D' : undefined}
+          onClick={orbiting ? () => setOrbiting(false) : startOrbit}
+        >
+          {orbiting ? 'Stop Orbit' : 'Start Orbit'}
+        </button>
+        <button className="control-button view-button" disabled={orbiting} onClick={() => viewerRef.current?.resetView()}>
           Reset View
         </button>
       </div>
 
-      {/* Lower-right corner: the Display Options panel. */}
-      <div className="lower-right-stack">
-        <DisplayOptionsPanel
-          displayOptions={displayOptions}
-          setDisplayOptions={setDisplayOptions}
-          gridPlane={view2D && placedCut ? ['yz', 'xz', 'xy'][placedCut.axis] : 'xy'}
-        />
+      {/* Bottom center: the playback controls, while there's a free charge,
+          above how to place and manipulate charges, which is shown at all
+          times -- nothing else on screen hints that Shift and Alt do
+          anything. */}
+      <div className="bottom-center-stack">
+        {charges.some(isFree) && (
+          <div className="playback-holder">
+            <OrbitLock locked={orbiting}>
+              <PlaybackPanel
+                run={run}
+                playback={playback}
+                onPlay={play}
+                onPause={pause}
+                onReset={resetRun}
+                onScrub={scrub}
+                onSpeed={setSpeed}
+                note={runNote}
+                calculating={linesMove && calculating}
+                playBlockedReason={playBlockedReason}
+              />
+            </OrbitLock>
+          </div>
+        )}
+        <div className="interaction-hint">
+          {orbiting
+            ? 'Orbiting the camera · Scroll to zoom · Click the view, or Stop Orbit, to stop'
+            : running
+            ? `A run is under way · Click a charge to see where it is and how fast it's going · Drag empty space to ${view2D ? 'pan' : 'turn the view'} · Reset to edit again`
+            : removeMode
+            ? 'Click an object to delete it · Press Escape, or click the trash can again, to stop deleting'
+            : view2D
+              ? 'Viewing the 2D cut! · Add objects from the sidebar · Click an object to edit it · Drag an object to move it · Drag empty space to pan, scroll to zoom · Back to 3D in the lower left'
+              : 'Add objects from the sidebar · Click an object to edit it · Drag an object to change its position, Shift+drag to raise or lower, Alt+drag to turn off snapping'}
+        </div>
       </div>
 
-      {/* How to place and manipulate charges, shown at all times --
-          nothing else on screen hints that Shift and Alt do anything. */}
-      <div className="interaction-hint">
-        {removeMode
-          ? 'Click an object to delete it · Press Escape, or click the trash can again, to stop deleting'
-          : view2D
-            ? 'Viewing the 2D cut! · Add objects from the sidebar · Click an object to edit it · Drag an object to move it · Drag empty space to pan, scroll to zoom · Back to 3D in the lower left'
-            : 'Add objects from the sidebar · Click an object to edit it · Drag an object to change its position, Shift+drag to raise or lower, Alt+drag to turn off snapping'}
-      </div>
+      {showRates && (
+        <div className="rates-readout">
+          {linesMove && rates
+            ? `Field lines: ${rates.workers} workers, ${rates.ms === null ? '…' : `${rates.ms.toFixed(0)} ms a frame (${rates.trip.toFixed(0)} ms there and back)`} · ${rates.fps} fps chosen, ${rates.shown} frames shown in the last second`
+            : 'Field lines: not changing as the charges move, so nothing to work out ahead'}
+        </div>
+      )}
 
       {/* While armed: a flat 2D icon follows the pointer whenever the charge
           can't be placed there (over the sidebar, off the edge of the

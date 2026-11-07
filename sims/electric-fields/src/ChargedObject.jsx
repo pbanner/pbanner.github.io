@@ -1,7 +1,7 @@
 import { DoubleSide, FrontSide } from 'three';
 import { Billboard, Line } from '@react-three/drei';
 import { chargeColor } from './chargeTypes.js';
-import { WORLD_HALF_EXTENT, SELECTION_COLOR } from './sceneConstants.js';
+import { WORLD_HALF_EXTENT, SELECTION_COLOR, LINE_ROD_DRAWN_RADIUS as LINE_ROD_RADIUS } from './sceneConstants.js';
 
 // A charged sphere, rod or plane in the scene (point charges are drawn by
 // ChargeMarker). Red for positive, blue for negative, and see-through, so
@@ -21,7 +21,6 @@ import { WORLD_HALF_EXTENT, SELECTION_COLOR } from './sceneConstants.js';
 const SURFACE_OPACITY = 0.14; // shells and sheets
 const VOLUME_OPACITY = 0.3; // solids and slabs
 const GHOST_FADE = 0.6;
-const LINE_ROD_RADIUS = 0.05; // a thin rod's drawn thickness (its charge is on the axis)
 const SPAN = 2 * WORLD_HALF_EXTENT; // a rod's length or a plane's width: the box's
 
 // Points around a circle of radius r in the plane perpendicular to `axis`

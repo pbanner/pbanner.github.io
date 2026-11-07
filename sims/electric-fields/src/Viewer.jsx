@@ -1,4 +1,4 @@
-import { useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { OrbitControls, GizmoHelper } from '@react-three/drei';
@@ -6,10 +6,11 @@ import { ChargeDrag } from './chargeDrag.js';
 import ChargeMarker, { PositionGuides } from './ChargeMarker.jsx';
 import ProbeMarker, { ProbeFieldLine } from './ProbeMarker.jsx';
 import { probeReading, probeInCut } from './probes.js';
-import { objectField } from './chargeField.js';
-import { chargeColor } from './chargeTypes.js';
+import { objectField, balancedFieldAt, fieldKey } from './chargeField.js';
+import { chargeColor, isFree, freeLabelText } from './chargeTypes.js';
 import ChargedObject from './ChargedObject.jsx';
 import ObjectHandles from './ObjectHandles.jsx';
+import { VelocityArrow, ForceArrow, PredictedPath, Trail } from './MotionMarks.jsx';
 import CutPlane from './CutPlane.jsx';
 import { objectHandles, LineDrag, unitAxis } from './handles.js';
 import Axes from './Axes.jsx';
@@ -94,11 +95,13 @@ function dragReadout(item, grab) {
 }
 
 // charges: everything placed, [{ id, kind, ... }] (see chargeField.js).
-//   They're also the field's sources, as they are, and since App.jsx only
-//   makes a new array when a charge changes,
-//   a re-render for anything else (e.g. the hover highlight) doesn't
-//   recompute the field. The placement ghost isn't a source: only placed
-//   charges make a field.
+// fieldSources: the charges whose field is drawn and read by the probes
+//   (all of them, or only some: App.jsx's fieldOf), traced again only
+//   when something that field depends on changes (`sources`, below) --
+//   not for a re-render for anything else (e.g. the hover highlight), nor
+//   for a change to a free charge that doesn't touch the field (its
+//   velocity). The placement ghost isn't a source: only placed charges
+//   make a field.
 // probes: the field probes, [{ id, label, position }] (see probes.js),
 //   picked and dragged like point charges (onMoveProbe(id, position),
 //   onDeleteProbe(id)). In the 2D cut's view, only those in the cut are
@@ -120,7 +123,25 @@ function dragReadout(item, grab) {
 //   its perspective, and only the cut's field lines (or arrows) are drawn.
 // showGrid / showAxes / showField / fieldStyle ('lines' or 'arrows') /
 //   fieldDensity: the Display Options panel's settings
-export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProbe, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, cut, onMoveCut, view2D, showGrid, showAxes, showField, fieldStyle, fieldDensity }) {
+// run: the free charges' run (motion.js's simulateRun), or null -- for
+//   the predicted paths and, during a run, the trails of the free charges
+//   that show them. Free charges that show their velocity, or the force on
+//   them, get an arrow along it.
+// lineFrame: during a run, while the field lines change as the charges
+//   move, the lines for the moment shown, traced by a worker -- { lines3D,
+//   cutLines }, each packed (fieldLines.js's packFieldLines) or null -- or
+//   null until the first is ready; otherwise undefined, and the lines are
+//   traced here.
+// runTime / runLocked: during a run, how far into it (s), and that it's
+//   under way. `charges` is then everything as it is at that moment (App's
+//   shownCharges): a free charge marked `outside` is out of the box, and
+//   isn't drawn or picked, though its field still counts. Nothing can be
+//   moved, placed or deleted during a run; a click on something selects
+//   it (to see its panel), and a drag anywhere turns the view.
+// orbiting: the camera is orbiting (Start Orbit; see CameraAnimator's
+//   startOrbit). Any press on the view stops it, where it is
+//   (onStopOrbit()), and then does whatever it would have done anyway.
+export default function Viewer({ ref, charges, fieldSources = charges, probes, onMoveProbe, onDeleteProbe, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, cut, onMoveCut, view2D, showGrid, showAxes, showField, fieldStyle, fieldDensity, run, lineFrame, runTime = 0, runLocked = false, orbiting, onStopOrbit }) {
   const wrapperRef = useRef();
   const controlsRef = useRef();
   const cameraAnimatorRef = useRef();
@@ -177,6 +198,15 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
     // flatFraming reads the current cut, whose position is in the deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view2D, cutAxis, cutOffset]);
+
+  // The orbit follows the `orbiting` prop. (A press on the view also stops
+  // it straight away, in handlePointerDownCapture, without waiting for the
+  // prop to catch up: see there.)
+  useEffect(() => {
+    const animator = cameraAnimatorRef.current;
+    if (orbiting) animator?.startOrbit();
+    else animator?.stopOrbit();
+  }, [orbiting]);
 
   // Can't use controls.reset(): drei captures the controls' saved state
   // before applying the `target` prop, so reset() would aim at the wrong
@@ -325,9 +355,20 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
     }, (ev) => endDrag(ev, onDeleteCharge));
   };
 
+  // The charges as the field's sources: the same array, but a new one only
+  // when something the field depends on changes (chargeField.js's
+  // fieldKey) -- not, say, a free charge's velocity, or whether its arrow
+  // is shown -- so the field lines and arrows, which are traced again
+  // whenever their sources change, aren't traced again for nothing. (So
+  // the deps are the key, not the array: the array is read only when the
+  // key changes.)
+  const sourcesKey = fieldKey(fieldSources);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const sources = useMemo(() => fieldSources, [sourcesKey]);
+
   // Point charges are picked, dragged and drawn as ChargeMarkers; the
   // charged spheres, rods and planes ("objects") as ChargedObjects.
-  const pointCharges = charges.filter((c) => c.kind === 'point');
+  const pointCharges = charges.filter((c) => c.kind === 'point' && !c.outside);
   const objects = charges.filter((c) => c.kind !== 'point');
   const shownProbes = view2D && cut ? probes.filter((p) => probeInCut(p, cut)) : probes;
   const probeHandlers = { onMove: onMoveProbe, onDelete: onDeleteProbe };
@@ -365,7 +406,7 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
   // cut's view, any that would take it out of the cut (one moving across
   // the cut).
   const handleHidden = (h) => view2D && cut && Math.abs(h.direction[cut.axis]) > 1e-9;
-  const selectedObject = armedTypeId || removeMode ? null : objects.find((c) => c.id === selectedId) ?? null;
+  const selectedObject = armedTypeId || removeMode || runLocked ? null : objects.find((c) => c.id === selectedId) ?? null;
   // The handle under the pointer (handles.js's { id, position, ... }), and
   // the one being dragged, { id, label, value, position } -- if any. The
   // readout labels a hovered handle ("Radius"), and shows a dragged one's
@@ -464,7 +505,17 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
   // click-to-place's second click, which is likewise acted on at pointerup
   // only if the pointer barely moved -- so a real drag still orbits the
   // camera, and only a genuine click drops the charge.
+  //
+  // Any press -- any button, anywhere on the view, the axis gizmo included
+  // -- first stops the orbit, if the camera is orbiting. It's stopped here
+  // and now, not just through App.jsx's state (which only reaches the
+  // orbit after a re-render), so the camera doesn't move a frame further
+  // under a drag that's just starting from where it is.
   const handlePointerDownCapture = (e) => {
+    if (orbiting) {
+      cameraAnimatorRef.current?.stopOrbit();
+      onStopOrbit();
+    }
     pressRef.current = null;
     // Finish any typing in the properties panel first: taking the focus
     // away from its box commits what was typed to the charge it belongs
@@ -490,6 +541,12 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
       return;
     }
     const item = picked.charge;
+    // During a run, a press on something only selects it, if it turns out
+    // to be a click (handlePointerUp); a drag from it turns the view.
+    if (runLocked) {
+      pressRef.current = { target: 'object', id: item.id, ...at };
+      return;
+    }
     if (item.kind === 'cut' && !item.movable && !removeMode) {
       pressRef.current = { target: 'object', id: item.id, ...at };
       return;
@@ -554,7 +611,7 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
   else if (hoveredHandleId) cursor = 'grab';
   else if (hoveredId != null && !armedTypeId) {
     const pinnedCut = hoveredId === 'cut' && !cut?.movable;
-    cursor = removeMode || pinnedCut ? 'pointer' : 'grab';
+    cursor = removeMode || pinnedCut || runLocked ? 'pointer' : 'grab';
   }
 
   const handlePointerUp = (e) => {
@@ -599,9 +656,9 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
         {/* With a valid 2D cut, its lines are painted on it, over the 3D
             lines, which fade -- and in 2D, they're all there is. Arrows
             are the 3D grid's, or in 2D a grid in the cut. */}
-        {showField && fieldStyle === 'lines' && !view2D && <FieldLines sources={charges} density={fieldDensity} faded={!!cut?.valid} />}
-        {showField && fieldStyle === 'lines' && cut?.valid && <FieldLines sources={charges} density={fieldDensity} cut={cut} />}
-        {showField && fieldStyle === 'arrows' && <FieldArrows sources={charges} density={fieldDensity} cut={view2D ? cut : null} />}
+        {showField && fieldStyle === 'lines' && !view2D && <FieldLines sources={sources} density={fieldDensity} faded={!!cut?.valid} packed={lineFrame === undefined ? undefined : lineFrame?.lines3D ?? null} />}
+        {showField && fieldStyle === 'lines' && cut?.valid && <FieldLines sources={sources} density={fieldDensity} cut={cut} packed={lineFrame === undefined ? undefined : lineFrame?.cutLines ?? null} />}
+        {showField && fieldStyle === 'arrows' && <FieldArrows sources={sources} density={fieldDensity} cut={view2D ? cut : null} />}
 
         {pointCharges.map((charge) => (
           <ChargeMarker
@@ -610,8 +667,24 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
             position={charge.position}
             highlighted={charge.id === draggingId || (draggingId == null && charge.id === hoveredId)}
             selected={charge.id === selectedId}
+            free={isFree(charge)}
+            label={isFree(charge) ? freeLabelText(charge.freeLabel) : null}
             showGuides={charge.id === draggingId}
           />
+        ))}
+        {pointCharges.filter(isFree).map((charge) => (
+          <group key={`motion-${charge.id}`}>
+            {charge.showVelocity && <VelocityArrow position={charge.position} velocity={charge.velocity} />}
+            {charge.showForce && (
+              <ForceArrow position={charge.position} q={charge.q} field={balancedFieldAt(charge.position, charges.filter((c) => c.id !== charge.id))} />
+            )}
+            {charge.showPredictedPath && run && (
+              <PredictedPath run={run} index={run.ids.indexOf(charge.id)} charge={charge} />
+            )}
+            {charge.showPath && runLocked && run && (
+              <Trail run={run} index={run.ids.indexOf(charge.id)} time={runTime} charge={charge} />
+            )}
+          </group>
         ))}
 
         {objects.map((obj) => (
@@ -629,10 +702,10 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
         )}
 
         {shownProbes.map((probe) => {
-          const reading = probeReading(charges, probe.position);
+          const reading = probeReading(sources, probe.position);
           // Each charge's own field there, where the field is defined.
           const contributions = probe.showContributions && reading.field
-            ? charges.map((c) => ({ id: c.id, field: objectField(c, probe.position), color: chargeColor(c) }))
+            ? sources.map((c) => ({ id: c.id, field: objectField(c, probe.position), color: chargeColor(c) }))
             : null;
           return (
             <group key={probe.id}>
@@ -648,7 +721,7 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
               />
               {/* Where the field has no single value, neither does its
                   line. */}
-              {probe.showFieldLine && reading.field && <ProbeFieldLine position={probe.position} sources={charges} cut={view2D ? cut : null} />}
+              {probe.showFieldLine && reading.field && <ProbeFieldLine position={probe.position} sources={sources} cut={view2D ? cut : null} />}
             </group>
           );
         })}
@@ -658,7 +731,7 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
         {selectedObject && <ObjectHandles charge={selectedObject} hoveredId={hoveredHandleId} activeId={handleDrag?.id} isHidden={handleHidden} />}
 
         {ghost && (ghost.kind === 'probe'
-          ? <ProbeMarker position={ghost.position} reading={probeReading(charges, ghost.position)} ghost showGuides />
+          ? <ProbeMarker position={ghost.position} reading={probeReading(sources, ghost.position)} ghost showGuides />
           : ghost.kind === 'point'
             ? <ChargeMarker q={ghost.q} position={ghost.position} ghost showGuides />
             : <ChargedObject charge={ghost} ghost />)}

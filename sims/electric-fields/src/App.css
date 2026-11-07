@@ -2,7 +2,8 @@
    an absolutely positioned overlay, rather than sharing the screen with a
    fixed sidebar the way the Bloch sphere sim does. */
 .app-layout {
-  --display-panel-width: 180px; /* shared by .display-options-panel and .interaction-hint */
+  --side-panel-width: 324px; /* the right-hand panels: the selected thing's, Field Probes, and Display Options */
+  --display-panel-width: var(--side-panel-width); /* shared by .display-options-panel and the bottom-center stack */
   position: relative;
   height: 100vh; /* fallback for browsers that don't support dvh below */
   height: 100dvh; /* the *actual* visible viewport height -- see the Bloch sphere sim's .app-layout for why plain 100vh misbehaves on mobile Safari */
@@ -57,6 +58,26 @@
   font-size: 12px;
   line-height: 1.3;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+/* While the camera orbits, every control but Stop Orbit is disabled: the
+   sidebar's and each panel's contents are wrapped in an .orbit-lock (see
+   OrbitLock in App.jsx) that's made `inert` -- nothing in it can be
+   clicked, hovered, focused or typed into. It's display: contents, so it
+   has no box of its own and lays nothing out: its children are laid out
+   as if it weren't there. A press on an inert element passes through it
+   to whatever is underneath -- here, the sidebar or panel stack holding
+   it, which isn't inert and does nothing with it -- so it never reaches
+   the 3D view (where it would stop the orbit). The contents are dimmed
+   the way a disabled control group is (.control-group.disabled), inside
+   panel frames that stay as they are. */
+.orbit-lock {
+  display: contents;
+}
+
+.orbit-lock[inert] > :not(.overlay-controls),
+.orbit-lock[inert] > .overlay-controls > * {
+  opacity: 0.45;
 }
 
 /* Left-edge toolbar -- a single thin column of icon buttons floating over
@@ -154,18 +175,75 @@
   margin: 4px 0;
 }
 
-/* One line of usage help along the bottom edge, centered in the space
-   between the view controls (lower left) and the Display Options panel
-   (lower right). With left, right and width all set, auto side margins
-   center it within that space; width: fit-content lets it shrink to its
-   text, and wrap only once the text is wider than the space. */
-.interaction-hint {
+/* Along the bottom edge, in the space between the view controls (lower
+   left) and the Display Options panel (lower right): the playback
+   controls, while there's a free charge, above one line of usage help,
+   each centered in that space and only as wide as it needs to be (wrapping
+   only once it's wider than the space). The space itself lets presses
+   through to the 3D view; only the playback panel takes them (its holder
+   is what catches a press on its controls while they're locked: see
+   .orbit-lock). */
+.bottom-center-stack {
   position: absolute;
   left: calc(16px + 108px + 16px);
   right: calc(16px + var(--display-panel-width) + 16px);
   bottom: 16px;
-  width: fit-content;
-  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.playback-holder {
+  max-width: 100%;
+  pointer-events: auto;
+}
+
+.playback-panel {
+  padding: 8px 12px;
+  gap: 4px;
+}
+
+.playback-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.playback-button {
+  margin: 0;
+  min-width: 64px;
+  padding: 4px 10px;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+/* Tabular digits keep the time from shifting sideways as it changes. */
+.playback-time {
+  min-width: 84px;
+  font-size: 13px;
+  color: #333;
+  font-variant-numeric: tabular-nums;
+}
+
+/* (As specific as the sliders' own input[type="range"] rule, and then
+   some, so this width wins over its 100%.) */
+input[type="range"].playback-scrubber {
+  width: 220px;
+}
+
+.playback-note {
+  font-size: 12px;
+  color: #444;
+  text-align: center;
+}
+
+.interaction-hint {
+  max-width: 100%;
   pointer-events: none;
   background: rgba(255, 255, 255, 0.85);
   border-radius: 6px;
@@ -174,7 +252,6 @@
   color: #444;
   text-align: center;
   line-height: 1.3;
-  z-index: 5;
 }
 
 /* These buttons are pointer-driven, and the Shift/Alt modifier keys would
@@ -216,6 +293,13 @@
   color: #fff;
 }
 
+/* A free charge's name ("q₁", ChargeMarker.jsx), in the same style, set
+   a little further out: a charge is bigger than a probe, and glows. */
+.charge-label {
+  left: 14px;
+  top: -32px;
+}
+
 .coordinate-readout {
   position: absolute;
   left: 0;
@@ -234,12 +318,30 @@
   z-index: 6;
 }
 
-/* Lower-right corner: the Display Options panel. */
-.lower-right-stack {
+/* The right-hand column, from the top margin to the bottom one: the
+   upper-right stack (below) at the top, and the Display Options panel at
+   the bottom. A flex column, so the stack gets exactly the room left above
+   the panel, whatever height the panel has. The column itself lets presses
+   through to the 3D view; only the panels in it take them. */
+.right-column {
   position: absolute;
+  top: 16px;
   right: 16px;
   bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  pointer-events: none;
   z-index: 10;
+}
+
+/* At the bottom of the column: the Display Options panel, as tall as it
+   needs to be. */
+.lower-right-stack {
+  flex: none;
+  pointer-events: auto;
 }
 
 /* On-canvas overlay panel look, copied from the optics lab's
@@ -289,12 +391,50 @@
   width: var(--display-panel-width);
 }
 
-/* The Lines / Arrows choice: side by side, indented under the "Electric
-   field" checkbox it belongs to. */
-/* The field's style (Lines / Arrows), set in under its checkbox. */
-.control-group.field-style {
+/* A thin line across a panel, between groups of its settings. Lighter than
+   the panel's border, so it separates without boxing anything in. */
+.panel-divider {
+  height: 1px;
+  margin: 2px 0;
+  background: #d5d5d5;
+}
+
+/* The grid's and the axes' checkboxes, side by side. */
+.checkbox-row {
+  display: flex;
+  gap: 28px;
+}
+
+/* Each of the field's settings ("Show as:", "Show field due to:",
+   "Display density:") on one line: its label, then its control. The labels
+   take a column of the same width, so the three controls start in line;
+   the menu and the slider fill the rest of their lines. (The slider's
+   rule is as specific as the sliders' own input[type="range"], and then
+   some, so it wins over that rule's width.) */
+.control-group.labeled-row {
   flex-direction: row;
-  padding-left: 21px;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #333;
+}
+
+.control-group.labeled-row > :first-child {
+  flex: none;
+  width: 128px;
+  white-space: nowrap;
+}
+
+.control-group.labeled-row select,
+.control-group.labeled-row input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.control-group.labeled-row select {
+  padding: 1px 2px;
+  font: inherit;
+  font-size: 12px;
 }
 
 .control-group.disabled {
@@ -349,31 +489,31 @@ input[type="range"]::-moz-range-track {
   border: none;
 }
 
-/* Upper-right corner: the properties panel for whatever is selected
-   (PropertiesPanel.jsx), in the same style as Display Options, wide
-   enough for a charge density ("+0.010 nC/cm²") and three number boxes
-   with their arrows ("Position (cm)" and its x, y and z) --
-   and under it the Field Probes panel (FieldProbesPanel.jsx), or that
-   alone, flush in the corner. They scroll rather than run into the
-   Display Options panel, about 200 px tall, in the lower-right corner --
-   and the stack is as wide as the panels, so a scrollbar goes beside them
-   rather than squeezing them (and it never scrolls sideways). */
+/* At the top of the right-hand column: the properties panel for whatever
+   is selected (PropertiesPanel.jsx), in the same style as Display Options,
+   wide enough for a charge density ("+0.010 nC/cm²") and three number
+   boxes with their arrows ("Position (cm)" and its x, y and z) -- and
+   under it the Field Probes panel (FieldProbesPanel.jsx), or that alone,
+   flush in the corner. They scroll rather than run into the Display
+   Options panel: a flex item won't shrink below its contents' height
+   unless its min-height is 0, and once it does, overflow-y: auto gives it
+   a scrollbar. The stack is as wide as the panels, so the scrollbar goes
+   beside them rather than squeezing them (and it never scrolls
+   sideways). */
 .upper-right-stack {
-  position: absolute;
-  right: 16px;
-  top: 16px;
-  max-height: calc(100dvh - 250px);
+  flex: 0 1 auto;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  z-index: 10;
+  pointer-events: auto;
 }
 
-.upper-right-stack > .overlay-controls {
+.upper-right-stack > .orbit-lock > .overlay-controls {
   flex: none;
-  width: 324px;
+  width: var(--side-panel-width);
 }
 
 /* The Field Probes panel's table: a row per probe, numbers lined up on
@@ -705,11 +845,11 @@ input[type="range"]::-moz-range-track {
 
 /* In a short window, the sidebar mustn't run into the view controls in
    the lower-left corner (the axis gizmo or the 2D cut's inset and its
-   buttons, about 200px tall): it's capped above them, and scrolls if it
+   buttons, about 230px tall): it's capped above them, and scrolls if it
    still doesn't fit -- which in windows under 620px tall, where its
    buttons are also smaller (below), takes a very short window. */
 .sidebar-panel {
-  max-height: calc(100dvh - 16px - 210px);
+  max-height: calc(100dvh - 16px - 242px);
   overflow-y: auto;
 }
 
@@ -737,4 +877,21 @@ input[type="range"]::-moz-range-track {
     width: 26px;
     height: 26px;
   }
+}
+
+/* The frame player's numbers (App.jsx's ?fps readout), along the top. */
+.rates-readout {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(20, 20, 20, 0.75);
+  color: #fff;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  white-space: nowrap;
 }
