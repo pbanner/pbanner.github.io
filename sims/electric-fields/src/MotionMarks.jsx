@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Line } from '@react-three/drei';
 import { VectorArrow } from './ProbeMarker.jsx';
 import { pathInsideBox } from './motion.js';
@@ -27,7 +28,8 @@ export function VelocityArrow({ position, velocity }) {
 // isn't seen. run: the run; index: the charge's place in run.ids; charge:
 // the charge itself, for its color.
 export function PredictedPath({ run, index, charge }) {
-  const pieces = pathInsideBox(run, index).filter((piece) => piece.length >= 2);
+  // The same throughout a run, so worked out once for it.
+  const pieces = useMemo(() => pathInsideBox(run, index).filter((piece) => piece.length >= 2), [run, index]);
   return pieces.map((points, k) => (
     <Line key={k} points={points} color={chargeColor(charge)} lineWidth={2} dashed dashSize={0.15} gapSize={0.1} />
   ));

@@ -59,6 +59,14 @@ export function allowedCut(charges, axis) {
   return offset === null ? { kind: 'any' } : { kind: 'one', offset };
 }
 
+// Whether what an arrangement allows along one axis (allowedCut) allows a
+// cut at `offset` -- for a cut that stays put while the charges move
+// during a run.
+export function allowsOffset(allowedForAxis, offset) {
+  if (allowedForAxis.kind === 'any') return true;
+  return allowedForAxis.kind === 'one' && Math.abs(allowedForAxis.offset - offset) <= SAME_OFFSET;
+}
+
 // allowedCut for each axis, x, y and z.
 export function allowedCuts(charges) {
   return [0, 1, 2].map((axis) => allowedCut(charges, axis));

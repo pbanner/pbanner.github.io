@@ -121,14 +121,19 @@ function dragReadout(item, grab) {
 //   its perspective, and only the cut's field lines (or arrows) are drawn.
 // showGrid / showAxes / showField / fieldStyle ('lines' or 'arrows') /
 //   fieldDensity: the Display Options panel's settings
-// predictedRun: the run the free charges would make from where they are
-//   (motion.js's simulateRun), or null -- for the predicted paths of the
-//   free charges that show theirs. Free charges that show their velocity
-//   get an arrow along it.
+// run: the free charges' run (motion.js's simulateRun), or null -- for
+//   the predicted paths of the free charges that show theirs. Free charges
+//   that show their velocity get an arrow along it.
+// runTime / runLocked: during a run, how far into it (s), and that it's
+//   under way. `charges` is then everything as it is at that moment (App's
+//   shownCharges): a free charge marked `outside` is out of the box, and
+//   isn't drawn or picked, though its field still counts. Nothing can be
+//   moved, placed or deleted during a run; a click on something selects
+//   it (to see its panel), and a drag anywhere turns the view.
 // orbiting: the camera is orbiting (Start Orbit; see CameraAnimator's
 //   startOrbit). Any press on the view stops it, where it is
 //   (onStopOrbit()), and then does whatever it would have done anyway.
-export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProbe, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, cut, onMoveCut, view2D, showGrid, showAxes, showField, fieldStyle, fieldDensity, predictedRun, orbiting, onStopOrbit }) {
+export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProbe, ghost, armedTypeId, onPlaceClick, removeMode, selectedId, onSelect, onMoveCharge, onUpdateCharge, onDeleteCharge, cut, onMoveCut, view2D, showGrid, showAxes, showField, fieldStyle, fieldDensity, run, runLocked = false, orbiting, onStopOrbit }) {
   const wrapperRef = useRef();
   const controlsRef = useRef();
   const cameraAnimatorRef = useRef();
@@ -355,7 +360,7 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
 
   // Point charges are picked, dragged and drawn as ChargeMarkers; the
   // charged spheres, rods and planes ("objects") as ChargedObjects.
-  const pointCharges = charges.filter((c) => c.kind === 'point');
+  const pointCharges = charges.filter((c) => c.kind === 'point' && !c.outside);
   const objects = charges.filter((c) => c.kind !== 'point');
   const shownProbes = view2D && cut ? probes.filter((p) => probeInCut(p, cut)) : probes;
   const probeHandlers = { onMove: onMoveProbe, onDelete: onDeleteProbe };
@@ -393,7 +398,7 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
   // cut's view, any that would take it out of the cut (one moving across
   // the cut).
   const handleHidden = (h) => view2D && cut && Math.abs(h.direction[cut.axis]) > 1e-9;
-  const selectedObject = armedTypeId || removeMode ? null : objects.find((c) => c.id === selectedId) ?? null;
+  const selectedObject = armedTypeId || removeMode || runLocked ? null : objects.find((c) => c.id === selectedId) ?? null;
   // The handle under the pointer (handles.js's { id, position, ... }), and
   // the one being dragged, { id, label, value, position } -- if any. The
   // readout labels a hovered handle ("Radius"), and shows a dragged one's
@@ -528,6 +533,12 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
       return;
     }
     const item = picked.charge;
+    // During a run, a press on something only selects it, if it turns out
+    // to be a click (handlePointerUp); a drag from it turns the view.
+    if (runLocked) {
+      pressRef.current = { target: 'object', id: item.id, ...at };
+      return;
+    }
     if (item.kind === 'cut' && !item.movable && !removeMode) {
       pressRef.current = { target: 'object', id: item.id, ...at };
       return;
@@ -592,7 +603,7 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
   else if (hoveredHandleId) cursor = 'grab';
   else if (hoveredId != null && !armedTypeId) {
     const pinnedCut = hoveredId === 'cut' && !cut?.movable;
-    cursor = removeMode || pinnedCut ? 'pointer' : 'grab';
+    cursor = removeMode || pinnedCut || runLocked ? 'pointer' : 'grab';
   }
 
   const handlePointerUp = (e) => {
@@ -656,8 +667,8 @@ export default function Viewer({ ref, charges, probes, onMoveProbe, onDeleteProb
         {pointCharges.filter(isFree).map((charge) => (
           <group key={`motion-${charge.id}`}>
             {charge.showVelocity && <VelocityArrow position={charge.position} velocity={charge.velocity} />}
-            {charge.showPredictedPath && predictedRun && (
-              <PredictedPath run={predictedRun} index={predictedRun.ids.indexOf(charge.id)} charge={charge} />
+            {charge.showPredictedPath && run && (
+              <PredictedPath run={run} index={run.ids.indexOf(charge.id)} charge={charge} />
             )}
           </group>
         ))}

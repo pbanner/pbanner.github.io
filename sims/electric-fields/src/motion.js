@@ -207,7 +207,8 @@ function closestContact(sys, y) {
   return best;
 }
 
-const insideBox = (p) => Math.max(Math.abs(p[0]), Math.abs(p[1]), Math.abs(p[2])) <= WORLD_HALF_EXTENT;
+// Whether a point is in the box (on its surface counts as in).
+export const insideBox = (p) => Math.max(Math.abs(p[0]), Math.abs(p[1]), Math.abs(p[2])) <= WORLD_HALF_EXTENT;
 function allOutside(sys, y) {
   for (let i = 0; i < sys.free.length; i++) if (insideBox(positionOf(y, i))) return false;
   return true;

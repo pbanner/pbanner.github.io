@@ -73,10 +73,12 @@ function RowLabel({ text, unit = 'cm' }) {
 // 2.75 steps up to 3 or down to 2. Stepping down goes no lower than
 // `stepMin` (min, by default), though a value typed below it is allowed:
 // a mass can be typed as 0.05 g, but stepped down only to 0.1 g. `format`
-// shows the value as text. `disabled` grays it out.
+// shows the value as text. `disabled` grays it out; `readOnly` leaves it
+// looking as it is -- for values shown live during a run -- but it can't be
+// typed in or stepped.
 function NumberField({
   label, value, onCommit, min = -Infinity, max = Infinity, step = 1, stepBase = Number.isFinite(min) ? min : 0,
-  stepMin = min, accept = () => true, format = formatNumber, disabled = false,
+  stepMin = min, accept = () => true, format = formatNumber, disabled = false, readOnly = false,
 }) {
   const [draft, setDraft] = useState(null);
   const commitValue = (text) => {
@@ -108,6 +110,7 @@ function NumberField({
           step={step}
           value={draft ?? format(value)}
           disabled={disabled}
+          readOnly={readOnly}
           onChange={(e) => {
             if (e.nativeEvent.inputType) setDraft(e.target.value);
             else commitValue(e.target.value);
@@ -123,7 +126,7 @@ function NumberField({
           step a focused box). */}
       <span className="number-arrows">
         {[[+1, 'Increase'], [-1, 'Decrease']].map(([direction, action]) => (
-          <button key={direction} type="button" tabIndex={-1} aria-label={`${action} ${label}`.trim()} disabled={disabled} onClick={() => stepBy(direction)}>
+          <button key={direction} type="button" tabIndex={-1} aria-label={`${action} ${label}`.trim()} disabled={disabled || readOnly} onClick={() => stepBy(direction)}>
             <svg width="8" height="5" viewBox="0 0 8 5" aria-hidden="true" style={{ display: 'block', transform: direction > 0 ? undefined : 'rotate(180deg)' }}>
               <path d="M0 5 4 0 8 5Z" fill="currentColor" />
             </svg>
@@ -161,7 +164,7 @@ function nextSteps(steps, delta) {
 //   - whether to show its predicted path (the run worked out in advance:
 //     motion.js) and an arrow along its velocity.
 const MASS_STEP = 0.1;
-function FreeChargeSettings({ charge, onChange }) {
+function FreeChargeSettings({ charge, onChange, readOnly = false }) {
   const setVelocity = (k, cmPerSecond) => {
     const velocity = [...charge.velocity];
     velocity[k] = toWorld(cmPerSecond);
@@ -181,6 +184,7 @@ function FreeChargeSettings({ charge, onChange }) {
             stepMin={MASS_STEP}
             accept={(grams) => grams > 0}
             format={formatMass}
+            readOnly={readOnly}
             onCommit={(mass) => onChange({ mass })}
           />
         </div>
@@ -189,7 +193,7 @@ function FreeChargeSettings({ charge, onChange }) {
         <RowLabel text="Velocity" unit="cm/s" />
         <div className="number-fields">
           {[0, 1, 2].map((k) => (
-            <NumberField key={`v${k}-${charge.id}`} label={AXIS_NAMES[k]} value={toCm(charge.velocity[k])} onCommit={(v) => setVelocity(k, v)} />
+            <NumberField key={`v${k}-${charge.id}`} label={AXIS_NAMES[k]} value={toCm(charge.velocity[k])} readOnly={readOnly} onCommit={(v) => setVelocity(k, v)} />
           ))}
         </div>
       </div>
@@ -216,11 +220,15 @@ function FreeChargeSettings({ charge, onChange }) {
 //   coordinate across the cut is grayed out, and so is turning a charged
 //   plane parallel to the cut, since either would take the charge out of
 //   the cut's mirror symmetry.
+// readOnly: during a run, when nothing that would change the run can be
+//   changed: the panel shows the charge as it is at this moment (a free
+//   one where it is now, going as fast as it is now), but only its display
+//   options can be changed.
 //
 // A free point charge's panel also has its mass, its velocity (where it
 // starts off, and how fast) and two display options: its predicted path,
 // and an arrow along its velocity.
-export default function PropertiesPanel({ charge, onChange, onSetFree, onDelete, onClose, lockedAxis = null, canBeFree = true, freeBlockedReason }) {
+export default function PropertiesPanel({ charge, onChange, onSetFree, onDelete, onClose, lockedAxis = null, canBeFree = true, freeBlockedReason, readOnly = false }) {
   const { kind } = charge;
   const free = isFree(charge);
   const steps = chargeSteps(charge);
@@ -262,7 +270,7 @@ export default function PropertiesPanel({ charge, onChange, onSetFree, onDelete,
             options={[[false, 'Pinned'], [true, 'Free']]}
             value={free}
             onChange={onSetFree}
-            isDisabled={(v) => v && !free && !canBeFree}
+            isDisabled={(v) => readOnly || (v && !free && !canBeFree)}
             titleFor={(v) => (v && !free && !canBeFree ? freeBlockedReason : undefined)}
           />
         </div>
@@ -271,11 +279,11 @@ export default function PropertiesPanel({ charge, onChange, onSetFree, onDelete,
       <div className="property-row">
         <span>{label}</span>
         <div className="stepper">
-          <button type="button" aria-label="Decrease charge" disabled={steps <= -MAX_CHARGE_STEPS} onClick={() => onChange(withChargeSteps(charge, nextSteps(steps, -1)))}>
+          <button type="button" aria-label="Decrease charge" disabled={readOnly || steps <= -MAX_CHARGE_STEPS} onClick={() => onChange(withChargeSteps(charge, nextSteps(steps, -1)))}>
             −
           </button>
           <ChargeValue charge={charge} />
-          <button type="button" aria-label="Increase charge" disabled={steps >= MAX_CHARGE_STEPS} onClick={() => onChange(withChargeSteps(charge, nextSteps(steps, +1)))}>
+          <button type="button" aria-label="Increase charge" disabled={readOnly || steps >= MAX_CHARGE_STEPS} onClick={() => onChange(withChargeSteps(charge, nextSteps(steps, +1)))}>
             +
           </button>
         </div>
@@ -284,20 +292,20 @@ export default function PropertiesPanel({ charge, onChange, onSetFree, onDelete,
       {FORMS[kind] && (
         <div className="property-row">
           <span>Form</span>
-          <Segmented options={FORMS[kind]} value={charge.form} onChange={(form) => onChange({ form })} />
+          <Segmented options={FORMS[kind]} value={charge.form} onChange={(form) => onChange({ form })} isDisabled={() => readOnly} />
         </div>
       )}
 
       {kind === 'rod' && (
         <div className="property-row">
           <span>Along</span>
-          <Segmented options={AXIS_NAMES.map((n, k) => [k, n])} value={charge.axis} onChange={(axis) => onChange({ axis })} />
+          <Segmented options={AXIS_NAMES.map((n, k) => [k, n])} value={charge.axis} onChange={(axis) => onChange({ axis })} isDisabled={() => readOnly} />
         </div>
       )}
       {kind === 'plane' && (
         <div className="property-row">
           <span>Parallel to</span>
-          <Segmented options={PLANE_NAMES.map((n, k) => [k, n])} value={charge.axis} onChange={setPlaneAxis} isDisabled={(axis) => axis === lockedAxis} />
+          <Segmented options={PLANE_NAMES.map((n, k) => [k, n])} value={charge.axis} onChange={setPlaneAxis} isDisabled={(axis) => readOnly || axis === lockedAxis} />
         </div>
       )}
 
@@ -312,19 +320,20 @@ export default function PropertiesPanel({ charge, onChange, onSetFree, onDelete,
               min={-WORLD_LIMIT_CM}
               max={WORLD_LIMIT_CM}
               disabled={k === lockedAxis}
+              readOnly={readOnly}
               onCommit={(cm) => setCoord(k, cm)}
             />
           ))}
         </div>
       </div>
 
-      {free && <FreeChargeSettings charge={charge} onChange={onChange} />}
+      {free && <FreeChargeSettings charge={charge} onChange={onChange} readOnly={readOnly} />}
 
       {(kind === 'sphere' || (kind === 'rod' && charge.form !== 'line')) && (
         <div className="property-row">
           <RowLabel text="Radius" />
           <div className="number-fields">
-            <NumberField key={`radius-${charge.id}`} label="" value={toCm(charge.radius)} {...SIZE_LIMITS_CM} stepBase={0} onCommit={(cm) => onChange({ radius: toWorld(cm) })} />
+            <NumberField key={`radius-${charge.id}`} label="" value={toCm(charge.radius)} {...SIZE_LIMITS_CM} stepBase={0} readOnly={readOnly} onCommit={(cm) => onChange({ radius: toWorld(cm) })} />
           </div>
         </div>
       )}
@@ -332,12 +341,12 @@ export default function PropertiesPanel({ charge, onChange, onSetFree, onDelete,
         <div className="property-row">
           <RowLabel text="Thickness" />
           <div className="number-fields">
-            <NumberField key={`thickness-${charge.id}`} label="" value={toCm(charge.thickness)} {...SIZE_LIMITS_CM} stepBase={0} onCommit={(cm) => onChange({ thickness: toWorld(cm) })} />
+            <NumberField key={`thickness-${charge.id}`} label="" value={toCm(charge.thickness)} {...SIZE_LIMITS_CM} stepBase={0} readOnly={readOnly} onCommit={(cm) => onChange({ thickness: toWorld(cm) })} />
           </div>
         </div>
       )}
 
-      <button type="button" className="control-button panel-delete-button" onClick={onDelete}>
+      <button type="button" className="control-button panel-delete-button" disabled={readOnly} onClick={onDelete}>
         Delete
       </button>
     </div>
@@ -348,9 +357,10 @@ export default function PropertiesPanel({ charge, onChange, onSetFree, onDelete,
 // (each a checkbox, kept with the probe).
 // probe: the selected probe (see probes.js). onChange(changes) /
 // onDelete() / onClose(): as for a charge's panel; so is lockedAxis (a
-// probe in the 2D cut's view stays in the cut). Its reading is in the
-// Field Probes panel below.
-export function ProbePanel({ probe, onChange, onDelete, onClose, lockedAxis = null }) {
+// probe in the 2D cut's view stays in the cut), and so is readOnly (during
+// a run, only what it shows can be changed). Its reading is in the Field
+// Probes panel below.
+export function ProbePanel({ probe, onChange, onDelete, onClose, lockedAxis = null, readOnly = false }) {
   const setCoord = (k, cm) => {
     const position = [...probe.position];
     position[k] = toWorld(cm);
@@ -375,6 +385,7 @@ export function ProbePanel({ probe, onChange, onDelete, onClose, lockedAxis = nu
               min={-WORLD_LIMIT_CM}
               max={WORLD_LIMIT_CM}
               disabled={k === lockedAxis}
+              readOnly={readOnly}
               onCommit={(cm) => setCoord(k, cm)}
             />
           ))}
@@ -392,7 +403,7 @@ export function ProbePanel({ probe, onChange, onDelete, onClose, lockedAxis = nu
         <input type="checkbox" checked={probe.showContributions} onChange={(e) => onChange({ showContributions: e.target.checked })} />
         Show each charge&apos;s contribution
       </label>
-      <button type="button" className="control-button panel-delete-button" onClick={onDelete}>
+      <button type="button" className="control-button panel-delete-button" disabled={readOnly} onClick={onDelete}>
         Delete
       </button>
     </div>
@@ -408,7 +419,8 @@ export function ProbePanel({ probe, onChange, onDelete, onClose, lockedAxis = nu
 // for the current charges. onChangeAxis(axis) / onChangeOffset(world) /
 // onView() / onRemove() / onClose(): edits, viewing it in 2D, removing it,
 // and deselecting. onView is null while the 2D view isn't available.
-export function CutPanel({ cut, allowed, onChangeAxis, onChangeOffset, onView, onRemove, onClose }) {
+// readOnly: during a run, when the cut can't be changed or removed.
+export function CutPanel({ cut, allowed, onChangeAxis, onChangeOffset, onView, onRemove, onClose, readOnly = false }) {
   return (
     <div className="overlay-controls properties-panel">
       <div className="panel-header">
@@ -423,7 +435,7 @@ export function CutPanel({ cut, allowed, onChangeAxis, onChangeOffset, onView, o
           options={PLANE_NAMES.map((n, k) => [k, n])}
           value={cut.axis}
           onChange={onChangeAxis}
-          isDisabled={(axis) => allowed[axis].kind === 'none'}
+          isDisabled={(axis) => readOnly || allowed[axis].kind === 'none'}
         />
       </div>
       <div className="property-row">
@@ -436,6 +448,7 @@ export function CutPanel({ cut, allowed, onChangeAxis, onChangeOffset, onView, o
             min={-WORLD_LIMIT_CM}
             max={WORLD_LIMIT_CM}
             disabled={!cut.movable}
+            readOnly={readOnly}
             onCommit={(cm) => onChangeOffset(toWorld(cm))}
           />
         </div>
@@ -444,7 +457,7 @@ export function CutPanel({ cut, allowed, onChangeAxis, onChangeOffset, onView, o
       <button type="button" className="control-button panel-wide-button" disabled={!onView || !cut.valid} onClick={onView}>
         View 2D cut
       </button>
-      <button type="button" className="control-button panel-delete-button" onClick={onRemove}>
+      <button type="button" className="control-button panel-delete-button" disabled={readOnly} onClick={onRemove}>
         Remove cut
       </button>
     </div>

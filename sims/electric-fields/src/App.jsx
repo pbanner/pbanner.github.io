@@ -7,11 +7,13 @@ import PropertiesPanel, { CutPanel, ProbePanel } from './PropertiesPanel.jsx';
 import FieldProbesPanel from './FieldProbesPanel.jsx';
 import CutInset from './CutInset.jsx';
 import OrbitLock from './OrbitLock.jsx';
+import PlaybackPanel from './PlaybackPanel.jsx';
+import { formatTime } from './playback.js';
 import { getChargeType, makeCharge, normalizePosition, crowds, freeingChanges, PINNING_CHANGES, isFree, freeLabelText } from './chargeTypes.js';
-import { simulateRun, motionKey } from './motion.js';
+import { simulateRun, motionKey, stateAt, insideBox, MAX_RUN_TIME } from './motion.js';
 import { contactGap, touchesFreeCharge, wallName } from './walls.js';
 import { PROBE_TYPE, MAX_PROBES, isProbeId, nextProbeLabel, probeInCut } from './probes.js';
-import { allowedCuts, defaultCutAxis, placeCut, keepInCut } from './cutPlanes.js';
+import { allowedCuts, defaultCutAxis, placeCut, keepInCut, allowsOffset } from './cutPlanes.js';
 import { CLICK_MOVE_THRESHOLD } from './sceneConstants.js';
 import './App.css';
 
@@ -19,6 +21,20 @@ import './App.css';
 const SIDEBAR_LABEL_GAP = 12;
 // Size of the 2D placement ghost.
 const GHOST_ICON_SIZE = 36;
+
+// What ended a run (motion.js's run.end), for the playback panel, naming
+// free charges by name and anything else by what it is (walls.js).
+function endNote(run, charges) {
+  const name = (c) => freeLabelText(c.freeLabel);
+  const at = `t = ${formatTime(run.end.time)}`;
+  if (run.end.reason === 'collision') {
+    const who = charges.find((c) => c.id === run.end.chargeId);
+    const what = charges.find((c) => c.id === run.end.otherId);
+    return `${name(who)} hit ${wallName(what, name)} at ${at}.`;
+  }
+  if (run.end.reason === 'left') return `Every free charge had left the box by ${at}.`;
+  return `The run stopped at its ${MAX_RUN_TIME} s limit.`;
+}
 
 export default function App() {
   // Everything placed -- point charges and charged spheres, rods and
@@ -40,6 +56,39 @@ export default function App() {
   // panel shows what can be changed.
   const [selectedId, setSelectedId] = useState(null);
 
+  // Playback of the free charges' motion (PlaybackPanel.jsx): status
+  // 'setup' -- no run under way, and everything can be edited -- or
+  // 'playing', 'paused' or 'ended' (the run has reached its end): a run is
+  // under way (`running`), and nothing that would change it can be edited
+  // until Reset. `time` is how far into the run, in seconds; `speed`, a
+  // multiple of real time.
+  const [playback, setPlayback] = useState({ status: 'setup', time: 0, speed: 1 });
+  const running = playback.status !== 'setup';
+
+  // The run (motion.js): the free charges' whole motion from where they
+  // start, worked out whenever there are free charges -- for the playback
+  // panel (how long the run is, and whether it can be played) and the
+  // predicted paths -- and again only when something it depends on changes
+  // (its key): as a free charge is dragged, say, but not when a display
+  // option is checked. It takes a few milliseconds, so it keeps up with a
+  // drag. Nothing that would change it can be edited during a run.
+  const runKey = charges.some(isFree) ? motionKey(charges) : null;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the key stands for the charges
+  const run = useMemo(() => (runKey ? simulateRun(charges) : null), [runKey]);
+
+  // Everything as it is at this moment of the run: each free charge where
+  // the run has it, going as fast as it is then, and marked `outside` while
+  // it's out of the box (it isn't seen then, but its field still counts).
+  // Before a run, the charges just as they're placed.
+  const shownCharges = useMemo(() => {
+    if (!running || !run) return charges;
+    const { positions, velocities } = stateAt(run, playback.time);
+    return charges.map((c) => {
+      const i = run.ids.indexOf(c.id);
+      return i < 0 ? c : { ...c, position: positions[i], velocity: velocities[i], outside: !insideBox(positions[i]) };
+    });
+  }, [charges, run, running, playback.time]);
+
   // The 2D cut, if there is one: { axis, offset } (see cutPlanes.js). Its
   // orientation is the user's choice; so is its offset, but only while the
   // charges allow it anywhere along its axis -- otherwise it's wherever the
@@ -47,7 +96,12 @@ export default function App() {
   // that, so the cut stays put if they stop pinning it.
   const [cut, setCut] = useState(null);
   const allowed = useMemo(() => allowedCuts(charges), [charges]);
-  const placedCut = cut && placeCut(cut, allowed);
+  // During a run, the cut stays where it was put, but whether it's valid
+  // follows the charges as they move: a free charge that leaves the cut
+  // leaves the arrangement no longer mirror-symmetric through it.
+  const allowedNow = useMemo(() => (running ? allowedCuts(shownCharges) : allowed), [running, shownCharges, allowed]);
+  const setupCut = cut && placeCut(cut, allowed);
+  const placedCut = setupCut && running ? { ...setupCut, valid: allowsOffset(allowedNow[setupCut.axis], setupCut.offset) } : setupCut;
   if (cut && placedCut.offset !== cut.offset) setCut({ ...cut, offset: placedCut.offset });
   // A new cut takes the first allowed orientation (cutPlanes.js), at the
   // charges' one allowed position, or in the middle of the box.
@@ -178,6 +232,9 @@ export default function App() {
       const changed = inCut ? keepInCut({ ...c, ...changes }, inCut) : { ...c, ...changes };
       if (!changed) return c;
       const next = normalizePosition(changed);
+      // During a run, nothing that would change the run can change: only,
+      // say, which of a free charge's marks are shown.
+      if (running && motionKey([next]) !== motionKey([c])) return c;
       const others = prev.filter((o) => o.id !== id);
       return crowds(next, others) || touchesFreeCharge(next, others) ? c : next;
     }));
@@ -338,15 +395,49 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  // The run the free charges would make from where they are now (motion.js),
-  // for their predicted paths -- worked out only while one of those is
-  // shown, and again only when something it depends on changes (its key):
-  // as a free charge is dragged, say, but not when a display option is
-  // checked. It takes a few milliseconds, so it keeps up with a drag.
-  const showsPredictedPath = charges.some((c) => isFree(c) && c.showPredictedPath);
-  const runKey = showsPredictedPath ? motionKey(charges) : null;
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- the key stands for the charges
-  const predictedRun = useMemo(() => (runKey ? simulateRun(charges) : null), [runKey]);
+  // Playing, pausing and so on (PlaybackPanel.jsx). Starting a run puts
+  // down whatever the sidebar had armed, and leaves delete mode. Play once
+  // the run is over plays it again from the start; scrubbing to a moment
+  // pauses there (and starts a run, if there wasn't one under way).
+  const play = () => {
+    if (!run || run.end.time === 0) return;
+    disarm();
+    setRemoveMode(false);
+    setPlayback((p) => ({ ...p, status: 'playing', time: p.time >= run.end.time ? 0 : p.time }));
+  };
+  const pause = () => setPlayback((p) => ({ ...p, status: 'paused' }));
+  const resetRun = () => setPlayback((p) => ({ ...p, status: 'setup', time: 0 }));
+  const scrub = (time) => {
+    if (!run) return;
+    disarm();
+    setRemoveMode(false);
+    setPlayback((p) => ({ ...p, status: time >= run.end.time ? 'ended' : 'paused', time }));
+  };
+  const setSpeed = (speed) => setPlayback((p) => ({ ...p, speed }));
+
+  // While playing: each animation frame, the time is however far real time
+  // (times the speed) has gone since playing began, until the run's end.
+  // (Through an effect event, to read the time playing began at without
+  // restarting the clock on every tick.)
+  const playbackTime = useEffectEvent(() => playback.time);
+  useEffect(() => {
+    if (playback.status !== 'playing' || !run) return undefined;
+    const startTime = playbackTime();
+    const end = run.end.time;
+    let startWall = null;
+    let frame;
+    const tick = (now) => {
+      if (startWall === null) startWall = now;
+      const time = Math.min(end, startTime + (playback.speed * (now - startWall)) / 1000);
+      setPlayback((p) => ({ ...p, time, status: time >= end ? 'ended' : p.status }));
+      if (time < end) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [playback.status, playback.speed, run]);
+
+  // What ended the run, once it's been reached.
+  const runNote = running && run && playback.time >= run.end.time ? endNote(run, charges) : null;
 
   const armedType = !armedTypeId ? null : isProbeType(armedTypeId) ? PROBE_TYPE : getChargeType(armedTypeId);
   const selectedCharge = charges.find((c) => c.id === selectedId) ?? null;
@@ -365,7 +456,7 @@ export default function App() {
     <div className="app-layout">
       <Viewer
         ref={viewerRef}
-        charges={charges}
+        charges={shownCharges}
         probes={probes}
         onMoveProbe={moveProbe}
         onDeleteProbe={deleteProbe}
@@ -386,7 +477,9 @@ export default function App() {
         showField={displayOptions.showField}
         fieldStyle={displayOptions.fieldStyle}
         fieldDensity={displayOptions.fieldDensity}
-        predictedRun={predictedRun}
+        run={run}
+        runTime={playback.time}
+        runLocked={running}
         orbiting={orbiting}
         onStopOrbit={() => setOrbiting(false)}
       />
@@ -397,7 +490,7 @@ export default function App() {
         removeMode={removeMode}
         onToggleRemoveMode={toggleRemoveMode}
         onHoverButton={setHoveredSidebarButton}
-        locked={orbiting}
+        locked={orbiting || running}
       />
 
       {hoveredSidebarButton && !armedTypeId && (
@@ -422,15 +515,17 @@ export default function App() {
               allowed={allowed}
               onChangeAxis={(axis) => setCut(cutAt(axis))}
               onChangeOffset={moveCut}
-              onView={viewCut}
+              onView={running ? null : viewCut}
               onRemove={removeCut}
+              readOnly={running}
               onClose={() => setSelectedId(null)}
             />
           )}
 
           {selectedCharge && (
             <PropertiesPanel
-              charge={selectedCharge}
+              charge={shownCharges.find((c) => c.id === selectedId)}
+              readOnly={running}
               lockedAxis={inCut ? inCut.axis : null}
               onChange={(changes) => updateCharge(selectedCharge.id, changes)}
               onSetFree={(free) => setFree(selectedCharge.id, free)}
@@ -444,6 +539,7 @@ export default function App() {
           {selectedProbe && (
             <ProbePanel
               probe={selectedProbe}
+              readOnly={running}
               lockedAxis={inCut ? inCut.axis : null}
               onChange={(changes) => updateProbe(selectedProbe.id, changes)}
               onDelete={() => deleteProbe(selectedProbe.id)}
@@ -452,7 +548,7 @@ export default function App() {
           )}
 
           {shownProbes.length > 0 && (
-            <FieldProbesPanel probes={shownProbes} charges={charges} selectedId={selectedId} onSelect={setSelectedId} cut={inCut} />
+            <FieldProbesPanel probes={shownProbes} charges={shownCharges} selectedId={selectedId} onSelect={setSelectedId} cut={inCut} />
           )}
         </OrbitLock>
       </div>
@@ -463,7 +559,7 @@ export default function App() {
           2D, or goes back to 3D. The orbit's button starts and stops the
           orbit; while it runs, the other two are disabled. */}
       <div className="view-controls">
-        {view2D && placedCut && <CutInset charges={charges} cut={placedCut} onClick={() => setView2D(false)} />}
+        {view2D && placedCut && <CutInset charges={shownCharges} cut={placedCut} onClick={() => setView2D(false)} />}
         {view2D ? (
           <button className="control-button view-button" onClick={() => setView2D(false)}>
             Back to 3D
@@ -471,7 +567,7 @@ export default function App() {
         ) : placedCut ? (
           <button
             className="control-button view-button"
-            disabled={!placedCut.valid || orbiting}
+            disabled={!placedCut.valid || orbiting || running}
             title={placedCut.valid ? undefined : "The charges aren't all in the cut"}
             onClick={viewCut}
           >
@@ -480,7 +576,7 @@ export default function App() {
         ) : (
           <button
             className="control-button view-button"
-            disabled={defaultCutAxis(allowed) === null || orbiting}
+            disabled={defaultCutAxis(allowed) === null || orbiting || running}
             title={defaultCutAxis(allowed) === null ? "The charges aren't all in one plane parallel to xy, xz or yz" : undefined}
             onClick={insertCut}
           >
@@ -511,16 +607,38 @@ export default function App() {
         </OrbitLock>
       </div>
 
-      {/* How to place and manipulate charges, shown at all times --
-          nothing else on screen hints that Shift and Alt do anything. */}
-      <div className="interaction-hint">
-        {orbiting
-          ? 'Orbiting the camera · Scroll to zoom · Click the view, or Stop Orbit, to stop'
-          : removeMode
-          ? 'Click an object to delete it · Press Escape, or click the trash can again, to stop deleting'
-          : view2D
-            ? 'Viewing the 2D cut! · Add objects from the sidebar · Click an object to edit it · Drag an object to move it · Drag empty space to pan, scroll to zoom · Back to 3D in the lower left'
-            : 'Add objects from the sidebar · Click an object to edit it · Drag an object to change its position, Shift+drag to raise or lower, Alt+drag to turn off snapping'}
+      {/* Bottom center: the playback controls, while there's a free charge,
+          above how to place and manipulate charges, which is shown at all
+          times -- nothing else on screen hints that Shift and Alt do
+          anything. */}
+      <div className="bottom-center-stack">
+        {charges.some(isFree) && (
+          <div className="playback-holder">
+            <OrbitLock locked={orbiting}>
+              <PlaybackPanel
+                run={run}
+                playback={playback}
+                onPlay={play}
+                onPause={pause}
+                onReset={resetRun}
+                onScrub={scrub}
+                onSpeed={setSpeed}
+                note={runNote}
+              />
+            </OrbitLock>
+          </div>
+        )}
+        <div className="interaction-hint">
+          {orbiting
+            ? 'Orbiting the camera · Scroll to zoom · Click the view, or Stop Orbit, to stop'
+            : running
+            ? 'A run is under way · Click a charge to see where it is and how fast it\'s going · Drag empty space to turn the view · Reset to edit again'
+            : removeMode
+            ? 'Click an object to delete it · Press Escape, or click the trash can again, to stop deleting'
+            : view2D
+              ? 'Viewing the 2D cut! · Add objects from the sidebar · Click an object to edit it · Drag an object to move it · Drag empty space to pan, scroll to zoom · Back to 3D in the lower left'
+              : 'Add objects from the sidebar · Click an object to edit it · Drag an object to change its position, Shift+drag to raise or lower, Alt+drag to turn off snapping'}
+        </div>
       </div>
 
       {/* While armed: a flat 2D icon follows the pointer whenever the charge
