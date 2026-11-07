@@ -56,10 +56,10 @@ export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions,
       <div className="panel-divider" />
       <label>
         <input type="checkbox" checked={displayOptions.showField} onChange={(e) => setOption('showField', e.target.checked)} />
-        Electric field
+        Show electric field
       </label>
       <div className={`control-group field-style${displayOptions.showField ? '' : ' disabled'}`}>
-        <span>Show as</span>
+        <span>Show as:</span>
         <Segmented
           options={[['lines', 'Lines'], ['arrows', 'Arrows']]}
           value={displayOptions.fieldStyle}
@@ -68,7 +68,7 @@ export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions,
         />
       </div>
       <div className={`control-group field-sources${canChooseSources ? '' : ' disabled'}`}>
-        <label htmlFor="field-sources">Show field due to</label>
+        <label htmlFor="field-sources">Show field due to:</label>
         <select id="field-sources" value={sourcesValue} disabled={!canChooseSources} onChange={(e) => chooseSources(e.target.value)}>
           <option value="all">all charges</option>
           <option value="pinned">pinned charges only</option>
@@ -78,7 +78,7 @@ export default function DisplayOptionsPanel({ displayOptions, setDisplayOptions,
         </select>
       </div>
       <div className={`control-group${displayOptions.showField ? '' : ' disabled'}`}>
-        <label htmlFor="field-density">Density: {displayOptions.fieldDensity}</label>
+        <label htmlFor="field-density">Display density: {displayOptions.fieldDensity}</label>
         <input
           id="field-density"
           type="range"
