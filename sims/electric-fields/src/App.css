@@ -317,12 +317,30 @@ input[type="range"].playback-scrubber {
   z-index: 6;
 }
 
-/* Lower-right corner: the Display Options panel. */
-.lower-right-stack {
+/* The right-hand column, from the top margin to the bottom one: the
+   upper-right stack (below) at the top, and the Display Options panel at
+   the bottom. A flex column, so the stack gets exactly the room left above
+   the panel, whatever height the panel has. The column itself lets presses
+   through to the 3D view; only the panels in it take them. */
+.right-column {
   position: absolute;
+  top: 16px;
   right: 16px;
   bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  pointer-events: none;
   z-index: 10;
+}
+
+/* At the bottom of the column: the Display Options panel, as tall as it
+   needs to be. */
+.lower-right-stack {
+  flex: none;
+  pointer-events: auto;
 }
 
 /* On-canvas overlay panel look, copied from the optics lab's
@@ -441,26 +459,26 @@ input[type="range"]::-moz-range-track {
   border: none;
 }
 
-/* Upper-right corner: the properties panel for whatever is selected
-   (PropertiesPanel.jsx), in the same style as Display Options, wide
-   enough for a charge density ("+0.010 nC/cm²") and three number boxes
-   with their arrows ("Position (cm)" and its x, y and z) --
-   and under it the Field Probes panel (FieldProbesPanel.jsx), or that
-   alone, flush in the corner. They scroll rather than run into the
-   Display Options panel, about 200 px tall, in the lower-right corner --
-   and the stack is as wide as the panels, so a scrollbar goes beside them
-   rather than squeezing them (and it never scrolls sideways). */
+/* At the top of the right-hand column: the properties panel for whatever
+   is selected (PropertiesPanel.jsx), in the same style as Display Options,
+   wide enough for a charge density ("+0.010 nC/cm²") and three number
+   boxes with their arrows ("Position (cm)" and its x, y and z) -- and
+   under it the Field Probes panel (FieldProbesPanel.jsx), or that alone,
+   flush in the corner. They scroll rather than run into the Display
+   Options panel: a flex item won't shrink below its contents' height
+   unless its min-height is 0, and once it does, overflow-y: auto gives it
+   a scrollbar. The stack is as wide as the panels, so the scrollbar goes
+   beside them rather than squeezing them (and it never scrolls
+   sideways). */
 .upper-right-stack {
-  position: absolute;
-  right: 16px;
-  top: 16px;
-  max-height: calc(100dvh - 250px);
+  flex: 0 1 auto;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  z-index: 10;
+  pointer-events: auto;
 }
 
 .upper-right-stack > .orbit-lock > .overlay-controls {

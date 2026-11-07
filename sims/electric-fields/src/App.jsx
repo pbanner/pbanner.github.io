@@ -642,52 +642,70 @@ export default function App() {
         </div>
       )}
 
-      {/* Upper-right corner: the selected thing's panel, and under it the
-          Field Probes panel -- or that alone, flush in the corner. */}
-      <div className="upper-right-stack">
-        <OrbitLock locked={orbiting}>
-          {selectedId === 'cut' && placedCut && (
-            <CutPanel
-              cut={placedCut}
-              allowed={allowed}
-              onChangeAxis={(axis) => setCut(cutAt(axis))}
-              onChangeOffset={moveCut}
-              onView={viewCut}
-              onRemove={removeCut}
-              readOnly={running}
-              onClose={() => setSelectedId(null)}
-            />
-          )}
+      {/* The right-hand column, from the top margin to the bottom one: at the
+          top, the selected thing's panel and under it the Field Probes
+          panel (or that alone, flush in the corner); at the bottom, the
+          Display Options panel. The top stack gets whatever room is left
+          above Display Options, and scrolls once it needs more. */}
+      <div className="right-column">
+        <div className="upper-right-stack">
+          <OrbitLock locked={orbiting}>
+            {selectedId === 'cut' && placedCut && (
+              <CutPanel
+                cut={placedCut}
+                allowed={allowed}
+                onChangeAxis={(axis) => setCut(cutAt(axis))}
+                onChangeOffset={moveCut}
+                onView={viewCut}
+                onRemove={removeCut}
+                readOnly={running}
+                onClose={() => setSelectedId(null)}
+              />
+            )}
 
-          {selectedCharge && (
-            <PropertiesPanel
-              charge={shownCharges.find((c) => c.id === selectedId)}
-              readOnly={running}
-              lockedAxis={inCut ? inCut.axis : null}
-              onChange={(changes) => updateCharge(selectedCharge.id, changes)}
-              onSetFree={(free) => setFree(selectedCharge.id, free)}
-              canBeFree={!freeBlocker}
-              freeBlockedReason={freeBlocker && `A free charge can't start out touching anything, and this one touches ${wallName(freeBlocker, (c) => freeLabelText(c.freeLabel))}`}
-              onDelete={() => deleteCharge(selectedCharge.id)}
-              onClose={() => setSelectedId(null)}
-            />
-          )}
+            {selectedCharge && (
+              <PropertiesPanel
+                charge={shownCharges.find((c) => c.id === selectedId)}
+                readOnly={running}
+                lockedAxis={inCut ? inCut.axis : null}
+                onChange={(changes) => updateCharge(selectedCharge.id, changes)}
+                onSetFree={(free) => setFree(selectedCharge.id, free)}
+                canBeFree={!freeBlocker}
+                freeBlockedReason={freeBlocker && `A free charge can't start out touching anything, and this one touches ${wallName(freeBlocker, (c) => freeLabelText(c.freeLabel))}`}
+                onDelete={() => deleteCharge(selectedCharge.id)}
+                onClose={() => setSelectedId(null)}
+              />
+            )}
 
-          {selectedProbe && (
-            <ProbePanel
-              probe={selectedProbe}
-              readOnly={running}
-              lockedAxis={inCut ? inCut.axis : null}
-              onChange={(changes) => updateProbe(selectedProbe.id, changes)}
-              onDelete={() => deleteProbe(selectedProbe.id)}
-              onClose={() => setSelectedId(null)}
-            />
-          )}
+            {selectedProbe && (
+              <ProbePanel
+                probe={selectedProbe}
+                readOnly={running}
+                lockedAxis={inCut ? inCut.axis : null}
+                onChange={(changes) => updateProbe(selectedProbe.id, changes)}
+                onDelete={() => deleteProbe(selectedProbe.id)}
+                onClose={() => setSelectedId(null)}
+              />
+            )}
 
-          {shownProbes.length > 0 && (
-            <FieldProbesPanel probes={shownProbes} charges={fieldSources} selectedId={selectedId} onSelect={setSelectedId} cut={inCut} />
-          )}
-        </OrbitLock>
+            {shownProbes.length > 0 && (
+              <FieldProbesPanel probes={shownProbes} charges={fieldSources} selectedId={selectedId} onSelect={setSelectedId} cut={inCut} />
+            )}
+          </OrbitLock>
+        </div>
+        {/* At the bottom: the Display Options panel. */}
+        <div className="lower-right-stack">
+          <OrbitLock locked={orbiting}>
+            <DisplayOptionsPanel
+              displayOptions={displayOptions}
+              setDisplayOptions={setDisplayOptions}
+              freeCharges={freeCharges}
+              fieldOf={fieldOf}
+              feltBy={feltBy}
+              gridPlane={view2D && placedCut ? ['yz', 'xz', 'xy'][placedCut.axis] : 'xy'}
+            />
+          </OrbitLock>
+        </div>
       </div>
 
       {/* Lower-left corner: the view controls, under the axis gizmo (which
@@ -731,20 +749,6 @@ export default function App() {
         <button className="control-button view-button" disabled={orbiting} onClick={() => viewerRef.current?.resetView()}>
           Reset View
         </button>
-      </div>
-
-      {/* Lower-right corner: the Display Options panel. */}
-      <div className="lower-right-stack">
-        <OrbitLock locked={orbiting}>
-          <DisplayOptionsPanel
-            displayOptions={displayOptions}
-            setDisplayOptions={setDisplayOptions}
-            freeCharges={freeCharges}
-            fieldOf={fieldOf}
-            feltBy={feltBy}
-            gridPlane={view2D && placedCut ? ['yz', 'xz', 'xy'][placedCut.axis] : 'xy'}
-          />
-        </OrbitLock>
       </div>
 
       {/* Bottom center: the playback controls, while there's a free charge,
