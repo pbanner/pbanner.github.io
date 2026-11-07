@@ -109,7 +109,55 @@ export function fieldKey(objects) {
   return JSON.stringify(objects.map((c) => [c.id, c.kind, c.position, c.q, c.lambda, c.sigma, c.radius, c.form, c.axis, c.thickness]));
 }
 
-// The total field at p of every object.
+// The sum of the first `count` of `terms` (reordering them), added up so
+// that terms that are exact opposites cancel exactly, in any order.
+//
+// That matters for symmetric arrangements. In the middle of a square of
+// charges, say, the charges' sideways pulls cancel exactly -- but added up
+// one by one, in whatever order the charges were placed, a running total
+// can round (-c - 2c needs one more binary digit than c has), and leave a
+// "zero" of 1e-17 instead. If the free charge's position is unstable (as
+// Earnshaw's theorem says some direction always is), that speck of
+// rounding then grows exponentially, until the charge veers off for no
+// reason anyone could see -- and only for some placement orders. A
+// mirror-image charge's term, though, is the exact opposite of its twin's
+// (the same numbers, one sign flipped), so here the terms are sorted by
+// size, and each group of the same size is added as one number: how many
+// more of them are positive than negative, times their size. Twins then
+// cancel to exactly 0, and the total is the same whatever order the terms
+// came in. A symmetric arrangement stays exactly symmetric, and a run
+// doesn't depend on the order the charges were placed in.
+//
+// (An insertion sort: the lists are short, one term per charge.)
+export function balancedSum(terms, count) {
+  for (let k = 1; k < count; k++) {
+    const v = terms[k];
+    const size = Math.abs(v);
+    let j = k - 1;
+    while (j >= 0 && Math.abs(terms[j]) > size) {
+      terms[j + 1] = terms[j];
+      j--;
+    }
+    terms[j + 1] = v;
+  }
+  let sum = 0;
+  let k = 0;
+  while (k < count) {
+    const size = Math.abs(terms[k]);
+    let net = 0; // how many more of this size are positive than negative
+    while (k < count && Math.abs(terms[k]) === size) {
+      net += Math.sign(terms[k]);
+      k++;
+    }
+    sum += net * size;
+  }
+  return sum;
+}
+
+// The total field at p of every object, added up one by one: the fast
+// sum, for the field-line tracer (fieldLines.js), which calls it a great
+// many times, and for which a field that cancels exactly needs no exact 0
+// (a line stops short of where the field vanishes anyway).
 export function fieldAt(p, objects) {
   let ex = 0;
   let ey = 0;
@@ -121,4 +169,26 @@ export function fieldAt(p, objects) {
     ez += z;
   }
   return [ex, ey, ez];
+}
+
+// The same total field, each axis added up by balancedSum instead, so it's
+// exactly 0 where the objects' fields cancel exactly -- the middle of a
+// symmetric arrangement -- rather than a speck of rounding pointing
+// whichever way, which an arrow drawn from it (a probe's, a free charge's
+// force, the grid of field arrows) would show at full size. For fields
+// read at one point at a time; a little slower than fieldAt. (The terms go
+// in scratch arrays kept from call to call, grown as needed.)
+let scratch = [new Float64Array(16), new Float64Array(16), new Float64Array(16)];
+export function balancedFieldAt(p, objects) {
+  if (objects.length > scratch[0].length) {
+    scratch = [0, 1, 2].map(() => new Float64Array(2 * objects.length));
+  }
+  const [tx, ty, tz] = scratch;
+  for (let k = 0; k < objects.length; k++) {
+    const [x, y, z] = objectField(objects[k], p);
+    tx[k] = x;
+    ty[k] = y;
+    tz[k] = z;
+  }
+  return [balancedSum(tx, objects.length), balancedSum(ty, objects.length), balancedSum(tz, objects.length)];
 }

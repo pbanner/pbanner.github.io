@@ -9,7 +9,7 @@
 // label a letter from A to Z, position in world units, placed and dragged
 // just like a point charge, and what it shows besides its arrow, set in
 // its properties panel.
-import { fieldAt } from './chargeField.js';
+import { balancedFieldAt } from './chargeField.js';
 
 // What the sidebar's probe button places (in the same form as
 // chargeTypes.js's CHARGE_TYPES, so the sidebar and the placement ghost
@@ -69,5 +69,5 @@ export function probeReading(sources, position) {
     const on = undefinedOn(source, position);
     if (on) return { field: null, undefinedOn: on };
   }
-  return { field: fieldAt(position, sources), undefinedOn: null };
+  return { field: balancedFieldAt(position, sources), undefinedOn: null };
 }

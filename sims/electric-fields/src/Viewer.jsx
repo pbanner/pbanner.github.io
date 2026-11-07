@@ -6,7 +6,7 @@ import { ChargeDrag } from './chargeDrag.js';
 import ChargeMarker, { PositionGuides } from './ChargeMarker.jsx';
 import ProbeMarker, { ProbeFieldLine } from './ProbeMarker.jsx';
 import { probeReading, probeInCut } from './probes.js';
-import { objectField, fieldAt, fieldKey } from './chargeField.js';
+import { objectField, balancedFieldAt, fieldKey } from './chargeField.js';
 import { chargeColor, isFree, freeLabelText } from './chargeTypes.js';
 import ChargedObject from './ChargedObject.jsx';
 import ObjectHandles from './ObjectHandles.jsx';
@@ -676,7 +676,7 @@ export default function Viewer({ ref, charges, fieldSources = charges, probes, o
           <group key={`motion-${charge.id}`}>
             {charge.showVelocity && <VelocityArrow position={charge.position} velocity={charge.velocity} />}
             {charge.showForce && (
-              <ForceArrow position={charge.position} q={charge.q} field={fieldAt(charge.position, charges.filter((c) => c.id !== charge.id))} />
+              <ForceArrow position={charge.position} q={charge.q} field={balancedFieldAt(charge.position, charges.filter((c) => c.id !== charge.id))} />
             )}
             {charge.showPredictedPath && run && (
               <PredictedPath run={run} index={run.ids.indexOf(charge.id)} charge={charge} />

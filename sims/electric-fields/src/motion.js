@@ -35,7 +35,7 @@
 // charge should close on itself lap after lap (an inverse-square force
 // makes closed orbits, and a sloppy integrator would make them slowly
 // turn, which is wrong physics).
-import { objectField, toKilonewtonsPerCoulomb } from './chargeField.js';
+import { objectField, balancedSum, toKilonewtonsPerCoulomb } from './chargeField.js';
 import { CM } from './geometry.js';
 import { WORLD_HALF_EXTENT, CHARGE_RADIUS } from './sceneConstants.js';
 import { isFree } from './chargeTypes.js';
@@ -107,57 +107,13 @@ function makeSystem(charges) {
   };
 }
 
-// The sum of the first `count` of `terms` (reordering them), added up so
-// that terms that are exact opposites cancel exactly, in any order.
-//
-// That matters for symmetric arrangements. In the middle of a square of
-// charges, say, the charges' sideways pulls cancel exactly -- but added up
-// one by one, in whatever order the charges were placed, a running total
-// can round (-c - 2c needs one more binary digit than c has), and leave a
-// "zero" of 1e-17 instead. If the free charge's position is unstable (as
-// Earnshaw's theorem says some direction always is), that speck of
-// rounding then grows exponentially, until the charge veers off for no
-// reason anyone could see -- and only for some placement orders. A
-// mirror-image charge's term, though, is the exact opposite of its twin's
-// (the same numbers, one sign flipped), so here the terms are sorted by
-// size, and each group of the same size is added as one number: how many
-// more of them are positive than negative, times their size. Twins then
-// cancel to exactly 0, and the total is the same whatever order the terms
-// came in. A symmetric arrangement stays exactly symmetric, and a run
-// doesn't depend on the order the charges were placed in.
-//
-// (An insertion sort: the lists are short, one term per charge.)
-function balancedSum(terms, count) {
-  for (let k = 1; k < count; k++) {
-    const v = terms[k];
-    const size = Math.abs(v);
-    let j = k - 1;
-    while (j >= 0 && Math.abs(terms[j]) > size) {
-      terms[j + 1] = terms[j];
-      j--;
-    }
-    terms[j + 1] = v;
-  }
-  let sum = 0;
-  let k = 0;
-  while (k < count) {
-    const size = Math.abs(terms[k]);
-    let net = 0; // how many more of this size are positive than negative
-    while (k < count && Math.abs(terms[k]) === size) {
-      net += Math.sign(terms[k]);
-      k++;
-    }
-    sum += net * size;
-  }
-  return sum;
-}
-
 const positionOf = (y, i) => [y[6 * i], y[6 * i + 1], y[6 * i + 2]];
 
 // The derivative of state y, into `out`: each position changes at its
 // velocity, and each velocity at (q / m) E, E the field of everything but
 // the charge itself -- each other charge's field, added up along each axis
-// by balancedSum.
+// by balancedSum (chargeField.js), so that exactly cancelling pulls cancel
+// exactly.
 function derivative(sys, y, out) {
   const n = sys.free.length;
   const [tx, ty, tz] = sys.terms;
